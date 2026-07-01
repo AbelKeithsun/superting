@@ -343,13 +343,13 @@ export default function NoteListItem({
               {(note.tags || []).slice(0, 3).map((tag) => (
                 <span
                   key={tag.toLocaleLowerCase()}
-                  className="max-w-20 truncate rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground"
+                  className="max-w-20 truncate rounded border border-primary/20 bg-primary/12 px-1.5 py-0.5 text-[10px] font-semibold text-primary"
                 >
                   {tag}
                 </span>
               ))}
               {(note.tags || []).length > 3 && (
-                <span className="text-[10px] text-muted-foreground">
+                <span className="rounded border border-primary/20 bg-primary/12 px-1.5 py-0.5 text-[10px] font-semibold text-primary">
                   +{(note.tags || []).length - 3}
                 </span>
               )}
