@@ -1614,7 +1614,9 @@
       "sort": "Sort",
       "sortUpdated": "Updated time",
       "sortCreated": "Created time",
-      "sortRecorded": "Recorded date"
+      "sortRecorded": "Recorded date",
+      "identifyingSpeakers": "Identifying speakers",
+      "speakersIdentified": "Speakers identified"
     },
     "editor": {
       "untitled": "Untitled",

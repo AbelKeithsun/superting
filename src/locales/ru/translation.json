@@ -1572,7 +1572,9 @@
       "sort": "Сортировка",
       "sortUpdated": "По обновлению",
       "sortCreated": "По созданию",
-      "sortRecorded": "Дата записи"
+      "sortRecorded": "Дата записи",
+      "identifyingSpeakers": "Распознавание говорящих",
+      "speakersIdentified": "Говорящие определены"
     },
     "editor": {
       "untitled": "Без названия",

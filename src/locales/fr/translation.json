@@ -1613,7 +1613,9 @@
       "sort": "Trier",
       "sortUpdated": "Par modification",
       "sortCreated": "Par création",
-      "sortRecorded": "Date d'enregistrement"
+      "sortRecorded": "Date d'enregistrement",
+      "identifyingSpeakers": "Identification des intervenants",
+      "speakersIdentified": "Intervenants identifiés"
     },
     "editor": {
       "untitled": "Sans titre",

@@ -1572,7 +1572,9 @@
       "sort": "排序",
       "sortUpdated": "依更新時間",
       "sortCreated": "依建立時間",
-      "sortRecorded": "記錄日期"
+      "sortRecorded": "記錄日期",
+      "identifyingSpeakers": "正在識別說話人",
+      "speakersIdentified": "說話人識別完成"
     },
     "editor": {
       "untitled": "未命名",

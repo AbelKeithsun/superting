@@ -1576,7 +1576,9 @@
       "sort": "排序",
       "sortUpdated": "按更新时间",
       "sortCreated": "按创建时间",
-      "sortRecorded": "记录日期"
+      "sortRecorded": "记录日期",
+      "identifyingSpeakers": "正在识别说话人",
+      "speakersIdentified": "说话人识别完成"
     },
     "editor": {
       "untitled": "无标题",

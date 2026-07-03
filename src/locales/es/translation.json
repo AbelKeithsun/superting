@@ -1572,7 +1572,9 @@
       "sort": "Ordenar",
       "sortUpdated": "Por actualización",
       "sortCreated": "Por creación",
-      "sortRecorded": "Fecha de registro"
+      "sortRecorded": "Fecha de registro",
+      "identifyingSpeakers": "Identificando hablantes",
+      "speakersIdentified": "Hablantes identificados"
     },
     "editor": {
       "untitled": "Sin título",

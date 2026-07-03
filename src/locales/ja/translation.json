@@ -1829,7 +1829,9 @@
       "sort": "並べ替え",
       "sortUpdated": "更新日時順",
       "sortCreated": "作成日時順",
-      "sortRecorded": "記録日"
+      "sortRecorded": "記録日",
+      "identifyingSpeakers": "話者を識別中",
+      "speakersIdentified": "話者の識別が完了"
     },
     "upload": {
       "title": "音声をアップロード",

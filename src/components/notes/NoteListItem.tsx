@@ -22,9 +22,10 @@ import {
   DropdownMenuSeparator,
 } from "../ui/dropdown-menu";
 import { cn } from "../lib/utils";
-import type { NoteItem, FolderItem } from "../../types/electron";
+import type { NoteItem, FolderItem, DiarizationTaskStatus } from "../../types/electron";
 import { normalizeDbDate } from "../../utils/dateFormatting";
 import { useActionProcessingStore } from "../../stores/actionProcessingStore";
+import { getNoteListBackgroundStatus } from "./noteListDiarizationStatus";
 
 const RE_HEADING = /#{1,6}\s+/g;
 const RE_EMPHASIS = /[*_~`]+/g;
@@ -53,6 +54,8 @@ interface NoteListItemProps {
   isDragging?: boolean;
   noteFilesEnabled?: boolean;
   timestamp?: string;
+  diarizationTaskStatus?: DiarizationTaskStatus | null;
+  completedDiarizationNoteId?: number | null;
 }
 
 function stripMarkdown(text: string): string {
@@ -101,11 +104,26 @@ export default function NoteListItem({
   isDragging,
   noteFilesEnabled,
   timestamp,
+  diarizationTaskStatus,
+  completedDiarizationNoteId,
 }: NoteListItemProps) {
   const { t } = useTranslation();
   const preview = stripMarkdown(note.content);
   const actionState = useActionProcessingStore((state) => state.noteStates[note.id] ?? null);
   const isProcessingAction = actionState?.status === "processing";
+  const backgroundStatus = getNoteListBackgroundStatus({
+    noteId: note.id,
+    actionLabel: actionState?.actionName || t("notes.editor.processing"),
+    isActionProcessing: isProcessingAction,
+    diarizationTaskStatus,
+    completedDiarizationNoteId,
+  });
+  const backgroundLabel =
+    backgroundStatus?.kind === "action"
+      ? backgroundStatus.label
+      : backgroundStatus
+        ? t(backgroundStatus.translationKey)
+        : null;
   const [folderSearch, setFolderSearch] = useState("");
   const [newFolderName, setNewFolderName] = useState("");
   const [isCreating, setIsCreating] = useState(false);
@@ -326,12 +344,14 @@ export default function NoteListItem({
               )}
             </div>
           </div>
-          {isProcessingAction ? (
+          {backgroundStatus ? (
             <p className="mt-0.5 flex min-w-0 items-center gap-1 overflow-hidden truncate text-xs text-primary">
-              <Loader2 size={10} className="shrink-0 animate-spin" />
-              <span className="truncate">
-                {actionState.actionName || t("notes.editor.processing")}
-              </span>
+              {backgroundStatus.isLoading ? (
+                <Loader2 size={10} className="shrink-0 animate-spin" />
+              ) : (
+                <Check size={10} className="shrink-0" />
+              )}
+              <span className="truncate">{backgroundLabel}</span>
             </p>
           ) : preview ? (
             <p className="mt-0.5 min-w-0 overflow-hidden truncate text-xs text-muted-foreground">

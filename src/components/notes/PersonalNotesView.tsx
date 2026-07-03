@@ -83,6 +83,7 @@ import { parseTranscriptSegments } from "../../utils/parseTranscriptSegments";
 import { buildNoteActionInput, makeActionContentHash } from "./noteActionInput";
 import { getAudioBulkAction, getAudioBulkAvailability } from "./audioManagement";
 import { deleteNoteAndRefresh } from "./deleteNoteFlow";
+import { getFinishedDiarizationNoteId } from "./noteListDiarizationStatus";
 import { serializeTranscriptSegments } from "../../utils/transcriptSpeakerState";
 import {
   offsetAppendedTranscriptSegments,
@@ -126,6 +127,7 @@ const NOTES_SIDEBAR_WIDTH_KEY = "superting.notesSidebarWidth";
 const NOTES_SIDEBAR_DEFAULT_WIDTH = 224;
 const NOTES_SIDEBAR_MIN_WIDTH = 200;
 const NOTES_SIDEBAR_MAX_WIDTH = 420;
+const DIARIZATION_COMPLETED_STATUS_MS = 5000;
 
 const clampNotesSidebarWidth = (value: number) =>
   Math.min(NOTES_SIDEBAR_MAX_WIDTH, Math.max(NOTES_SIDEBAR_MIN_WIDTH, value));
@@ -290,6 +292,9 @@ export default function PersonalNotesView({
   const [diarizationTaskStatus, setDiarizationTaskStatus] = useState<DiarizationTaskStatus | null>(
     null
   );
+  const [completedDiarizationNoteId, setCompletedDiarizationNoteId] = useState<number | null>(null);
+  const previousDiarizationTaskStatusRef = useRef<DiarizationTaskStatus | null>(null);
+  const completedDiarizationTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [isSelectionMode, setIsSelectionMode] = useState(false);
   const [isMiddlePaneCollapsed, setIsMiddlePaneCollapsed] = useState(false);
   const [notesSidebarWidth, setNotesSidebarWidth] = useState(() => {
@@ -326,16 +331,36 @@ export default function PersonalNotesView({
     setSelectedTags((current) => current.filter((tag) => availableTags.includes(tag)));
   }, [availableTags]);
 
+  const applyDiarizationTaskStatus = useCallback((status: DiarizationTaskStatus | null) => {
+    if (!status) return;
+
+    const completedNoteId = getFinishedDiarizationNoteId(
+      previousDiarizationTaskStatusRef.current,
+      status
+    );
+    previousDiarizationTaskStatusRef.current = status;
+    setDiarizationTaskStatus(status);
+
+    if (completedNoteId == null) return;
+
+    setCompletedDiarizationNoteId(completedNoteId);
+    if (completedDiarizationTimerRef.current) {
+      clearTimeout(completedDiarizationTimerRef.current);
+    }
+    completedDiarizationTimerRef.current = setTimeout(() => {
+      setCompletedDiarizationNoteId((current) => (current === completedNoteId ? null : current));
+      completedDiarizationTimerRef.current = null;
+    }, DIARIZATION_COMPLETED_STATUS_MS);
+  }, []);
+
   const refreshDiarizationTaskStatus = useCallback(async () => {
     try {
       const status = await window.electronAPI.getDiarizationTaskStatus?.(activeNoteId ?? null);
-      if (status) {
-        setDiarizationTaskStatus(status);
-      }
+      applyDiarizationTaskStatus(status ?? null);
     } catch (error) {
       logger.warn("Failed to refresh diarization task status", error);
     }
-  }, [activeNoteId]);
+  }, [activeNoteId, applyDiarizationTaskStatus]);
 
   useEffect(() => {
     let cancelled = false;
@@ -343,12 +368,16 @@ export default function PersonalNotesView({
       .getDiarizationTaskStatus?.(activeNoteId ?? null)
       .then((status) => {
         if (!cancelled && status) {
-          setDiarizationTaskStatus(status);
+          applyDiarizationTaskStatus(status);
         }
       })
       .catch((error) => logger.warn("Failed to load diarization task status", error));
 
-    const unsubscribe = window.electronAPI.onDiarizationTaskStatus?.(() => {
+    const unsubscribe = window.electronAPI.onDiarizationTaskStatus?.((status) => {
+      if (status) {
+        applyDiarizationTaskStatus(status);
+        return;
+      }
       void refreshDiarizationTaskStatus();
     });
 
@@ -357,6 +386,14 @@ export default function PersonalNotesView({
       unsubscribe?.();
     };
   }, [activeNoteId, refreshDiarizationTaskStatus]);
+
+  useEffect(() => {
+    return () => {
+      if (completedDiarizationTimerRef.current) {
+        clearTimeout(completedDiarizationTimerRef.current);
+      }
+    };
+  }, []);
   const [isBulkExporting, setIsBulkExporting] = useState(false);
   const [newNoteFolderId, setNewNoteFolderId] = useState<string>("");
   const [isCreatingNewNoteFolder, setIsCreatingNewNoteFolder] = useState(false);
@@ -1869,6 +1906,8 @@ export default function PersonalNotesView({
                     dragHandlers={noteDragHandlers(note.id, note.title)}
                     isDragging={dragState.draggingNoteId === note.id}
                     noteFilesEnabled={noteFilesEnabled}
+                    diarizationTaskStatus={diarizationTaskStatus}
+                    completedDiarizationNoteId={completedDiarizationNoteId}
                     timestamp={
                       noteSortBy === "createdAt"
                         ? note.created_at

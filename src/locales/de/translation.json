@@ -1573,7 +1573,9 @@
       "sort": "Sortieren",
       "sortUpdated": "Nach Aktualisierung",
       "sortCreated": "Nach Erstellung",
-      "sortRecorded": "Aufzeichnungsdatum"
+      "sortRecorded": "Aufzeichnungsdatum",
+      "identifyingSpeakers": "Sprecher werden erkannt",
+      "speakersIdentified": "Sprecher erkannt"
     },
     "editor": {
       "untitled": "Unbenannt",
