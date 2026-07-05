@@ -11,6 +11,7 @@ import {
   getActiveFolderIdValue,
   getActiveNoteIdValue,
   initializeNotes,
+  updateNoteInStore,
 } from "../stores/noteStore";
 
 export interface UseFolderManagementReturn {
@@ -54,7 +55,7 @@ export function useFolderManagement(
 
   const newFolderInputRef = useRef<HTMLInputElement>(null);
   const renameInputRef = useRef<HTMLInputElement>(null);
-  const prevFolderIdRef = useRef<number | null>(null);
+  const previousLoadKeyRef = useRef<string | null>(null);
   const isMountedRef = useRef(true);
 
   const loadFolders = useCallback(async () => {
@@ -77,35 +78,27 @@ export function useFolderManagement(
     }
   }, []);
 
-  // Load folders on mount, determine initial active folder
+  // Load folders and default to the all-notes view on every mount.
   useEffect(() => {
     isMountedRef.current = true;
     const load = async () => {
       try {
         setIsLoading(true);
-        const items = await loadFolders();
+        await loadFolders();
         if (!isMountedRef.current) return;
 
-        // Respect pre-set activeFolderId (e.g., navigating from "Open Note")
-        const presetFolderId = getActiveFolderIdValue();
-        const isPresetValid = presetFolderId != null && items.some((f) => f.id === presetFolderId);
-
-        const initialFolderId = isPresetValid
-          ? presetFolderId
-          : (findDefaultFolder(items)?.id ?? items[0]?.id ?? null);
-
-        if (initialFolderId !== presetFolderId) {
-          setActiveFolderId(initialFolderId);
+        setActiveFolderId(null);
+        const notes = await initializeNotes(null, 50, null, "createdAt");
+        if (!isMountedRef.current) return;
+        const presetNoteId = getActiveNoteIdValue();
+        if (presetNoteId && !notes.some((note) => note.id === presetNoteId)) {
+          const presetNote = await window.electronAPI.getNote(presetNoteId);
+          if (presetNote) updateNoteInStore(presetNote);
+          else setActiveNoteId(notes[0]?.id ?? null);
+        } else if (!presetNoteId) {
+          setActiveNoteId(notes[0]?.id ?? null);
         }
-        if (initialFolderId) {
-          const notes = await initializeNotes(null, 50, initialFolderId, noteSortBy);
-          if (!isMountedRef.current) return;
-          const presetNoteId = getActiveNoteIdValue();
-          if (!presetNoteId && notes.length > 0) {
-            setActiveNoteId(notes[0].id);
-          }
-        }
-        prevFolderIdRef.current = initialFolderId;
+        previousLoadKeyRef.current = "all:createdAt";
       } finally {
         if (isMountedRef.current) setIsLoading(false);
       }
@@ -114,13 +107,14 @@ export function useFolderManagement(
     return () => {
       isMountedRef.current = false;
     };
-  }, [loadFolders, noteSortBy]);
+  }, [loadFolders]);
 
-  // Re-initialize notes when active folder changes
+  // Re-initialize notes when the folder or sort changes. Null is the all-notes view.
   useEffect(() => {
-    if (!activeFolderId || isLoading) return;
-    if (prevFolderIdRef.current === activeFolderId) return;
-    prevFolderIdRef.current = activeFolderId;
+    if (isLoading) return;
+    const loadKey = `${activeFolderId ?? "all"}:${noteSortBy}`;
+    if (previousLoadKeyRef.current === loadKey) return;
+    previousLoadKeyRef.current = loadKey;
     const loadForFolder = async () => {
       try {
         const notes = await initializeNotes(null, 50, activeFolderId, noteSortBy);

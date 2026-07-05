@@ -1549,6 +1549,7 @@
     },
     "folders": {
       "title": "Ordner",
+      "all": "Alle",
       "soon": "Demnächst",
       "folderName": "Ordnername",
       "couldNotCreate": "Ordner konnte nicht erstellt werden",

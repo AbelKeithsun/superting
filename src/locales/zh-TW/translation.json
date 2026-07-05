@@ -1548,6 +1548,7 @@
     },
     "folders": {
       "title": "資料夾",
+      "all": "全部",
       "soon": "即將推出",
       "folderName": "資料夾名稱",
       "couldNotCreate": "無法建立資料夾",

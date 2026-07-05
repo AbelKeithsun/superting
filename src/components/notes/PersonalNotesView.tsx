@@ -29,6 +29,7 @@ import {
   GripVertical,
   RefreshCw,
   Tag,
+  Files,
 } from "lucide-react";
 import { Button } from "../ui/button";
 import {
@@ -122,7 +123,6 @@ import type {
 
 const FOLDER_INPUT_CLASS =
   "w-full h-7 bg-background dark:bg-white/[0.03] rounded-md px-2 text-xs text-foreground outline-none border border-border/70 focus:border-border-hover";
-const NOTE_SORT_STORAGE_KEY = "noteSortBy";
 const NOTES_SIDEBAR_WIDTH_KEY = "superting.notesSidebarWidth";
 const NOTES_SIDEBAR_DEFAULT_WIDTH = 224;
 const NOTES_SIDEBAR_MIN_WIDTH = 200;
@@ -131,12 +131,6 @@ const DIARIZATION_COMPLETED_STATUS_MS = 5000;
 
 const clampNotesSidebarWidth = (value: number) =>
   Math.min(NOTES_SIDEBAR_MAX_WIDTH, Math.max(NOTES_SIDEBAR_MIN_WIDTH, value));
-
-function readNoteSortBy(): NoteSortBy {
-  if (typeof window === "undefined") return "updatedAt";
-  const value = window.localStorage.getItem(NOTE_SORT_STORAGE_KEY);
-  return value === "createdAt" || value === "recordedAt" ? value : "updatedAt";
-}
 
 function formatAudioDuration(seconds: number | null): string {
   if (!seconds || seconds <= 0) return "";
@@ -286,7 +280,11 @@ export default function PersonalNotesView({
   const [audioBulkMerge, setAudioBulkMerge] = useState(false);
   const [audioBulkCompress, setAudioBulkCompress] = useState(false);
   const [showBulkExportDialog, setShowBulkExportDialog] = useState(false);
-  const [noteSortBy, setNoteSortByState] = useState<NoteSortBy>(readNoteSortBy);
+  const [noteSortBy, setNoteSortByState] = useState<NoteSortBy>("createdAt");
+  const [noteLimit, setNoteLimit] = useState(50);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const loadMoreSentinelRef = useRef<HTMLDivElement>(null);
+  const loadingMoreRef = useRef(false);
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [noteAudioFiles, setNoteAudioFiles] = useState<NoteAudioFile[]>([]);
   const [diarizationTaskStatus, setDiarizationTaskStatus] = useState<DiarizationTaskStatus | null>(
@@ -485,6 +483,44 @@ export default function PersonalNotesView({
     handleReorderFolders,
   } = useFolderManagement(noteSortBy);
 
+  const totalNoteCount = Object.values(folderCounts).reduce((sum, count) => sum + count, 0);
+  const currentNoteCount =
+    activeFolderId == null ? totalNoteCount : (folderCounts[activeFolderId] ?? 0);
+  const hasMoreNotes = notes.length < currentNoteCount;
+
+  useEffect(() => {
+    setNoteLimit(50);
+    loadingMoreRef.current = false;
+    setIsLoadingMore(false);
+  }, [activeFolderId, noteSortBy]);
+
+  const loadMoreNotes = useCallback(async () => {
+    if (loadingMoreRef.current || !hasMoreNotes) return;
+    loadingMoreRef.current = true;
+    setIsLoadingMore(true);
+    const nextLimit = noteLimit + 50;
+    try {
+      await initializeNotes(null, nextLimit, activeFolderId, noteSortBy);
+      setNoteLimit(nextLimit);
+    } finally {
+      loadingMoreRef.current = false;
+      setIsLoadingMore(false);
+    }
+  }, [activeFolderId, hasMoreNotes, noteLimit, noteSortBy]);
+
+  useEffect(() => {
+    const sentinel = loadMoreSentinelRef.current;
+    if (!sentinel || !hasMoreNotes) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) void loadMoreNotes();
+      },
+      { rootMargin: "120px" }
+    );
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [hasMoreNotes, loadMoreNotes, visibleNotes.length]);
+
   const { confirmDialog, showConfirmDialog, hideConfirmDialog } = useDialogs();
 
   useEffect(() => {
@@ -541,18 +577,11 @@ export default function PersonalNotesView({
     setSelectedNoteIds(new Set(visibleNotes.map((note) => note.id)));
   }, [visibleNotes]);
 
-  const handleNoteSortChange = useCallback(
-    async (value: string) => {
-      const nextSortBy: NoteSortBy =
-        value === "createdAt" || value === "recordedAt" ? value : "updatedAt";
-      setNoteSortByState(nextSortBy);
-      window.localStorage.setItem(NOTE_SORT_STORAGE_KEY, nextSortBy);
-      if (activeFolderId) {
-        await initializeNotes(null, 50, activeFolderId, nextSortBy);
-      }
-    },
-    [activeFolderId]
-  );
+  const handleNoteSortChange = useCallback((value: string) => {
+    const nextSortBy: NoteSortBy =
+      value === "createdAt" || value === "recordedAt" ? value : "updatedAt";
+    setNoteSortByState(nextSortBy);
+  }, []);
 
   const handleRecordedAtChange = useCallback(
     async (noteId: number, recordedAt: string) => {
@@ -902,8 +931,17 @@ export default function PersonalNotesView({
     }, 1000);
   }, []);
 
+  const handleOpenNewNoteDialog = useCallback(() => {
+    const personal = findDefaultFolder(folders);
+    setNewNoteFolderId(personal ? String(personal.id) : folders[0] ? String(folders[0].id) : "");
+    setShowNewNoteDialog(true);
+  }, [folders]);
+
   const handleNewNote = useCallback(async () => {
-    if (!activeFolderId) return;
+    if (activeFolderId == null) {
+      handleOpenNewNoteDialog();
+      return;
+    }
     const result = await window.electronAPI.saveNote(
       t("notes.list.untitledNote"),
       "",
@@ -916,13 +954,7 @@ export default function PersonalNotesView({
       setActiveNoteId(result.note.id);
       loadFolders();
     }
-  }, [activeFolderId, loadFolders, t]);
-
-  const handleOpenNewNoteDialog = useCallback(() => {
-    const personal = findDefaultFolder(folders);
-    setNewNoteFolderId(personal ? String(personal.id) : folders[0] ? String(folders[0].id) : "");
-    setShowNewNoteDialog(true);
-  }, [folders]);
+  }, [activeFolderId, handleOpenNewNoteDialog, loadFolders, t]);
 
   const handleNewNoteFolderChange = useCallback((val: string) => {
     if (val === "__create_new__") {
@@ -956,17 +988,16 @@ export default function PersonalNotesView({
       folderId
     );
     if (result.success && result.note) {
-      setActiveFolderId(folderId);
+      if (activeFolderId != null) setActiveFolderId(folderId);
+      updateNoteInStore(result.note);
       setActiveNoteId(result.note.id);
       loadFolders();
     }
     setShowNewNoteDialog(false);
-  }, [newNoteFolderId, loadFolders, t]);
+  }, [activeFolderId, newNoteFolderId, loadFolders, t]);
 
   const handleNotesAdded = useCallback(async () => {
-    if (activeFolderId) {
-      await initializeNotes(null, 50, activeFolderId, noteSortBy);
-    }
+    await initializeNotes(null, 50, activeFolderId, noteSortBy);
     loadFolders();
   }, [activeFolderId, loadFolders, noteSortBy]);
 
@@ -1002,7 +1033,13 @@ export default function PersonalNotesView({
 
   const handleMoveToFolder = useCallback(
     async (noteId: number, folderId: number) => {
-      await window.electronAPI.updateNote(noteId, { folder_id: folderId });
+      const result = await window.electronAPI.updateNote(noteId, { folder_id: folderId });
+      if (!result.success || !result.note) return;
+      if (activeFolderId == null) {
+        updateNoteInStore(result.note);
+        loadFolders();
+        return;
+      }
       if (noteId === activeNoteId) {
         setActiveFolderId(folderId);
       } else {
@@ -1010,7 +1047,7 @@ export default function PersonalNotesView({
       }
       loadFolders();
     },
-    [activeNoteId, loadFolders]
+    [activeFolderId, activeNoteId, loadFolders]
   );
 
   const { dragState, noteDragHandlers, folderDropHandlers } = useNoteDragAndDrop({
@@ -1514,6 +1551,29 @@ export default function PersonalNotesView({
             </div>
 
             <div className="px-3 space-y-0.5">
+              <button
+                type="button"
+                onClick={() => setActiveFolderId(null)}
+                className={cn(
+                  "ow-list-row group relative h-8 gap-1.5 cursor-pointer border-y border-transparent",
+                  activeFolderId == null ? "ow-list-row-active" : "ow-list-row-idle"
+                )}
+              >
+                <span className="h-5 w-3.5" aria-hidden="true" />
+                <Files
+                  size={13}
+                  className={cn(
+                    "shrink-0 transition-colors duration-150",
+                    activeFolderId == null
+                      ? "text-foreground/70"
+                      : "text-muted-foreground group-hover:text-foreground/65"
+                  )}
+                />
+                <span className="text-xs truncate flex-1 text-left">{t("notes.folders.all")}</span>
+                <span className="text-[10px] tabular-nums text-muted-foreground/70">
+                  {totalNoteCount}
+                </span>
+              </button>
               {folders.map((folder) => {
                 const isActive = folder.id === activeFolderId;
                 const isMeetings = folder.name === MEETINGS_FOLDER_NAME;
@@ -1878,7 +1938,9 @@ export default function PersonalNotesView({
                   <p className="ow-empty-state-description mb-3">
                     {selectedTags.length > 0
                       ? t("notes.tags.noMatches")
-                      : t("notes.empty.emptyFolder")}
+                      : activeFolderId == null
+                        ? t("notes.empty.title")
+                        : t("notes.empty.emptyFolder")}
                   </p>
                   <div className="flex flex-col gap-1.5 w-full max-w-36">
                     <button
@@ -1888,12 +1950,14 @@ export default function PersonalNotesView({
                       <Plus size={10} />
                       {t("notes.empty.createNote")}
                     </button>
-                    <button
-                      onClick={() => setShowAddNotesDialog(true)}
-                      className="flex items-center justify-center gap-1.5 h-6 rounded-md border border-border bg-card text-xs font-medium text-muted-foreground hover:text-foreground hover:border-border-hover hover:bg-muted transition-colors"
-                    >
-                      {t("notes.addToFolder.addExisting")}
-                    </button>
+                    {activeFolderId != null && (
+                      <button
+                        onClick={() => setShowAddNotesDialog(true)}
+                        className="flex items-center justify-center gap-1.5 h-6 rounded-md border border-border bg-card text-xs font-medium text-muted-foreground hover:text-foreground hover:border-border-hover hover:bg-muted transition-colors"
+                      >
+                        {t("notes.addToFolder.addExisting")}
+                      </button>
+                    )}
                   </div>
                 </div>
               ) : (
@@ -1925,6 +1989,13 @@ export default function PersonalNotesView({
                     }
                   />
                 ))
+              )}
+              {!isLoading && hasMoreNotes && (
+                <div ref={loadMoreSentinelRef} className="flex h-8 items-center justify-center">
+                  {isLoadingMore && (
+                    <Loader2 size={11} className="animate-spin text-muted-foreground/50" />
+                  )}
+                </div>
               )}
             </div>
           </div>

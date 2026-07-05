@@ -71,3 +71,25 @@ test("MCP integration renders the tool catalog returned by status", () => {
     assert.equal(english.integrations.mcp.tools[unsupported], undefined);
   }
 });
+
+test("notes default to all folders and load 50 more at the bottom", () => {
+  const notesView = read("src/components/notes/PersonalNotesView.tsx");
+  const folderManagement = read("src/hooks/useFolderManagement.ts");
+  const localeRoot = path.join(root, "src/locales");
+  const locales = fs
+    .readdirSync(localeRoot, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => entry.name);
+
+  assert.match(notesView, /useState<NoteSortBy>\("createdAt"\)/);
+  assert.match(notesView, /IntersectionObserver/);
+  assert.match(notesView, /noteLimit \+ 50/);
+  assert.match(notesView, /t\("notes\.folders\.all"\)/);
+  assert.match(folderManagement, /setActiveFolderId\(null\)/);
+  assert.match(folderManagement, /initializeNotes\(null, 50, null, "createdAt"\)/);
+  assert.match(folderManagement, /getNote\(presetNoteId\)/);
+  for (const locale of locales) {
+    const translations = JSON.parse(read(`src/locales/${locale}/translation.json`));
+    assert.ok(translations.notes.folders.all, `${locale} should translate notes.folders.all`);
+  }
+});

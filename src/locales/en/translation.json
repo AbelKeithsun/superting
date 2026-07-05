@@ -1590,6 +1590,7 @@
     },
     "folders": {
       "title": "Folders",
+      "all": "All",
       "soon": "Soon",
       "folderName": "Folder name",
       "couldNotCreate": "Couldn't create folder",

@@ -1805,6 +1805,7 @@
     },
     "folders": {
       "title": "フォルダ",
+      "all": "すべて",
       "soon": "近日公開",
       "folderName": "フォルダ名",
       "couldNotCreate": "フォルダを作成できませんでした",

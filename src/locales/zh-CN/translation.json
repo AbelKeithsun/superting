@@ -1552,6 +1552,7 @@
     },
     "folders": {
       "title": "文件夹",
+      "all": "全部",
       "soon": "即将推出",
       "folderName": "文件夹名称",
       "couldNotCreate": "无法创建文件夹",

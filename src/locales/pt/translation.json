@@ -1548,6 +1548,7 @@
     },
     "folders": {
       "title": "Pastas",
+      "all": "Todas",
       "soon": "Em breve",
       "folderName": "Nome da pasta",
       "couldNotCreate": "Não foi possível criar a pasta",

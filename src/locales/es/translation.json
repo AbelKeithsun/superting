@@ -1548,6 +1548,7 @@
     },
     "folders": {
       "title": "Carpetas",
+      "all": "Todo",
       "soon": "Próximamente",
       "folderName": "Nombre de la carpeta",
       "couldNotCreate": "No se pudo crear la carpeta",

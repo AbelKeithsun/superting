@@ -1548,6 +1548,7 @@
     },
     "folders": {
       "title": "Cartelle",
+      "all": "Tutte",
       "soon": "Presto",
       "folderName": "Nome cartella",
       "couldNotCreate": "Impossibile creare la cartella",
