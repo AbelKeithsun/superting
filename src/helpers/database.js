@@ -2131,11 +2131,12 @@ class DatabaseManager {
   searchNotes(query, limit = 50, tags = []) {
     try {
       if (!this.db) throw new Error("Database not initialized");
-      const term = query
+      const rawTerm = query.trim();
+      if (!rawTerm) return [];
+      const term = rawTerm
         .trim()
         .replace(/[^\w\s]/g, " ")
         .trim();
-      if (!term) return [];
       const tagNames = this.normalizeTagNames(tags);
       const tagFilter = tagNames.length
         ? `AND n.id IN (
@@ -2145,14 +2146,19 @@ class DatabaseManager {
             WHERE LOWER(t.name) IN (${tagNames.map(() => "?").join(", ")})
           )`
         : "";
-      const params = [term + "*"];
-      if (tagNames.length) {
-        params.push(...tagNames.map((name) => name.toLocaleLowerCase()));
-      }
-      params.push(limit);
-      const notes = this.db
-        .prepare(
-          `
+      const tagParams = tagNames.map((name) => name.toLocaleLowerCase());
+      const notesById = new Map();
+      const addNotes = (notes) => {
+        for (const note of notes) {
+          if (notesById.size >= limit) break;
+          if (!notesById.has(note.id)) notesById.set(note.id, note);
+        }
+      };
+      const runFtsSearch = () => {
+        if (!term) return [];
+        return this.db
+          .prepare(
+            `
         SELECT n.*
         FROM notes n
         JOIN notes_fts ON notes_fts.rowid = n.id
@@ -2161,9 +2167,34 @@ class DatabaseManager {
         ORDER BY notes_fts.rank
         LIMIT ?
       `
-        )
-        .all(...params);
-      return this.attachTags(notes);
+          )
+          .all(term + "*", ...tagParams, limit);
+      };
+      const runLikeSearch = () => {
+        const escaped = rawTerm.replace(/[\\%_]/g, (match) => `\\${match}`);
+        const pattern = `%${escaped}%`;
+        return this.db
+          .prepare(
+            `
+        SELECT n.*
+        FROM notes n
+        WHERE n.deleted_at IS NULL
+          AND (
+            n.title LIKE ? ESCAPE '\\'
+            OR n.content LIKE ? ESCAPE '\\'
+            OR n.enhanced_content LIKE ? ESCAPE '\\'
+          )
+        ${tagFilter}
+        ORDER BY n.updated_at DESC, n.created_at DESC
+        LIMIT ?
+      `
+          )
+          .all(pattern, pattern, pattern, ...tagParams, limit);
+      };
+      const preferLike = /[^\x00-\x7F]/.test(rawTerm) || rawTerm !== term;
+      const searches = preferLike ? [runLikeSearch, runFtsSearch] : [runFtsSearch, runLikeSearch];
+      for (const search of searches) addNotes(search());
+      return this.attachTags([...notesById.values()]);
     } catch (error) {
       debugLogger.error("Error searching notes", { error: error.message }, "database");
       throw error;

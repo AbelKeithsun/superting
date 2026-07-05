@@ -81,3 +81,37 @@ test("note lists and search match any selected tag", (t) => {
     ["Roadmap one", "Roadmap three"]
   );
 });
+
+test("searchNotes matches Chinese substrings without treating LIKE wildcards as wildcards", (t) => {
+  const db = createDatabase(t);
+  db.saveNote("颂拓项目", "跟进颂拓项目，评估费用。", "personal", null, null, null, null, [
+    "商机",
+  ]);
+  db.saveNote("AI内容平台纪要", "明确AI内容平台后续规划。", "personal", null, null, null, null, [
+    "产品",
+  ]);
+  db.saveNote("Roadmap one", "Alpha", "personal", null, null, null, null, ["AI"]);
+  db.saveNote("100 percent", "Progress is 100 percent", "personal");
+
+  assert.deepEqual(
+    db.searchNotes("颂拓").map((note) => note.title),
+    ["颂拓项目"]
+  );
+  assert.deepEqual(
+    db.searchNotes("AI内容平台").map((note) => note.title),
+    ["AI内容平台纪要"]
+  );
+  assert.deepEqual(
+    db.searchNotes("Roadmap").map((note) => note.title),
+    ["Roadmap one"]
+  );
+  assert.deepEqual(
+    db.searchNotes("颂拓", 10, ["产品"]).map((note) => note.title),
+    []
+  );
+  assert.deepEqual(
+    db.searchNotes("颂拓", 10, ["商机"]).map((note) => note.title),
+    ["颂拓项目"]
+  );
+  assert.deepEqual(db.searchNotes("%"), []);
+});
