@@ -102,3 +102,25 @@ test("getNotes supports updated, created, and recorded date sorting", (t) => {
     ["older created", "newer created"]
   );
 });
+
+test("getNotes supports offset pagination after sorting", (t) => {
+  const db = createDatabase(t);
+  const oldest = db.saveNote("oldest", "", "meeting").note;
+  const middle = db.saveNote("middle", "", "meeting").note;
+  const newest = db.saveNote("newest", "", "meeting").note;
+
+  db.db
+    .prepare("UPDATE notes SET created_at = ? WHERE id = ?")
+    .run("2026-06-01 09:00:00", oldest.id);
+  db.db
+    .prepare("UPDATE notes SET created_at = ? WHERE id = ?")
+    .run("2026-06-02 09:00:00", middle.id);
+  db.db
+    .prepare("UPDATE notes SET created_at = ? WHERE id = ?")
+    .run("2026-06-03 09:00:00", newest.id);
+
+  assert.deepEqual(
+    db.getNotes(null, 2, null, "createdAt", [], 2).map((note) => note.title),
+    ["oldest"]
+  );
+});

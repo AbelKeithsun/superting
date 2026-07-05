@@ -1561,7 +1561,8 @@
       "deleteDescriptionEmpty": "Questa azione eliminerà definitivamente \"{{name}}\". Questa operazione non può essere annullata.",
       "deleteConfirm": "Elimina cartella e note"
     },
-    "loadingMore": "Caricamento altri...",
+    "loadMore": "Carica altro...",
+    "loadingMore": "Caricamento...",
     "list": {
       "title": "Note",
       "newNote": "Nuova nota",

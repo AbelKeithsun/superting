@@ -95,6 +95,7 @@ import {
   useActiveNoteId,
   useActiveFolderId,
   initializeNotes,
+  appendNotesPage,
   setActiveNoteId,
   setActiveFolderId,
   removeNote,
@@ -281,10 +282,8 @@ export default function PersonalNotesView({
   const [audioBulkCompress, setAudioBulkCompress] = useState(false);
   const [showBulkExportDialog, setShowBulkExportDialog] = useState(false);
   const [noteSortBy, setNoteSortByState] = useState<NoteSortBy>("createdAt");
-  const [noteLimit, setNoteLimit] = useState(50);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
-  const notesListScrollRef = useRef<HTMLDivElement>(null);
-  const loadMoreSentinelRef = useRef<HTMLDivElement>(null);
+  const [hasLoadedAllNotes, setHasLoadedAllNotes] = useState(false);
   const loadingMoreRef = useRef(false);
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [noteAudioFiles, setNoteAudioFiles] = useState<NoteAudioFile[]>([]);
@@ -487,10 +486,10 @@ export default function PersonalNotesView({
   const totalNoteCount = Object.values(folderCounts).reduce((sum, count) => sum + count, 0);
   const currentNoteCount =
     activeFolderId == null ? totalNoteCount : (folderCounts[activeFolderId] ?? 0);
-  const hasMoreNotes = notes.length < currentNoteCount;
+  const hasMoreNotes = !hasLoadedAllNotes && notes.length < currentNoteCount;
 
   useEffect(() => {
-    setNoteLimit(50);
+    setHasLoadedAllNotes(false);
     loadingMoreRef.current = false;
     setIsLoadingMore(false);
   }, [activeFolderId, noteSortBy]);
@@ -499,28 +498,22 @@ export default function PersonalNotesView({
     if (loadingMoreRef.current || !hasMoreNotes) return;
     loadingMoreRef.current = true;
     setIsLoadingMore(true);
-    const nextLimit = noteLimit + 50;
     try {
-      await initializeNotes(null, nextLimit, activeFolderId, noteSortBy);
-      setNoteLimit(nextLimit);
+      const page = await window.electronAPI.getNotes(
+        null,
+        50,
+        activeFolderId,
+        noteSortBy,
+        undefined,
+        notes.length
+      );
+      appendNotesPage(page, notes.length + page.length);
+      if (page.length < 50) setHasLoadedAllNotes(true);
     } finally {
       loadingMoreRef.current = false;
       setIsLoadingMore(false);
     }
-  }, [activeFolderId, hasMoreNotes, noteLimit, noteSortBy]);
-
-  useEffect(() => {
-    const sentinel = loadMoreSentinelRef.current;
-    if (!sentinel || !hasMoreNotes) return;
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (entry.isIntersecting) void loadMoreNotes();
-      },
-      { root: notesListScrollRef.current, rootMargin: "120px" }
-    );
-    observer.observe(sentinel);
-    return () => observer.disconnect();
-  }, [hasMoreNotes, loadMoreNotes, visibleNotes.length]);
+  }, [activeFolderId, hasMoreNotes, noteSortBy, notes.length]);
 
   const { confirmDialog, showConfirmDialog, hideConfirmDialog } = useDialogs();
 
@@ -1926,7 +1919,7 @@ export default function PersonalNotesView({
               )}
             </div>
 
-            <div ref={notesListScrollRef} className="flex-1 overflow-y-auto px-2 pb-3">
+            <div className="flex-1 overflow-y-auto px-2 pb-3">
               {isLoading ? (
                 <div className="flex items-center justify-center py-8">
                   <Loader2 size={12} className="animate-spin text-foreground/15" />
@@ -1992,15 +1985,17 @@ export default function PersonalNotesView({
                 ))
               )}
               {!isLoading && hasMoreNotes && (
-                <div
-                  ref={loadMoreSentinelRef}
+                <button
+                  type="button"
+                  onClick={loadMoreNotes}
+                  disabled={isLoadingMore}
                   className="flex h-8 items-center justify-center gap-1.5 text-[11px] text-muted-foreground/60"
                 >
                   {isLoadingMore && (
                     <Loader2 size={11} className="animate-spin text-muted-foreground/50" />
                   )}
-                  <span>{t("notes.loadingMore")}</span>
-                </div>
+                  <span>{isLoadingMore ? t("notes.loadingMore") : t("notes.loadMore")}</span>
+                </button>
               )}
             </div>
           </div>

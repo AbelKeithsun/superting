@@ -1565,7 +1565,8 @@
       "deleteDescriptionEmpty": "这将永久删除「{{name}}」。此操作无法撤销。",
       "deleteConfirm": "删除文件夹和笔记"
     },
-    "loadingMore": "加载更多...",
+    "loadMore": "加载更多...",
+    "loadingMore": "加载中...",
     "list": {
       "title": "笔记",
       "newNote": "新建笔记",

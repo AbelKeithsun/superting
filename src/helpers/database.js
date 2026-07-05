@@ -1075,7 +1075,14 @@ class DatabaseManager {
     }
   }
 
-  getNotes(noteType = null, limit = 100, folderId = null, sortBy = "updatedAt", tags = []) {
+  getNotes(
+    noteType = null,
+    limit = 100,
+    folderId = null,
+    sortBy = "updatedAt",
+    tags = [],
+    offset = 0
+  ) {
     try {
       if (!this.db) {
         throw new Error("Database not initialized");
@@ -1105,8 +1112,10 @@ class DatabaseManager {
       }
       const where = `WHERE ${conditions.join(" AND ")}`;
       const orderBy = getNoteOrderByClause(sortBy);
-      const stmt = this.db.prepare(`SELECT * FROM notes ${where} ORDER BY ${orderBy} LIMIT ?`);
-      params.push(limit);
+      const stmt = this.db.prepare(
+        `SELECT * FROM notes ${where} ORDER BY ${orderBy} LIMIT ? OFFSET ?`
+      );
+      params.push(limit, offset);
       return this.attachTags(stmt.all(...params));
     } catch (error) {
       debugLogger.error("Error getting notes", { error: error.message }, "notes");

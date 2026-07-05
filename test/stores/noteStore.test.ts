@@ -80,3 +80,64 @@ test("deleted note update removes the note instead of re-adding it", async () =>
 
   assert.deepEqual(getNotesValue(), []);
 });
+
+test("appendNotesPage appends the next page without replacing the first page", async () => {
+  Object.defineProperty(globalThis, "window", {
+    value: {
+      addEventListener: () => {},
+      electronAPI: {
+        getNotes: async () => [createNote({ id: 1, title: "first" })],
+      },
+    },
+    configurable: true,
+  });
+
+  const { initializeNotes, appendNotesPage, getNotesValue } =
+    await import("../../src/stores/noteStore.ts");
+
+  await initializeNotes(null, 50, null, "createdAt");
+  appendNotesPage([createNote({ id: 2, title: "second" })], 2);
+
+  assert.deepEqual(
+    getNotesValue().map((note) => note.title),
+    ["first", "second"]
+  );
+});
+
+test("appendNotesPage deduplicates notes and preserves the newest version", async () => {
+  const savedNote = createNote({
+    id: 1,
+    title: "saved",
+    content: "newer local edit",
+    updated_at: "2026-06-13 10:01:00",
+  });
+  const stalePageNote = createNote({
+    id: 1,
+    title: "stale",
+    content: "older page",
+    updated_at: "2026-06-13 10:00:00",
+  });
+
+  Object.defineProperty(globalThis, "window", {
+    value: {
+      addEventListener: () => {},
+      electronAPI: {
+        getNotes: async () => [savedNote],
+      },
+    },
+    configurable: true,
+  });
+
+  const { initializeNotes, appendNotesPage, getNotesValue } =
+    await import("../../src/stores/noteStore.ts");
+
+  await initializeNotes(null, 50, null, "createdAt");
+  appendNotesPage([stalePageNote, createNote({ id: 2, title: "second" })], 2);
+
+  assert.equal(getNotesValue().length, 2);
+  assert.equal(getNotesValue()[0]?.content, savedNote.content);
+  assert.deepEqual(
+    getNotesValue().map((note) => note.title),
+    ["saved", "second"]
+  );
+});

@@ -1561,7 +1561,8 @@
       "deleteDescriptionEmpty": "Esto eliminará permanentemente \"{{name}}\". Esta acción no se puede deshacer.",
       "deleteConfirm": "Eliminar carpeta y notas"
     },
-    "loadingMore": "Cargando más...",
+    "loadMore": "Cargar más...",
+    "loadingMore": "Cargando...",
     "list": {
       "title": "Notas",
       "newNote": "Nueva nota",

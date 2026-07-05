@@ -625,7 +625,8 @@ declare global {
         limit?: number,
         folderId?: number | null,
         sortBy?: NoteSortBy,
-        tags?: string[]
+        tags?: string[],
+        offset?: number
       ) => Promise<NoteItem[]>;
       getTags: () => Promise<NoteTag[]>;
       updateNote: (

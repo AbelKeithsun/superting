@@ -1602,6 +1602,7 @@
       "deleteDescriptionEmpty": "Cette action supprimera définitivement \"{{name}}\". Cette action est irréversible.",
       "deleteConfirm": "Supprimer le dossier et les notes"
     },
+    "loadMore": "Charger plus...",
     "loadingMore": "Chargement...",
     "list": {
       "title": "Notes",

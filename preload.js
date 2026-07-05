@@ -95,8 +95,8 @@ contextBridge.exposeInMainWorld("electronAPI", {
       tags
     ),
   getNote: (id) => ipcRenderer.invoke("db-get-note", id),
-  getNotes: (noteType, limit, folderId, sortBy, tags) =>
-    ipcRenderer.invoke("db-get-notes", noteType, limit, folderId, sortBy, tags),
+  getNotes: (noteType, limit, folderId, sortBy, tags, offset) =>
+    ipcRenderer.invoke("db-get-notes", noteType, limit, folderId, sortBy, tags, offset),
   getTags: () => ipcRenderer.invoke("db-get-tags"),
   updateNote: (id, updates) => ipcRenderer.invoke("db-update-note", id, updates),
   deleteNote: (id) => ipcRenderer.invoke("db-delete-note", id),

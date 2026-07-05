@@ -1561,7 +1561,8 @@
       "deleteDescriptionEmpty": "Это навсегда удалит «{{name}}». Это действие нельзя отменить.",
       "deleteConfirm": "Удалить папку и заметки"
     },
-    "loadingMore": "Загрузка ещё...",
+    "loadMore": "Загрузить ещё...",
+    "loadingMore": "Загрузка...",
     "list": {
       "title": "Заметки",
       "newNote": "Новая заметка",

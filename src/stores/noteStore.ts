@@ -96,6 +96,22 @@ export async function initializeNotes(
   return items;
 }
 
+export function appendNotesPage(items: NoteItem[], limit = currentLimit): void {
+  currentLimit = limit;
+  const next = [...useNoteStore.getState().notes];
+  const indexById = new Map(next.map((note, index) => [note.id, index]));
+  for (const item of items) {
+    const index = indexById.get(item.id);
+    if (index == null) {
+      indexById.set(item.id, next.length);
+      next.push(item);
+      continue;
+    }
+    next[index] = preferNewerNote(item, next[index]);
+  }
+  useNoteStore.setState({ notes: next.slice(0, currentLimit) });
+}
+
 export function addNote(note: NoteItem): void {
   if (!note) return;
   const { notes, activeFolderId } = useNoteStore.getState();

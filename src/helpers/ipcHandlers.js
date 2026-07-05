@@ -1557,9 +1557,12 @@ class IPCHandlers {
       return this.databaseManager.getNote(id);
     });
 
-    ipcMain.handle("db-get-notes", async (event, noteType, limit, folderId, sortBy, tags) => {
-      return this.databaseManager.getNotes(noteType, limit, folderId, sortBy, tags);
-    });
+    ipcMain.handle(
+      "db-get-notes",
+      async (event, noteType, limit, folderId, sortBy, tags, offset) => {
+        return this.databaseManager.getNotes(noteType, limit, folderId, sortBy, tags, offset);
+      }
+    );
 
     ipcMain.handle("db-get-tags", async () => this.databaseManager.getTags());
 

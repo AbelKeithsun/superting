@@ -82,9 +82,14 @@ test("notes default to all folders and load 50 more at the bottom", () => {
     .map((entry) => entry.name);
 
   assert.match(notesView, /useState<NoteSortBy>\("createdAt"\)/);
-  assert.match(notesView, /IntersectionObserver/);
-  assert.match(notesView, /root: notesListScrollRef\.current/);
-  assert.match(notesView, /noteLimit \+ 50/);
+  assert.doesNotMatch(notesView, /IntersectionObserver/);
+  assert.match(notesView, /onClick=\{loadMoreNotes\}/);
+  assert.match(
+    notesView,
+    /window\.electronAPI\.getNotes\(\s*null,\s*50,\s*activeFolderId,\s*noteSortBy,\s*undefined,\s*notes\.length\s*\)/
+  );
+  assert.match(notesView, /appendNotesPage/);
+  assert.match(notesView, /notes\.loadMore/);
   assert.match(notesView, /notes\.loadingMore/);
   assert.match(notesView, /t\("notes\.folders\.all"\)/);
   assert.match(folderManagement, /setActiveFolderId\(null\)/);
@@ -94,6 +99,7 @@ test("notes default to all folders and load 50 more at the bottom", () => {
   for (const locale of locales) {
     const translations = JSON.parse(read(`src/locales/${locale}/translation.json`));
     assert.ok(translations.notes.folders.all, `${locale} should translate notes.folders.all`);
+    assert.ok(translations.notes.loadMore, `${locale} should translate notes.loadMore`);
     assert.ok(translations.notes.loadingMore, `${locale} should translate notes.loadingMore`);
   }
 });

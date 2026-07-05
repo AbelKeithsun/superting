@@ -1603,7 +1603,8 @@
       "deleteDescriptionEmpty": "This will permanently delete \"{{name}}\". This cannot be undone.",
       "deleteConfirm": "Delete folder and notes"
     },
-    "loadingMore": "Loading more...",
+    "loadMore": "Load more...",
+    "loadingMore": "Loading...",
     "list": {
       "title": "Notes",
       "newNote": "New note",
