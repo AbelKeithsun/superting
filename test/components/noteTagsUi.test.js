@@ -28,6 +28,8 @@ test("note editor and list expose note tags", () => {
   assert.match(notesView, /selectedTagSummary/);
   assert.match(notesView, /visibleNotes\.map/);
   assert.match(notesView, /notes\.tags\.filterAll/);
+  assert.match(notesView, /electronAPI\.getTags\(\)/);
+  assert.doesNotMatch(notesView, /notes\.flatMap\(\(note\) => note\.tags/);
 });
 
 test("MCP integration renders the tool catalog returned by status", () => {

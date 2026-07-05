@@ -308,13 +308,15 @@ export default function PersonalNotesView({
     "enhanced_content",
   ]);
   const [exportFormat, setExportFormat] = useState<NoteExportFormat>("md");
-  const availableTags = useMemo(
-    () =>
-      Array.from(new Set(notes.flatMap((note) => note.tags || []))).sort((a, b) =>
-        a.localeCompare(b)
-      ),
-    [notes]
-  );
+  const [availableTags, setAvailableTags] = useState<string[]>([]);
+  const loadTags = useCallback(async () => {
+    try {
+      const tags = await window.electronAPI.getTags();
+      setAvailableTags(tags.map((tag) => tag.name));
+    } catch (error) {
+      logger.warn("Failed to load note tags", error);
+    }
+  }, []);
   const visibleNotes = useMemo(
     () =>
       selectedTags.length > 0
@@ -326,6 +328,10 @@ export default function PersonalNotesView({
   const remainingSelectedTagCount = Math.max(0, selectedTags.length - 1);
   const tagCheckboxItemClass =
     "text-xs gap-2 rounded-md py-1.5 pl-8 pr-2 [&>span:first-child]:rounded-[3px] [&>span:first-child]:border [&>span:first-child]:border-border [&>span:first-child]:bg-background";
+
+  useEffect(() => {
+    void loadTags();
+  }, [activeFolderId, loadTags]);
 
   useEffect(() => {
     setSelectedTags((current) => current.filter((tag) => availableTags.includes(tag)));
@@ -567,8 +573,9 @@ export default function PersonalNotesView({
         throw new Error(t("notes.tags.saveFailed"));
       }
       updateNoteInStore(result.note);
+      await loadTags();
     },
-    [t]
+    [loadTags, t]
   );
 
   const handleExportSelectedNotes = useCallback(async () => {
@@ -979,6 +986,7 @@ export default function PersonalNotesView({
         removeNote,
         loadFolders,
       });
+      if (result.success) await loadTags();
       if (result.success && id === activeNoteRef.current) {
         markNoteAsSynced(null);
         setLocalTitle("");
@@ -989,7 +997,7 @@ export default function PersonalNotesView({
         localEnhancedContentRef.current = null;
       }
     },
-    [loadFolders]
+    [loadFolders, loadTags]
   );
 
   const handleMoveToFolder = useCallback(
