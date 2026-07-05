@@ -11,7 +11,6 @@ import {
   getActiveFolderIdValue,
   getActiveNoteIdValue,
   initializeNotes,
-  updateNoteInStore,
 } from "../stores/noteStore";
 
 export interface UseFolderManagementReturn {
@@ -92,9 +91,7 @@ export function useFolderManagement(
         if (!isMountedRef.current) return;
         const presetNoteId = getActiveNoteIdValue();
         if (presetNoteId && !notes.some((note) => note.id === presetNoteId)) {
-          const presetNote = await window.electronAPI.getNote(presetNoteId);
-          if (presetNote) updateNoteInStore(presetNote);
-          else setActiveNoteId(notes[0]?.id ?? null);
+          setActiveNoteId(notes[0]?.id ?? null);
         } else if (!presetNoteId) {
           setActiveNoteId(notes[0]?.id ?? null);
         }

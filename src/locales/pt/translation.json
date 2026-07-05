@@ -1561,6 +1561,7 @@
       "deleteDescriptionEmpty": "Isso excluirá permanentemente \"{{name}}\". Esta ação não pode ser desfeita.",
       "deleteConfirm": "Excluir pasta e notas"
     },
+    "loadingMore": "Carregando mais...",
     "list": {
       "title": "Notas",
       "newNote": "Nova nota",

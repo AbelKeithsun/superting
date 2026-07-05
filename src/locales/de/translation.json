@@ -1562,6 +1562,7 @@
       "deleteDescriptionEmpty": "Dadurch wird \"{{name}}\" dauerhaft gelöscht. Diese Aktion kann nicht rückgängig gemacht werden.",
       "deleteConfirm": "Ordner und Notizen löschen"
     },
+    "loadingMore": "Weitere werden geladen...",
     "list": {
       "title": "Notizen",
       "newNote": "Neue Notiz",

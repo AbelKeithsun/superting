@@ -283,6 +283,7 @@ export default function PersonalNotesView({
   const [noteSortBy, setNoteSortByState] = useState<NoteSortBy>("createdAt");
   const [noteLimit, setNoteLimit] = useState(50);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const notesListScrollRef = useRef<HTMLDivElement>(null);
   const loadMoreSentinelRef = useRef<HTMLDivElement>(null);
   const loadingMoreRef = useRef(false);
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
@@ -515,7 +516,7 @@ export default function PersonalNotesView({
       ([entry]) => {
         if (entry.isIntersecting) void loadMoreNotes();
       },
-      { rootMargin: "120px" }
+      { root: notesListScrollRef.current, rootMargin: "120px" }
     );
     observer.observe(sentinel);
     return () => observer.disconnect();
@@ -1925,7 +1926,7 @@ export default function PersonalNotesView({
               )}
             </div>
 
-            <div className="flex-1 overflow-y-auto px-2 pb-3">
+            <div ref={notesListScrollRef} className="flex-1 overflow-y-auto px-2 pb-3">
               {isLoading ? (
                 <div className="flex items-center justify-center py-8">
                   <Loader2 size={12} className="animate-spin text-foreground/15" />
@@ -1991,10 +1992,14 @@ export default function PersonalNotesView({
                 ))
               )}
               {!isLoading && hasMoreNotes && (
-                <div ref={loadMoreSentinelRef} className="flex h-8 items-center justify-center">
+                <div
+                  ref={loadMoreSentinelRef}
+                  className="flex h-8 items-center justify-center gap-1.5 text-[11px] text-muted-foreground/60"
+                >
                   {isLoadingMore && (
                     <Loader2 size={11} className="animate-spin text-muted-foreground/50" />
                   )}
+                  <span>{t("notes.loadingMore")}</span>
                 </div>
               )}
             </div>

@@ -83,13 +83,17 @@ test("notes default to all folders and load 50 more at the bottom", () => {
 
   assert.match(notesView, /useState<NoteSortBy>\("createdAt"\)/);
   assert.match(notesView, /IntersectionObserver/);
+  assert.match(notesView, /root: notesListScrollRef\.current/);
   assert.match(notesView, /noteLimit \+ 50/);
+  assert.match(notesView, /notes\.loadingMore/);
   assert.match(notesView, /t\("notes\.folders\.all"\)/);
   assert.match(folderManagement, /setActiveFolderId\(null\)/);
   assert.match(folderManagement, /initializeNotes\(null, 50, null, "createdAt"\)/);
-  assert.match(folderManagement, /getNote\(presetNoteId\)/);
+  assert.doesNotMatch(folderManagement, /getNote\(presetNoteId\)/);
+  assert.doesNotMatch(folderManagement, /updateNoteInStore\(presetNote\)/);
   for (const locale of locales) {
     const translations = JSON.parse(read(`src/locales/${locale}/translation.json`));
     assert.ok(translations.notes.folders.all, `${locale} should translate notes.folders.all`);
+    assert.ok(translations.notes.loadingMore, `${locale} should translate notes.loadingMore`);
   }
 });
