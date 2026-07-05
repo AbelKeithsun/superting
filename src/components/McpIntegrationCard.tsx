@@ -126,19 +126,31 @@ export default function McpIntegrationCard() {
           <Wrench className="h-3.5 w-3.5 text-muted-foreground" />
           {t("integrations.mcp.toolsTitle")}
         </div>
-        <div className="flex flex-wrap gap-1.5">
+        <div role="table" className="overflow-hidden rounded-md border border-border/60">
+          <div
+            role="row"
+            className="hidden bg-muted/35 px-3 py-2 text-[11px] font-semibold text-muted-foreground sm:grid sm:grid-cols-[minmax(9rem,0.8fr)_minmax(0,2.2fr)] sm:gap-4"
+          >
+            <span role="columnheader">{t("integrations.mcp.toolColumn")}</span>
+            <span role="columnheader">{t("integrations.mcp.descriptionColumn")}</span>
+          </div>
           {(status.tools || []).map((tool) => (
-            <code
+            <div
               key={tool.name}
-              className="rounded border border-border/60 bg-muted/40 px-1.5 py-1 text-[11px] text-foreground/80"
+              role="row"
+              className="grid grid-cols-1 gap-1 border-t border-border/50 px-3 py-2.5 first:border-t-0 sm:grid-cols-[minmax(9rem,0.8fr)_minmax(0,2.2fr)] sm:gap-4"
             >
-              {tool.name}
-            </code>
+              <code role="cell" className="min-w-0 break-all text-[11px] text-foreground/90">
+                {tool.name}
+              </code>
+              <span role="cell" className="min-w-0 text-xs leading-relaxed text-muted-foreground">
+                {t(`integrations.mcp.tools.${tool.name}`, {
+                  defaultValue: t("integrations.mcp.unknownToolDescription"),
+                })}
+              </span>
+            </div>
           ))}
         </div>
-        <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">
-          {t("integrations.mcp.migrationNotice")}
-        </p>
       </div>
 
       {error && (
