@@ -506,6 +506,50 @@ class IPCHandlers {
     return this._getWhisperVadSettings();
   }
 
+  async _compressNoteAudioAfterDiarization(noteId, filename) {
+    if (!noteId || !filename || path.extname(filename).toLowerCase() === ".webm") {
+      return { success: true, skipped: true };
+    }
+
+    try {
+      const compressed = await this.audioStorageManager.compressRetainedAudioToOpusWebm(filename);
+      if (!compressed.success) {
+        debugLogger.warn("Post-diarization audio compression skipped", {
+          noteId,
+          filename,
+          error: compressed.error,
+        });
+        return compressed;
+      }
+
+      this.audioStorageManager.cleanupPendingDeleteAudio();
+      if (compressed.alreadyCompressed || compressed.filename === filename) {
+        return { success: true, skipped: true };
+      }
+
+      const updateResult = this.databaseManager.replaceNoteAudioFilename(
+        filename,
+        compressed.filename
+      );
+      for (const affectedNoteId of updateResult.affectedNoteIds || []) {
+        const updatedNote = this.databaseManager.getNote(affectedNoteId);
+        if (updatedNote) {
+          setImmediate(() => this.broadcastToWindows("note-updated", updatedNote));
+          this._asyncMirrorWrite(updatedNote);
+        }
+      }
+
+      return { success: true, filename: compressed.filename };
+    } catch (error) {
+      debugLogger.warn("Post-diarization audio compression failed", {
+        noteId,
+        filename,
+        error: error.message,
+      });
+      return { success: false, error: error.message };
+    }
+  }
+
   _resolveWhisperVadOptions(context) {
     const settings = this._getWhisperVadSettings();
     const {
@@ -6970,7 +7014,8 @@ class IPCHandlers {
             diarizationWin,
             liveSpeakerState,
             sessionSpeakerConfigSnapshot,
-            noteIdSnapshot
+            noteIdSnapshot,
+            savedAudio?.filename
           );
 
           return buildMeetingStopResult({
@@ -7015,7 +7060,8 @@ class IPCHandlers {
           diarizationWin,
           liveSpeakerState,
           sessionSpeakerConfigSnapshot,
-          noteIdSnapshot
+          noteIdSnapshot,
+          savedAudio?.filename
         );
 
         return buildMeetingStopResult({
@@ -8368,7 +8414,8 @@ class IPCHandlers {
     win,
     liveSpeakerState = null,
     sessionConfig = null,
-    noteId = null
+    noteId = null,
+    retainedAudioFilename = null
   ) {
     const send = (payload) => {
       if (win && !win.isDestroyed()) {
@@ -8562,6 +8609,7 @@ class IPCHandlers {
           speakerEmbeddings: speakerEmbeddingsMap,
           diarizationDiagnostics: adaptiveResult.diagnostics,
         });
+        void this._compressNoteAudioAfterDiarization(trackedNoteId, retainedAudioFilename);
       } catch (err) {
         debugLogger.warn("Background diarization failed", { error: err.message });
         send({ segments: [] });
@@ -8791,6 +8839,7 @@ class IPCHandlers {
         this._asyncVectorUpsert(updatedNote);
         this._asyncMirrorWrite(updatedNote);
       }
+      void this._compressNoteAudioAfterDiarization(noteId, audioFile.filename);
       return {
         success: true,
         note: updatedNote,
