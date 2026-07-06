@@ -26,3 +26,16 @@ test("meeting transcription IPC channels exposed by preload are registered in ma
 
   assert.deepEqual(missing, []);
 });
+
+test("meeting background diarization publishes note-list task status", () => {
+  const ipcHandlers = read("src/helpers/ipcHandlers.js");
+  const start = ipcHandlers.indexOf("\n  _startOrSkipDiarization(");
+  const end = ipcHandlers.indexOf("\n  _parseNoteTranscriptSegments", start);
+  const method = ipcHandlers.slice(start, end);
+
+  assert.notEqual(start, -1);
+  assert.notEqual(end, -1);
+  assert.match(method, /this\.diarizationTaskTracker\.startTask\(\{/);
+  assert.match(method, /this\._broadcastDiarizationTaskStatus\(\)/);
+  assert.match(method, /this\.diarizationTaskTracker\.finishTask\(trackedTask\.taskId\)/);
+});

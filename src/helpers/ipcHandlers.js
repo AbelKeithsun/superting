@@ -8389,6 +8389,19 @@ class IPCHandlers {
     }
 
     const fs = require("fs");
+    const trackedNoteId = Number.isFinite(Number(noteId)) ? Number(noteId) : null;
+    let trackedTask = null;
+    if (trackedNoteId != null) {
+      let noteTitle = "";
+      try {
+        noteTitle = this.databaseManager.getNote(trackedNoteId)?.title || "";
+      } catch (_) {}
+      trackedTask = this.diarizationTaskTracker.startTask({
+        noteId: trackedNoteId,
+        noteTitle,
+      });
+      this._broadcastDiarizationTaskStatus();
+    }
 
     (async () => {
       let tmpWav = null;
@@ -8553,6 +8566,10 @@ class IPCHandlers {
         debugLogger.warn("Background diarization failed", { error: err.message });
         send({ segments: [] });
       } finally {
+        if (trackedTask) {
+          this.diarizationTaskTracker.finishTask(trackedTask.taskId);
+          this._broadcastDiarizationTaskStatus();
+        }
         try {
           fs.unlinkSync(rawPcmPath);
         } catch (_) {}
