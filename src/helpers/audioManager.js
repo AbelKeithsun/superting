@@ -465,6 +465,7 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
         localTranscriptionProvider,
         whisperModel,
         parakeetModel,
+        funasrModel,
       } = getSettings();
       if (showTranscriptionPreview && useLocalWhisper) {
         try {
@@ -485,8 +486,16 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
           this._previewProcessor.connect(this._previewGain);
           this._previewGain.connect(this._previewAudioContext.destination);
 
-          const provider = localTranscriptionProvider === "nvidia" ? "nvidia" : "whisper";
-          const model = provider === "nvidia" ? parakeetModel : whisperModel;
+          const provider =
+            localTranscriptionProvider === "nvidia" || localTranscriptionProvider === "funasr"
+              ? localTranscriptionProvider
+              : "whisper";
+          const model =
+            provider === "nvidia"
+              ? parakeetModel
+              : provider === "funasr"
+                ? funasrModel
+                : whisperModel;
           const language = getBaseLanguageCode(getSettings().preferredLanguage);
           window.electronAPI?.startDictationPreview?.({ provider, model, language });
         } catch (e) {
@@ -614,6 +623,7 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
       const localProvider = settings.localTranscriptionProvider;
       const whisperModel = settings.whisperModel;
       const parakeetModel = settings.parakeetModel || "parakeet-tdt-0.6b-v3";
+      const funasrModel = settings.funasrModel || "sensevoice-small";
 
       logger.debug("Transcription routing", { useLocalWhisper, localProvider }, "transcription");
 
@@ -623,6 +633,9 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
         if (localProvider === "nvidia") {
           activeModel = parakeetModel;
           result = await this.processWithLocalParakeet(audioBlob, parakeetModel, metadata);
+        } else if (localProvider === "funasr") {
+          activeModel = funasrModel;
+          result = await this.processWithLocalFunasr(audioBlob, funasrModel, metadata);
         } else {
           activeModel = whisperModel;
           result = await this.processWithLocalWhisper(audioBlob, whisperModel, metadata);
@@ -873,6 +886,90 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
         }
       } else {
         throw new Error(`Parakeet failed: ${error.message}`);
+      }
+    }
+  }
+
+  async processWithLocalFunasr(audioBlob, model = "sensevoice-small", metadata = {}) {
+    const timings = {};
+
+    try {
+      const arrayBuffer = await audioBlob.arrayBuffer();
+      const { preferredLanguage, funasrUseItn } = getSettings();
+
+      logger.debug(
+        "FunASR transcription starting",
+        {
+          audioFormat: audioBlob.type,
+          audioSizeBytes: audioBlob.size,
+          model,
+          language: preferredLanguage,
+        },
+        "performance"
+      );
+
+      const transcriptionStart = performance.now();
+      const result = await window.electronAPI.transcribeLocalFunasr(arrayBuffer, {
+        model,
+        language: preferredLanguage,
+        useItn: funasrUseItn,
+      });
+      timings.transcriptionProcessingDurationMs = Math.round(
+        performance.now() - transcriptionStart
+      );
+
+      logger.debug(
+        "FunASR transcription complete",
+        {
+          transcriptionProcessingDurationMs: timings.transcriptionProcessingDurationMs,
+          success: result.success,
+          lang: result.lang,
+        },
+        "performance"
+      );
+
+      if (result.success && result.text) {
+        const rawText = result.text;
+        const reasoningStart = performance.now();
+        const text = await this.processTranscription(result.text, "local-funasr");
+        timings.reasoningProcessingDurationMs = Math.round(performance.now() - reasoningStart);
+
+        if (text !== null && text !== undefined) {
+          return {
+            success: true,
+            text: text || result.text,
+            rawText,
+            source: "local-funasr",
+            timings,
+            warning: this.lastProcessingWarning,
+            cleanupError: this.lastProcessingCleanupError,
+          };
+        } else {
+          throw new Error("No text transcribed");
+        }
+      } else if (result.success === false && result.message === "No audio detected") {
+        throw new Error("No audio detected");
+      } else {
+        throw new Error(result.message || result.error || "FunASR transcription failed");
+      }
+    } catch (error) {
+      if (error.message === "No audio detected") {
+        throw error;
+      }
+
+      const { allowOpenAIFallback, useLocalWhisper: isLocalMode } = getSettings();
+
+      if (allowOpenAIFallback && isLocalMode) {
+        try {
+          const fallbackResult = await this.processWithOpenAIAPI(audioBlob, metadata);
+          return { ...fallbackResult, source: "openai-fallback" };
+        } catch (fallbackError) {
+          throw new Error(
+            `FunASR failed: ${error.message}. OpenAI fallback also failed: ${fallbackError.message}`
+          );
+        }
+      } else {
+        throw new Error(`FunASR failed: ${error.message}`);
       }
     }
   }

@@ -443,6 +443,7 @@ export default function ControlPanel() {
           cloudTranscriptionModel: s.cloudTranscriptionModel,
           cloudTranscriptionBaseUrl: s.cloudTranscriptionBaseUrl,
           parakeetModel: s.parakeetModel,
+          funasrModel: s.funasrModel,
           whisperModel: s.whisperModel,
           customDictionary: s.customDictionary,
           customDictionaryAliases: s.customDictionaryAliases,

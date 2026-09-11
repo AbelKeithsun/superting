@@ -432,6 +432,7 @@ class IPCHandlers {
     this.clipboardManager = managers.clipboardManager;
     this.whisperManager = managers.whisperManager;
     this.parakeetManager = managers.parakeetManager;
+    this.funasrManager = managers.funasrManager;
     this.diarizationManager = managers.diarizationManager;
     this.windowManager = managers.windowManager;
     this.updateManager = managers.updateManager;
@@ -1136,6 +1137,22 @@ class IPCHandlers {
               async ({ signal }) =>
                 this.parakeetManager.transcribeLocalParakeet(buffer, { model, signal })
             );
+          } else if (settings.localTranscriptionProvider === "funasr") {
+            const model = settings.funasrModel || process.env.FUNASR_MODEL || "sensevoice-small";
+            result = await this._runLocalSttTask(
+              {
+                kind: "history-retry",
+                priority: LOCAL_STT_PRIORITY.HISTORY,
+                interruptible: true,
+              },
+              async ({ signal }) =>
+                this.funasrManager.transcribeLocalFunasr(buffer, {
+                  model,
+                  language: settings?.preferredLanguage,
+                  useItn: settings?.funasrUseItn,
+                  signal,
+                })
+            );
           } else if (this.whisperManager?.serverManager?.isAvailable?.()) {
             const vadOptions = this._resolveWhisperVadOptions("noteRecording");
             result = await this._runLocalSttTask(
@@ -1272,7 +1289,9 @@ class IPCHandlers {
           (settings?.useLocalWhisper
             ? settings.localTranscriptionProvider === "nvidia"
               ? "nvidia"
-              : "whisper"
+              : settings.localTranscriptionProvider === "funasr"
+                ? "funasr"
+                : "whisper"
             : settings?.cloudTranscriptionMode === "superting"
               ? "superting"
               : settings?.cloudTranscriptionProvider || "openai");
@@ -1281,7 +1300,9 @@ class IPCHandlers {
           (settings?.useLocalWhisper
             ? settings.localTranscriptionProvider === "nvidia"
               ? settings.parakeetModel || process.env.PARAKEET_MODEL || "parakeet-tdt-0.6b-v3"
-              : settings.whisperModel
+              : settings.localTranscriptionProvider === "funasr"
+                ? settings.funasrModel || process.env.FUNASR_MODEL || "sensevoice-small"
+                : settings.whisperModel
             : settings?.cloudTranscriptionMode === "superting"
               ? "cloud"
               : this._resolveByokModel(
@@ -2646,7 +2667,10 @@ class IPCHandlers {
     ipcMain.handle("transcribe-audio-file", async (event, filePath, options = {}) => {
       try {
         return await this.uploadTranscriptionCoordinator.run("local", async ({ jobId, signal }) => {
-          const provider = options.provider === "nvidia" ? "nvidia" : "whisper";
+          const provider =
+            options.provider === "nvidia" || options.provider === "funasr"
+              ? options.provider
+              : "whisper";
           const model = options.model;
           const language = options.language;
           const dictionaryPrompt = buildRuntimeDictionaryPrompt(options.customDictionary);
@@ -2685,6 +2709,14 @@ class IPCHandlers {
                   if (provider === "nvidia") {
                     return this.parakeetManager.transcribeLocalParakeet(chunkBuffer, {
                       model,
+                      signal: combinedSignal,
+                    });
+                  }
+                  if (provider === "funasr") {
+                    return this.funasrManager.transcribeLocalFunasr(chunkBuffer, {
+                      model,
+                      language: options.preferredLanguage,
+                      useItn: options.funasrUseItn,
                       signal: combinedSignal,
                     });
                   }
@@ -3210,6 +3242,140 @@ class IPCHandlers {
       return this.parakeetManager.getServerStatus();
     });
 
+    ipcMain.handle("transcribe-local-funasr", async (event, audioBlob, options = {}) => {
+      debugLogger.log("transcribe-local-funasr called", {
+        audioBlobType: typeof audioBlob,
+        audioBlobSize: audioBlob?.byteLength || audioBlob?.length || 0,
+        options,
+      });
+
+      try {
+        const result = await this._runLocalSttTask(
+          {
+            kind: "dictation",
+            priority: LOCAL_STT_PRIORITY.REALTIME,
+            interruptible: false,
+          },
+          async ({ signal }) =>
+            this.funasrManager.transcribeLocalFunasr(audioBlob, {
+              ...options,
+              signal,
+            })
+        );
+
+        debugLogger.log("FunASR result", {
+          success: result.success,
+          hasText: !!result.text,
+          lang: result.lang,
+          message: result.message,
+          error: result.error,
+        });
+
+        if (!result.success && result.message === "No audio detected") {
+          debugLogger.log("Sending no-audio-detected event to renderer");
+          event.sender.send("no-audio-detected");
+        }
+
+        return result;
+      } catch (error) {
+        debugLogger.error("Local FunASR transcription error", error);
+        const errorMessage = error.message || "Unknown error";
+
+        if (errorMessage.includes("sherpa-onnx") && errorMessage.includes("not found")) {
+          return {
+            success: false,
+            error: "funasr_not_found",
+            message: "FunASR binary is missing. Please reinstall the app.",
+          };
+        }
+        if (errorMessage.includes("model") && errorMessage.includes("not downloaded")) {
+          return {
+            success: false,
+            error: "model_not_found",
+            message: errorMessage,
+          };
+        }
+
+        throw error;
+      }
+    });
+
+    ipcMain.handle("check-funasr-installation", async () => {
+      return this.funasrManager.checkInstallation();
+    });
+
+    ipcMain.handle("download-funasr-model", async (event, modelName) => {
+      try {
+        const result = await this.funasrManager.downloadFunasrModel(
+          modelName,
+          (progressData) => {
+            if (!event.sender.isDestroyed()) {
+              event.sender.send("funasr-download-progress", progressData);
+            }
+          }
+        );
+        return result;
+      } catch (error) {
+        if (!event.sender.isDestroyed()) {
+          event.sender.send("funasr-download-progress", {
+            type: "error",
+            model: modelName,
+            error: error.message,
+            code: error.code || "DOWNLOAD_FAILED",
+          });
+        }
+        return {
+          success: false,
+          error: error.message,
+          code: error.code || "DOWNLOAD_FAILED",
+        };
+      }
+    });
+
+    ipcMain.handle("check-funasr-model-status", async (_event, modelName) => {
+      return this.funasrManager.checkModelStatus(modelName);
+    });
+
+    ipcMain.handle("list-funasr-models", async () => {
+      return this.funasrManager.listFunasrModels();
+    });
+
+    ipcMain.handle("delete-funasr-model", async (_event, modelName) => {
+      return this.funasrManager.deleteFunasrModel(modelName);
+    });
+
+    ipcMain.handle("delete-all-funasr-models", async () => {
+      return this.funasrManager.deleteAllFunasrModels();
+    });
+
+    ipcMain.handle("cancel-funasr-download", async () => {
+      return this.funasrManager.cancelDownload();
+    });
+
+    ipcMain.handle("get-funasr-diagnostics", async () => {
+      return this.funasrManager.getDiagnostics();
+    });
+
+    ipcMain.handle("funasr-server-start", async (event, modelName) => {
+      const result = await this.funasrManager.startServer(modelName);
+      process.env.LOCAL_TRANSCRIPTION_PROVIDER = "funasr";
+      process.env.FUNASR_MODEL = modelName;
+      await this.environmentManager.saveAllKeysToEnvFile();
+      return result;
+    });
+
+    ipcMain.handle("funasr-server-stop", async () => {
+      const result = await this.funasrManager.stopServer();
+      delete process.env.LOCAL_TRANSCRIPTION_PROVIDER;
+      delete process.env.FUNASR_MODEL;
+      await this.environmentManager.saveAllKeysToEnvFile();
+      return result;
+    });
+
+    ipcMain.handle("funasr-server-status", async () => {
+      return this.funasrManager.getServerStatus();
+    });
+
     // Diarization model management
     ipcMain.handle("download-diarization-models", async (event) => {
       try {
@@ -3271,6 +3437,11 @@ class IPCHandlers {
         errors.push(`Parakeet stop: ${e.message}`);
       }
       try {
+        await this.funasrManager?.stopServer();
+      } catch (e) {
+        errors.push(`FunASR stop: ${e.message}`);
+      }
+      try {
         this.whisperManager?.stopServer();
       } catch (e) {
         errors.push(`Whisper stop: ${e.message}`);
@@ -3300,6 +3471,11 @@ class IPCHandlers {
         await this.parakeetManager?.deleteAllParakeetModels();
       } catch (e) {
         errors.push(`Parakeet models: ${e.message}`);
+      }
+      try {
+        await this.funasrManager?.deleteAllFunasrModels();
+      } catch (e) {
+        errors.push(`FunASR models: ${e.message}`);
       }
       try {
         const modelManager = require("./modelManagerBridge").default;
@@ -4028,27 +4204,60 @@ class IPCHandlers {
         setVars.LOCAL_TRANSCRIPTION_PROVIDER = prefs.localTranscriptionProvider;
         if (prefs.localTranscriptionProvider === "nvidia") {
           setVars.PARAKEET_MODEL = prefs.model;
-          clearVars.push("LOCAL_WHISPER_MODEL");
+          clearVars.push("LOCAL_WHISPER_MODEL", "FUNASR_MODEL");
           this.whisperManager.stopServer().catch((err) => {
             debugLogger.error("Failed to stop whisper-server on provider switch", {
               error: err.message,
             });
           });
-        } else {
-          setVars.LOCAL_WHISPER_MODEL = prefs.model;
-          clearVars.push("PARAKEET_MODEL");
+          this.funasrManager?.stopServer().catch((err) => {
+            debugLogger.error("Failed to stop funasr-server on provider switch", {
+              error: err.message,
+            });
+          });
+        } else if (prefs.localTranscriptionProvider === "funasr") {
+          setVars.FUNASR_MODEL = prefs.model;
+          clearVars.push("LOCAL_WHISPER_MODEL", "PARAKEET_MODEL");
+          this.whisperManager.stopServer().catch((err) => {
+            debugLogger.error("Failed to stop whisper-server on provider switch", {
+              error: err.message,
+            });
+          });
           this.parakeetManager.stopServer().catch((err) => {
             debugLogger.error("Failed to stop parakeet-server on provider switch", {
+              error: err.message,
+            });
+          });
+        } else {
+          setVars.LOCAL_WHISPER_MODEL = prefs.model;
+          clearVars.push("PARAKEET_MODEL", "FUNASR_MODEL");
+          this.parakeetManager.stopServer().catch((err) => {
+            debugLogger.error("Failed to stop parakeet-server on provider switch", {
+              error: err.message,
+            });
+          });
+          this.funasrManager?.stopServer().catch((err) => {
+            debugLogger.error("Failed to stop funasr-server on provider switch", {
               error: err.message,
             });
           });
         }
       } else if (prefs.useLocalWhisper) {
         // Local mode enabled but no model selected - clear pre-warming vars
-        clearVars.push("LOCAL_TRANSCRIPTION_PROVIDER", "PARAKEET_MODEL", "LOCAL_WHISPER_MODEL");
+        clearVars.push(
+          "LOCAL_TRANSCRIPTION_PROVIDER",
+          "PARAKEET_MODEL",
+          "LOCAL_WHISPER_MODEL",
+          "FUNASR_MODEL"
+        );
       } else {
         // Cloud mode - stop local servers to free RAM
-        clearVars.push("LOCAL_TRANSCRIPTION_PROVIDER", "PARAKEET_MODEL", "LOCAL_WHISPER_MODEL");
+        clearVars.push(
+          "LOCAL_TRANSCRIPTION_PROVIDER",
+          "PARAKEET_MODEL",
+          "LOCAL_WHISPER_MODEL",
+          "FUNASR_MODEL"
+        );
         this.whisperManager.stopServer().catch((err) => {
           debugLogger.error("Failed to stop whisper-server on cloud switch", {
             error: err.message,
@@ -4056,6 +4265,11 @@ class IPCHandlers {
         });
         this.parakeetManager.stopServer().catch((err) => {
           debugLogger.error("Failed to stop parakeet-server on cloud switch", {
+            error: err.message,
+          });
+        });
+        this.funasrManager?.stopServer().catch((err) => {
+          debugLogger.error("Failed to stop funasr-server on cloud switch", {
             error: err.message,
           });
         });
@@ -5005,6 +5219,20 @@ class IPCHandlers {
             async ({ signal }) =>
               this.parakeetManager.transcribeLocalParakeet(wav, {
                 model: dictationPreviewModel,
+                signal,
+              })
+          );
+        } else if (dictationPreviewProvider === "funasr") {
+          result = await this._runLocalSttTask(
+            {
+              kind: "dictation-preview",
+              priority: LOCAL_STT_PRIORITY.REALTIME,
+              interruptible: false,
+            },
+            async ({ signal }) =>
+              this.funasrManager.transcribeLocalFunasr(wav, {
+                model: dictationPreviewModel,
+                language: dictationPreviewLanguage,
                 signal,
               })
           );
@@ -6284,6 +6512,20 @@ class IPCHandlers {
             async ({ signal }) =>
               this.parakeetManager.transcribeLocalParakeet(wav, {
                 model: meetingLocalModel,
+                signal,
+              })
+          );
+        } else if (meetingLocalProvider === "funasr") {
+          result = await this._runLocalSttTask(
+            {
+              kind: "meeting",
+              priority: LOCAL_STT_PRIORITY.REALTIME,
+              interruptible: false,
+            },
+            async ({ signal }) =>
+              this.funasrManager.transcribeLocalFunasr(wav, {
+                model: meetingLocalModel,
+                language: meetingLocalLanguage,
                 signal,
               })
           );

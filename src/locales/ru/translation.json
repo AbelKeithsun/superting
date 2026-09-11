@@ -420,7 +420,8 @@
     "customProvider": "Пользовательский",
     "fallback": {
       "whisperModelDescription": "Модель",
-      "parakeetModelDescription": "Модель NVIDIA Parakeet"
+      "parakeetModelDescription": "Модель NVIDIA Parakeet",
+      "funasrModelDescription": "Модель FunASR SenseVoice"
     },
     "whisperModels": "Модели Whisper"
   },

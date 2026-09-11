@@ -124,7 +124,9 @@ const getMeetingTranscriptionOptions = () => {
       localModel:
         resolved.localTranscriptionProvider === "nvidia"
           ? resolved.parakeetModel || "parakeet-tdt-0.6b-v3"
-          : resolved.whisperModel || "base",
+          : resolved.localTranscriptionProvider === "funasr"
+            ? resolved.funasrModel || "sensevoice-small"
+            : resolved.whisperModel || "base",
       language,
       scriptLanguage,
       dataRetentionEnabled: state.dataRetentionEnabled,

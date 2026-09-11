@@ -420,7 +420,8 @@
     "customProvider": "Benutzerdefiniert",
     "fallback": {
       "whisperModelDescription": "Modell",
-      "parakeetModelDescription": "NVIDIA-Parakeet-Modell"
+      "parakeetModelDescription": "NVIDIA-Parakeet-Modell",
+      "funasrModelDescription": "FunASR SenseVoice Modell"
     },
     "whisperModels": "Whisper-Modelle"
   },

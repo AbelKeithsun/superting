@@ -16,7 +16,7 @@ export interface DownloadProgress {
   eta?: number;
 }
 
-export type ModelType = "whisper" | "llm" | "parakeet";
+export type ModelType = "whisper" | "llm" | "parakeet" | "funasr";
 
 interface UseModelDownloadOptions {
   modelType: ModelType;
@@ -163,6 +163,8 @@ export function useModelDownload({
       dispose = window.electronAPI?.onWhisperDownloadProgress(handleWhisperProgress);
     } else if (modelType === "parakeet") {
       dispose = window.electronAPI?.onParakeetDownloadProgress(handleWhisperProgress);
+    } else if (modelType === "funasr") {
+      dispose = window.electronAPI?.onFunasrDownloadProgress(handleWhisperProgress);
     } else {
       dispose = window.electronAPI?.onModelDownloadProgress(handleLLMProgress);
     }
@@ -206,8 +208,11 @@ export function useModelDownload({
           } else {
             success = result?.success ?? false;
           }
-        } else if (modelType === "parakeet") {
-          const result = await window.electronAPI?.downloadParakeetModel(modelId);
+        } else if (modelType === "parakeet" || modelType === "funasr") {
+          const result =
+            modelType === "parakeet"
+              ? await window.electronAPI?.downloadParakeetModel(modelId)
+              : await window.electronAPI?.downloadFunasrModel(modelId);
           if (!result?.success && !result?.error?.includes("interrupted by user")) {
             const msg = getDownloadErrorMessage(
               t,
@@ -289,8 +294,11 @@ export function useModelDownload({
               }),
             });
           }
-        } else if (modelType === "parakeet") {
-          const result = await window.electronAPI?.deleteParakeetModel(modelId);
+        } else if (modelType === "parakeet" || modelType === "funasr") {
+          const result =
+            modelType === "parakeet"
+              ? await window.electronAPI?.deleteParakeetModel(modelId)
+              : await window.electronAPI?.deleteFunasrModel(modelId);
           if (result?.success) {
             toast({
               title: t("hooks.modelDownload.modelDeleted.title"),
@@ -328,6 +336,8 @@ export function useModelDownload({
         await window.electronAPI?.cancelWhisperDownload();
       } else if (modelType === "parakeet") {
         await window.electronAPI?.cancelParakeetDownload();
+      } else if (modelType === "funasr") {
+        await window.electronAPI?.cancelFunasrDownload();
       } else {
         await window.electronAPI?.modelCancelDownload?.(downloadingModel);
       }
