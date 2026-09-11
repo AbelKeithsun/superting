@@ -378,9 +378,12 @@ export default function UploadAudioView({ onNoteCreated, onOpenSettings }: Uploa
               : whisperModel
         }
         onLocalModelSelect={(modelId) => {
-          if (localTranscriptionProvider === "nvidia") {
+          // The picker switches provider before forwarding the selection, so
+          // read the live store value instead of the captured prop.
+          const activeProvider = useSettingsStore.getState().localTranscriptionProvider;
+          if (activeProvider === "nvidia") {
             setParakeetModel(modelId);
-          } else if (localTranscriptionProvider === "funasr") {
+          } else if (activeProvider === "funasr") {
             setFunasrModel(modelId);
           } else {
             setWhisperModel(modelId);

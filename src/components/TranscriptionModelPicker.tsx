@@ -309,6 +309,7 @@ export default function TranscriptionModelPicker({
   const ensureValidCloudSelectionRef = useRef<(() => void) | null>(null);
   const selectedLocalModelRef = useRef(selectedLocalModel);
   const onLocalModelSelectRef = useRef(onLocalModelSelect);
+  const selectedLocalProviderRef = useRef(selectedLocalProvider);
 
   const { confirmDialog, showConfirmDialog, hideConfirmDialog } = useDialogs();
   const colorScheme: ColorScheme = variant === "settings" ? "purple" : "blue";
@@ -328,10 +329,18 @@ export default function TranscriptionModelPicker({
     selectedLocalModelRef.current = selectedLocalModel;
   }, [selectedLocalModel]);
   useEffect(() => {
+    selectedLocalProviderRef.current = selectedLocalProvider;
+  }, [selectedLocalProvider]);
+  useEffect(() => {
     onLocalModelSelectRef.current = onLocalModelSelect;
   }, [onLocalModelSelect]);
 
   const validateAndSelectModel = useCallback((loadedModels: LocalModel[]) => {
+    // This list is the whisper engine's models; when another engine is active
+    // the current selection legitimately lives outside this list, so falling
+    // back to the first downloaded whisper model would overwrite that engine's
+    // model slot via the provider-dispatched onLocalModelSelect.
+    if (selectedLocalProviderRef.current !== "whisper") return;
     const current = selectedLocalModelRef.current;
     if (!current) return;
 
@@ -596,10 +605,12 @@ export default function TranscriptionModelPicker({
     (providerId: string) => {
       const tab = LOCAL_PROVIDER_TABS.find((t) => t.id === providerId);
       if (tab?.disabled) return;
+      // Browsing a tab only previews that engine's models; the active engine is
+      // switched when a model card is selected (handleXxxModelSelect), so merely
+      // looking at another tab can't silently change the transcription engine.
       setInternalLocalProvider(providerId);
-      onLocalProviderSelect?.(providerId);
     },
-    [onLocalProviderSelect]
+    []
   );
 
   const handleWhisperModelSelect = useCallback(
