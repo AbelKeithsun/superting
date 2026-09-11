@@ -25,7 +25,7 @@
 
 ---
 
-SuperTing turns your voice into text, notes, and actions from your desktop. Press a hotkey, speak, and your words appear at your cursor. Choose fully private offline transcription with local speech-to-text engines like Whisper and NVIDIA Parakeet, or bring your own provider API key. No data collection, no telemetry, fully open source.
+SuperTing turns your voice into text, notes, and actions from your desktop. Press a hotkey, speak, and your words appear at your cursor. Choose fully private offline transcription with local speech-to-text engines like Whisper, NVIDIA Parakeet, and FunASR SenseVoice (best-in-class Chinese, see [FUNASR_SETUP.md](FUNASR_SETUP.md)), or bring your own provider API key. No data collection, no telemetry, fully open source.
 
 ## Download
 
@@ -62,7 +62,7 @@ Start with this README and the files in [`docs/`](docs/) for local development, 
 
 ## Tech stack
 
-React 19, TypeScript, Tailwind CSS v4, Electron 41, better-sqlite3, whisper.cpp, sherpa-onnx, shadcn/ui
+React 19, TypeScript, Tailwind CSS v4, Electron 41, better-sqlite3, whisper.cpp, sherpa-onnx (Parakeet + FunASR SenseVoice), shadcn/ui
 
 ## Star History
 
@@ -82,7 +82,8 @@ We welcome contributions. Fork the repo, create a feature branch, and open a pul
 - **[OpenAI Whisper](https://github.com/openai/whisper)** — speech recognition model powering local and cloud transcription
 - **[whisper.cpp](https://github.com/ggerganov/whisper.cpp)** — high-performance C++ implementation for local processing
 - **[NVIDIA Parakeet](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3)** — fast multilingual ASR model
-- **[sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx)** — cross-platform ONNX runtime for Parakeet inference
+- **[sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx)** — cross-platform ONNX runtime for Parakeet / FunASR inference
+- **[FunASR SenseVoice](https://github.com/modelscope/FunASR)** — high-accuracy Chinese/multilingual ASR with punctuation and ITN
 - **[Hugging Face](https://huggingface.co/)** — model hub hosting Whisper, Parakeet, and embedding model weights
 - **[llama.cpp](https://github.com/ggerganov/llama.cpp)** — local LLM inference for AI text processing
 - **[Electron](https://www.electronjs.org/)** — cross-platform desktop framework
