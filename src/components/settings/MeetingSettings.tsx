@@ -82,20 +82,18 @@ export function MeetingTranscriptionPanel() {
 
   const handleLocalTranscriptionModelSelect = useCallback(
     (modelId: string) => {
-      if (meetingLocalTranscriptionProvider === "nvidia") {
+      // The picker switches provider before forwarding the selection, so the
+      // captured prop can be stale — read the live store value instead.
+      const activeProvider = useSettingsStore.getState().meetingLocalTranscriptionProvider;
+      if (activeProvider === "nvidia") {
         setMeetingParakeetModel(modelId);
-      } else if (meetingLocalTranscriptionProvider === "funasr") {
+      } else if (activeProvider === "funasr") {
         setMeetingFunasrModel(modelId);
       } else {
         setMeetingWhisperModel(modelId);
       }
     },
-    [
-      meetingLocalTranscriptionProvider,
-      setMeetingParakeetModel,
-      setMeetingFunasrModel,
-      setMeetingWhisperModel,
-    ]
+    [setMeetingParakeetModel, setMeetingFunasrModel, setMeetingWhisperModel]
   );
 
   const renderTranscriptionPicker = (mode: "cloud" | "local") => (

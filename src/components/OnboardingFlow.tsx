@@ -11,6 +11,7 @@ import {
   Shield,
   Command,
 } from "lucide-react";
+import { useSettingsStore } from "../stores/settingsStore";
 import TitleBar from "./TitleBar";
 import WindowControls from "./WindowControls";
 import PermissionsSection from "./ui/PermissionsSection";
@@ -413,9 +414,12 @@ export default function OnboardingFlow({ onComplete }: OnboardingFlowProps) {
                     : whisperModel
               }
               onLocalModelSelect={(modelId) => {
-                if (localTranscriptionProvider === "nvidia") {
+                // The picker switches provider before forwarding the selection,
+                // so read the live store value instead of the captured prop.
+                const activeProvider = useSettingsStore.getState().localTranscriptionProvider;
+                if (activeProvider === "nvidia") {
                   updateTranscriptionSettings({ parakeetModel: modelId });
-                } else if (localTranscriptionProvider === "funasr") {
+                } else if (activeProvider === "funasr") {
                   updateTranscriptionSettings({ funasrModel: modelId });
                 } else {
                   updateTranscriptionSettings({ whisperModel: modelId });

@@ -240,15 +240,18 @@ function TranscriptionSection({
 
   const handleLocalModelSelect = useCallback(
     (modelId: string) => {
-      if (localTranscriptionProvider === "nvidia") {
+      // The picker switches provider before forwarding the selection, so the
+      // captured prop can be stale — read the live store value instead.
+      const activeProvider = useSettingsStore.getState().localTranscriptionProvider;
+      if (activeProvider === "nvidia") {
         setParakeetModel(modelId);
-      } else if (localTranscriptionProvider === "funasr") {
+      } else if (activeProvider === "funasr") {
         setFunasrModel(modelId);
       } else {
         setWhisperModel(modelId);
       }
     },
-    [localTranscriptionProvider, setParakeetModel, setFunasrModel, setWhisperModel]
+    [setParakeetModel, setFunasrModel, setWhisperModel]
   );
 
   const renderPreviewToggle = () => (
