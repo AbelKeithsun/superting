@@ -32,6 +32,7 @@
 
 - **完全开源、跨平台**（macOS / Windows / Linux）
 - **本地优先**：转录、嵌入、向量检索都可以在本地完成
+- **三本地引擎可选**：whisper.cpp（多语言）、NVIDIA Parakeet（英文）、**FunASR SenseVoice（中文推荐，见 [FUNASR_SETUP.md](FUNASR_SETUP.md)）**
 - **支持国内模型生态**：DeepSeek、通义千问、智谱、月之暗面等可作为推理/清洗后端
 - **个人数据底座**：你说话、思考、记录的每一件事都进了你自己的 SQLite + 向量索引，永远属于你
 - **Agent 友好**：通过本地 MCP server 把知识库开放给任何 agent
@@ -221,6 +222,7 @@ npm run typecheck
 - better-sqlite3
 - whisper.cpp
 - sherpa-onnx / NVIDIA Parakeet
+- sherpa-onnx / FunASR SenseVoice
 - Qdrant 本地向量检索
 - shadcn/ui 与 Radix UI
 
@@ -261,6 +263,7 @@ git commit -s -m "fix: describe the change"
 - [OpenAI Whisper](https://github.com/openai/whisper)
 - [whisper.cpp](https://github.com/ggerganov/whisper.cpp)
 - [NVIDIA Parakeet](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3)
+- [FunASR](https://github.com/modelscope/FunASR) 与 [SenseVoice](https://github.com/FunAudioLLM/SenseVoice)
 - [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx)
 - [llama.cpp](https://github.com/ggerganov/llama.cpp)
 - [Electron](https://www.electronjs.org/)
