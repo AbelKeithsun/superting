@@ -241,12 +241,16 @@ function wavToFloat32Samples(wavBuffer) {
   let dataOffset = -1;
   let dataSize = 0;
   let bitsPerSample = 16;
+  let audioFormat = 1; // 1 = PCM int, 3 = IEEE float, 0xFFFE = WAVE_FORMAT_EXTENSIBLE
+  let fmtChunkOffset = -1;
 
   while (offset < wavBuffer.length - 8) {
     const chunkId = wavBuffer.toString("ascii", offset, offset + 4);
     const chunkSize = wavBuffer.readUInt32LE(offset + 4);
 
     if (chunkId === "fmt ") {
+      fmtChunkOffset = offset;
+      audioFormat = wavBuffer.readUInt16LE(offset + 8);
       bitsPerSample = wavBuffer.readUInt16LE(offset + 22);
     } else if (chunkId === "data") {
       dataOffset = offset + 8;
@@ -261,16 +265,59 @@ function wavToFloat32Samples(wavBuffer) {
     throw new Error("WAV data chunk not found");
   }
 
+  // Streamed writers sometimes leave a stale chunk size behind; never read
+  // past the actual buffer.
+  dataSize = Math.min(dataSize, wavBuffer.length - dataOffset);
+
+  if (audioFormat === 0xfffe) {
+    // WAVE_FORMAT_EXTENSIBLE: the real format sits in the SubFormat GUID's
+    // first 2 bytes at fmt data+24 (only present when fmt size >= 40).
+    if (fmtChunkOffset >= 12 && wavBuffer.readUInt32LE(fmtChunkOffset + 4) >= 40) {
+      audioFormat = wavBuffer.readUInt16LE(fmtChunkOffset + 8 + 24);
+    }
+  }
+
   const bytesPerSample = bitsPerSample / 8;
+  if (!Number.isInteger(bytesPerSample) || bytesPerSample < 1) {
+    throw new Error(`Unsupported WAV bit depth: ${bitsPerSample}`);
+  }
   const numSamples = Math.floor(dataSize / bytesPerSample);
   const float32 = Buffer.alloc(numSamples * 4);
 
+  if (audioFormat === 3 && bitsPerSample === 32) {
+    for (let i = 0; i < numSamples; i++) {
+      float32.writeFloatLE(
+        wavBuffer.readFloatLE(dataOffset + i * 4),
+        i * 4
+      );
+    }
+    return float32;
+  }
+
+  if (audioFormat !== 1) {
+    throw new Error(`Unsupported WAV audio format: ${audioFormat}`);
+  }
+
   for (let i = 0; i < numSamples; i++) {
     const sampleOffset = dataOffset + i * bytesPerSample;
-    const intVal =
-      bitsPerSample === 16 ? wavBuffer.readInt16LE(sampleOffset) : wavBuffer.readInt8(sampleOffset);
-    const maxVal = bitsPerSample === 16 ? 32768 : 128;
-    float32.writeFloatLE(intVal / maxVal, i * 4);
+    let normalized;
+    if (bitsPerSample === 8) {
+      normalized = (wavBuffer.readUInt8(sampleOffset) - 128) / 128;
+    } else if (bitsPerSample === 16) {
+      normalized = wavBuffer.readInt16LE(sampleOffset) / 32768;
+    } else if (bitsPerSample === 24) {
+      const b0 = wavBuffer.readUInt8(sampleOffset);
+      const b1 = wavBuffer.readUInt8(sampleOffset + 1);
+      const b2 = wavBuffer.readUInt8(sampleOffset + 2);
+      let int24 = b0 | (b1 << 8) | (b2 << 16);
+      if (int24 & 0x800000) int24 |= ~0xffffff; // sign-extend
+      normalized = int24 / 8388608;
+    } else if (bitsPerSample === 32) {
+      normalized = wavBuffer.readInt32LE(sampleOffset) / 2147483648;
+    } else {
+      throw new Error(`Unsupported PCM WAV bit depth: ${bitsPerSample}`);
+    }
+    float32.writeFloatLE(normalized, i * 4);
   }
 
   return float32;
