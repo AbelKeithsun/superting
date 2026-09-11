@@ -6,9 +6,8 @@ import { withRetry, createApiRetryStrategy } from "../../../utils/retry";
 import logger from "../../../utils/logger";
 import { getConfiguredOpenAIBase } from "../openaiBase";
 import { applyThinkingSuppression } from "../thinkingSuppression";
-import openAiCompatibleErrors from "../openaiCompatibleErrors.js";
-
-const { formatOpenAiCompatibleError } = openAiCompatibleErrors;
+// CJS files get no interop under Vite 8 (rolldown) dev — import the ESM mirror.
+import { formatOpenAiCompatibleError } from "../openaiCompatibleErrorsCompat";
 
 const OPENAI_ENDPOINT_PREF_STORAGE_KEY = "openAiEndpointPreference";
 const REQUEST_TIMEOUT_MS = 90_000;
