@@ -22,7 +22,7 @@ import {
 } from "../ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "../ui/dialog";
 import { Input } from "../ui/input";
-import type { FolderItem } from "../../types/electron";
+import type { FolderItem, LocalTranscriptionProvider } from "../../types/electron";
 import { findDefaultFolder } from "./shared";
 import { useSettings } from "../../hooks/useSettings";
 import { getAllReasoningModels } from "../../models/ModelRegistry";
@@ -76,6 +76,8 @@ export default function UploadAudioView({ onNoteCreated, onOpenSettings }: Uploa
     setLocalTranscriptionProvider,
     parakeetModel,
     setParakeetModel,
+    funasrModel,
+    setFunasrModel,
     cloudTranscriptionProvider,
     setCloudTranscriptionProvider,
     cloudTranscriptionModel,
@@ -172,6 +174,12 @@ export default function UploadAudioView({ onNoteCreated, onOpenSettings }: Uploa
           setProviderReady(
             !!(r?.success && r.models.some((m: { downloaded?: boolean }) => m.downloaded))
           );
+      } else if (localTranscriptionProvider === "funasr") {
+        const r = await window.electronAPI.listFunasrModels?.();
+        if (!cancelled)
+          setProviderReady(
+            !!(r?.success && r.models.some((m: { downloaded?: boolean }) => m.downloaded))
+          );
       } else {
         const r = await window.electronAPI.listWhisperModels?.();
         if (!cancelled)
@@ -199,6 +207,8 @@ export default function UploadAudioView({ onNoteCreated, onOpenSettings }: Uploa
     if (useLocalWhisper) {
       if (localTranscriptionProvider === "nvidia")
         return `Parakeet · ${parakeetModel || "default"}`;
+      if (localTranscriptionProvider === "funasr")
+        return `FunASR · ${funasrModel || "sensevoice-small"}`;
       return `Whisper · ${whisperModel || "base"}`;
     }
     const name =
@@ -278,8 +288,13 @@ export default function UploadAudioView({ onNoteCreated, onOpenSettings }: Uploa
       transcribe: async () => {
         if (useLocalWhisper) {
           return window.electronAPI.transcribeAudioFile(file.path, {
-            provider: localTranscriptionProvider as "whisper" | "nvidia",
-            model: localTranscriptionProvider === "nvidia" ? parakeetModel : whisperModel,
+            provider: localTranscriptionProvider,
+            model:
+              localTranscriptionProvider === "nvidia"
+                ? parakeetModel
+                : localTranscriptionProvider === "funasr"
+                  ? funasrModel
+                  : whisperModel,
             customDictionary,
             customDictionaryAliases,
           });
@@ -355,16 +370,24 @@ export default function UploadAudioView({ onNoteCreated, onOpenSettings }: Uploa
         onCloudProviderSelect={setCloudTranscriptionProvider}
         selectedCloudModel={cloudTranscriptionModel}
         onCloudModelSelect={setCloudTranscriptionModel}
-        selectedLocalModel={localTranscriptionProvider === "nvidia" ? parakeetModel : whisperModel}
+        selectedLocalModel={
+          localTranscriptionProvider === "nvidia"
+            ? parakeetModel
+            : localTranscriptionProvider === "funasr"
+              ? funasrModel
+              : whisperModel
+        }
         onLocalModelSelect={(modelId) => {
           if (localTranscriptionProvider === "nvidia") {
             setParakeetModel(modelId);
+          } else if (localTranscriptionProvider === "funasr") {
+            setFunasrModel(modelId);
           } else {
             setWhisperModel(modelId);
           }
         }}
         selectedLocalProvider={localTranscriptionProvider}
-        onLocalProviderSelect={(id) => setLocalTranscriptionProvider(id as "whisper" | "nvidia")}
+        onLocalProviderSelect={(id) => setLocalTranscriptionProvider(id as LocalTranscriptionProvider)}
         useLocalWhisper={useLocalWhisper}
         onModeChange={(isLocal) => {
           setUseLocalWhisper(isLocal);

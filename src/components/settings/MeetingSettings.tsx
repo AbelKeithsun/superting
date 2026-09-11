@@ -39,6 +39,8 @@ export function MeetingTranscriptionPanel() {
     setMeetingLocalTranscriptionProvider,
     meetingParakeetModel,
     setMeetingParakeetModel,
+    meetingFunasrModel,
+    setMeetingFunasrModel,
     meetingCloudTranscriptionProvider,
     setMeetingCloudTranscriptionProvider,
     meetingCloudTranscriptionModel,
@@ -82,11 +84,18 @@ export function MeetingTranscriptionPanel() {
     (modelId: string) => {
       if (meetingLocalTranscriptionProvider === "nvidia") {
         setMeetingParakeetModel(modelId);
+      } else if (meetingLocalTranscriptionProvider === "funasr") {
+        setMeetingFunasrModel(modelId);
       } else {
         setMeetingWhisperModel(modelId);
       }
     },
-    [meetingLocalTranscriptionProvider, setMeetingParakeetModel, setMeetingWhisperModel]
+    [
+      meetingLocalTranscriptionProvider,
+      setMeetingParakeetModel,
+      setMeetingFunasrModel,
+      setMeetingWhisperModel,
+    ]
   );
 
   const renderTranscriptionPicker = (mode: "cloud" | "local") => (
@@ -97,7 +106,11 @@ export function MeetingTranscriptionPanel() {
       selectedCloudModel={meetingCloudTranscriptionModel}
       onCloudModelSelect={setMeetingCloudTranscriptionModel}
       selectedLocalModel={
-        meetingLocalTranscriptionProvider === "nvidia" ? meetingParakeetModel : meetingWhisperModel
+        meetingLocalTranscriptionProvider === "nvidia"
+          ? meetingParakeetModel
+          : meetingLocalTranscriptionProvider === "funasr"
+            ? meetingFunasrModel
+            : meetingWhisperModel
       }
       onLocalModelSelect={handleLocalTranscriptionModelSelect}
       selectedLocalProvider={meetingLocalTranscriptionProvider}

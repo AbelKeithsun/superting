@@ -420,7 +420,8 @@
     "customProvider": "カスタム",
     "fallback": {
       "whisperModelDescription": "モデル",
-      "parakeetModelDescription": "NVIDIA Parakeet モデル"
+      "parakeetModelDescription": "NVIDIA Parakeet モデル",
+      "funasrModelDescription": "FunASR SenseVoice モデル"
     },
     "whisperModels": "Whisper モデル"
   },

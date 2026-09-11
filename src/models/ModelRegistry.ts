@@ -103,8 +103,28 @@ export interface ParakeetModelInfo {
 
 export type ParakeetModelsMap = Record<string, ParakeetModelInfo>;
 
+export interface FunasrModelInfo {
+  name: string;
+  description: string;
+  descriptionKey?: string;
+  size: string;
+  sizeMb: number;
+  language: string;
+  supportedLanguages: string[];
+  recommended?: boolean;
+  modelType: string;
+  repo: string;
+  files: { name: string; sizeMb: number }[];
+  requiredFiles: string[];
+  downloadUrl: string;
+  extractDir: string;
+}
+
+export type FunasrModelsMap = Record<string, FunasrModelInfo>;
+
 interface ModelRegistryData {
   parakeetModels: ParakeetModelsMap;
+  funasrModels: FunasrModelsMap;
   whisperModels: WhisperModelsMap;
   transcriptionProviders: TranscriptionProviderData[];
   cloudProviders: CloudProviderData[];
@@ -419,6 +439,16 @@ export function getParakeetModelInfo(modelId: string): ParakeetModelInfo | undef
 }
 
 export const PARAKEET_MODEL_INFO = modelData.parakeetModels;
+
+export function getFunasrModels(): FunasrModelsMap {
+  return modelData.funasrModels;
+}
+
+export function getFunasrModelInfo(modelId: string): FunasrModelInfo | undefined {
+  return modelData.funasrModels[modelId];
+}
+
+export const FUNASR_MODEL_INFO = modelData.funasrModels;
 
 export function getWhisperModelConfig(modelId: string): WhisperModelConfig | null {
   const modelInfo = modelData.whisperModels[modelId];

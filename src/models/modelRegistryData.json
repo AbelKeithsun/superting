@@ -51,6 +51,41 @@
       "descriptionKey": "models.descriptions.parakeet.parakeet_unified_en_0_6b"
     }
   },
+  "funasrModels": {
+    "sensevoice-small": {
+      "name": "SenseVoice Small",
+      "description": "FunASR SenseVoice: fast Chinese/English/Japanese/Korean/Cantonese ASR with ITN and emotion/event tags",
+      "descriptionKey": "transcription.fallback.funasrModelDescription",
+      "size": "228MB",
+      "sizeMb": 229,
+      "language": "multilingual",
+      "supportedLanguages": [
+        "zh",
+        "en",
+        "ja",
+        "ko",
+        "yue"
+      ],
+      "modelType": "sense_voice",
+      "repo": "csukuangfj/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17",
+      "files": [
+        {
+          "name": "model.int8.onnx",
+          "sizeMb": 228.2
+        },
+        {
+          "name": "tokens.txt",
+          "sizeMb": 0.3
+        }
+      ],
+      "requiredFiles": [
+        "model.int8.onnx",
+        "tokens.txt"
+      ],
+      "downloadUrl": "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17.tar.bz2",
+      "extractDir": "sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17"
+    }
+  },
   "diarizationModels": {
     "sherpa-onnx-pyannote-segmentation-3-0": {
       "name": "Pyannote Segmentation 3.0",

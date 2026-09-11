@@ -6,6 +6,7 @@ import mistralIcon from "@/assets/icons/providers/mistral.svg";
 import qwenIcon from "@/assets/icons/providers/qwen.svg";
 import groqIcon from "@/assets/icons/providers/groq.svg";
 import nvidiaIcon from "@/assets/icons/providers/nvidia.svg";
+import funasrIcon from "@/assets/icons/providers/funasr.svg";
 import openaiOssIcon from "@/assets/icons/providers/openai-oss.svg";
 import gemmaIcon from "@/assets/icons/providers/gemma.svg";
 import bedrockIcon from "@/assets/icons/providers/bedrock.svg";
@@ -22,6 +23,7 @@ export const PROVIDER_ICONS: Record<string, string> = {
   qwen: qwenIcon,
   groq: groqIcon,
   nvidia: nvidiaIcon,
+  funasr: funasrIcon,
   "openai-oss": openaiOssIcon,
   gemma: gemmaIcon,
   bedrock: bedrockIcon,

@@ -420,7 +420,8 @@
     "customProvider": "Personalizzato",
     "fallback": {
       "whisperModelDescription": "Modello",
-      "parakeetModelDescription": "Modello NVIDIA Parakeet"
+      "parakeetModelDescription": "Modello NVIDIA Parakeet",
+      "funasrModelDescription": "Modello FunASR SenseVoice"
     },
     "whisperModels": "Modelli Whisper"
   },

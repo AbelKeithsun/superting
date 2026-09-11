@@ -147,6 +147,8 @@ interface TranscriptionSectionProps {
   setWhisperModel: (model: string) => void;
   parakeetModel: string;
   setParakeetModel: (model: string) => void;
+  funasrModel: string;
+  setFunasrModel: (model: string) => void;
   cloudTranscriptionBaseUrl?: string;
   setCloudTranscriptionBaseUrl: (url: string) => void;
   transcriptionMode: InferenceMode;
@@ -181,6 +183,8 @@ function TranscriptionSection({
   setWhisperModel,
   parakeetModel,
   setParakeetModel,
+  funasrModel,
+  setFunasrModel,
   cloudTranscriptionBaseUrl,
   setCloudTranscriptionBaseUrl,
   transcriptionMode,
@@ -238,11 +242,13 @@ function TranscriptionSection({
     (modelId: string) => {
       if (localTranscriptionProvider === "nvidia") {
         setParakeetModel(modelId);
+      } else if (localTranscriptionProvider === "funasr") {
+        setFunasrModel(modelId);
       } else {
         setWhisperModel(modelId);
       }
     },
-    [localTranscriptionProvider, setParakeetModel, setWhisperModel]
+    [localTranscriptionProvider, setParakeetModel, setFunasrModel, setWhisperModel]
   );
 
   const renderPreviewToggle = () => (
@@ -264,7 +270,13 @@ function TranscriptionSection({
       onCloudProviderSelect={setCloudTranscriptionProvider}
       selectedCloudModel={cloudTranscriptionModel}
       onCloudModelSelect={setCloudTranscriptionModel}
-      selectedLocalModel={localTranscriptionProvider === "nvidia" ? parakeetModel : whisperModel}
+      selectedLocalModel={
+        localTranscriptionProvider === "nvidia"
+          ? parakeetModel
+          : localTranscriptionProvider === "funasr"
+            ? funasrModel
+            : whisperModel
+      }
       onLocalModelSelect={handleLocalModelSelect}
       selectedLocalProvider={localTranscriptionProvider}
       onLocalProviderSelect={setLocalTranscriptionProvider}
@@ -613,6 +625,7 @@ export default function SettingsPage({
     whisperModel,
     localTranscriptionProvider,
     parakeetModel,
+    funasrModel,
     uiLanguage,
     preferredLanguage,
     cloudTranscriptionProvider,
@@ -631,6 +644,7 @@ export default function SettingsPage({
     setWhisperModel,
     setLocalTranscriptionProvider,
     setParakeetModel,
+    setFunasrModel,
     setCloudTranscriptionProvider,
     setCloudTranscriptionModel,
     setCloudTranscriptionBaseUrl,
@@ -1134,6 +1148,7 @@ export default function SettingsPage({
           const results = await Promise.allSettled([
             window.electronAPI?.deleteAllWhisperModels?.(),
             window.electronAPI?.deleteAllParakeetModels?.(),
+            window.electronAPI?.deleteAllFunasrModels?.(),
             window.electronAPI?.modelDeleteAll?.(),
           ]);
 
@@ -2816,6 +2831,8 @@ EOF`,
                   setWhisperModel={setWhisperModel}
                   parakeetModel={parakeetModel}
                   setParakeetModel={setParakeetModel}
+                  funasrModel={funasrModel}
+                  setFunasrModel={setFunasrModel}
                   cloudTranscriptionBaseUrl={cloudTranscriptionBaseUrl}
                   setCloudTranscriptionBaseUrl={setCloudTranscriptionBaseUrl}
                   transcriptionMode={transcriptionMode}
@@ -2827,7 +2844,7 @@ EOF`,
                   toast={toast}
                 />
                 {transcriptionMode === "local" &&
-                  localTranscriptionProvider !== "nvidia" &&
+                  localTranscriptionProvider === "whisper" &&
                   renderWhisperVadSettings()}
               </div>
             )}
@@ -2835,7 +2852,7 @@ EOF`,
               <div className="space-y-6">
                 <MeetingTranscriptionPanel />
                 {transcriptionMode === "local" &&
-                  localTranscriptionProvider !== "nvidia" &&
+                  localTranscriptionProvider === "whisper" &&
                   renderWhisperVadSettings()}
               </div>
             )}

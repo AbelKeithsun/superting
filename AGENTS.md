@@ -13,7 +13,7 @@ SuperTing is an Electron-based desktop dictation application that uses whisper.c
 - **Desktop Framework**: Electron 41 with context isolation
 - **Database**: better-sqlite3 for local transcription history
 - **UI Components**: shadcn/ui with Radix primitives
-- **Speech Processing**: whisper.cpp + NVIDIA Parakeet (via sherpa-onnx) + OpenAI API
+- **Speech Processing**: whisper.cpp + NVIDIA Parakeet + FunASR SenseVoice (via sherpa-onnx) + OpenAI API
 - **Audio Processing**: FFmpeg (bundled via ffmpeg-static)
 - **Node.js**: 24 (pinned in `.nvmrc` — CI uses Node 24, do NOT regenerate `package-lock.json` with a different major version)
 
@@ -168,6 +168,18 @@ SuperTing is an Electron-based desktop dictation application that uses whisper.c
   - `parakeet-unified-en-0.6b`: English-only, ~631MB, state-of-the-art EN accuracy (5.91% avg WER on Open ASR Leaderboard)
 
 - **Download URLs**: Models from sherpa-onnx ASR models release on GitHub
+
+### FunASR SenseVoice Integration (via sherpa-onnx)
+
+- **funasr.js**: Model management for the FunASR SenseVoice-Small ASR model
+  - Reuses the same bundled sherpa-onnx WS server binary as Parakeet (no new runtime)
+  - Models stored in `~/.cache/superting/funasr-models/`
+  - Downloads per-file from HuggingFace mirror (default `hf-mirror.com`, override via `SUPERTING_FUNASR_HF_MIRROR`), with GitHub release archive + `gh-proxy.com` (`SUPERTING_FUNASR_GH_PROXY`) and HF official fallbacks
+  - Server pre-warming on startup when `LOCAL_TRANSCRIPTION_PROVIDER=funasr` is set
+- **funasrServer.js / funasrWsServer.js**: WS server wrapper + 30s segmentation, mirrors `parakeetServer.js`/`parakeetWsServer.js` (port range 6030-6053)
+- **Available Models**:
+  - `sensevoice-small`: zh/en/ja/ko/yue, ~228MB int8, ITN + emotion/event tags
+- **Provider env vars**: `LOCAL_TRANSCRIPTION_PROVIDER=funasr`, `FUNASR_MODEL=sensevoice-small`
 
 ### Local Semantic Search (Qdrant + MiniLM)
 

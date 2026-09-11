@@ -15,6 +15,7 @@ export interface TranscriptionSettings {
   whisperModel: string;
   localTranscriptionProvider: LocalTranscriptionProvider;
   parakeetModel: string;
+  funasrModel: string;
   allowOpenAIFallback: boolean;
   allowLocalFallback: boolean;
   fallbackWhisperModel: string;
@@ -157,6 +158,7 @@ function useSettingsInternal() {
     localTranscriptionProvider,
     whisperModel,
     parakeetModel,
+    funasrModel,
     cleanupProvider,
     cleanupModel,
     dictationAgentProvider,
@@ -166,7 +168,12 @@ function useSettingsInternal() {
   useEffect(() => {
     if (typeof window === "undefined" || !window.electronAPI?.syncStartupPreferences) return;
 
-    const model = localTranscriptionProvider === "nvidia" ? parakeetModel : whisperModel;
+    const model =
+      localTranscriptionProvider === "nvidia"
+        ? parakeetModel
+        : localTranscriptionProvider === "funasr"
+          ? funasrModel
+          : whisperModel;
     window.electronAPI
       .syncStartupPreferences({
         useLocalWhisper,
@@ -189,6 +196,7 @@ function useSettingsInternal() {
     localTranscriptionProvider,
     whisperModel,
     parakeetModel,
+    funasrModel,
     cleanupProvider,
     cleanupModel,
     dictationAgentProvider,
@@ -201,6 +209,7 @@ function useSettingsInternal() {
     uiLanguage: store.uiLanguage,
     localTranscriptionProvider: store.localTranscriptionProvider,
     parakeetModel: store.parakeetModel,
+    funasrModel: store.funasrModel,
     allowOpenAIFallback: store.allowOpenAIFallback,
     allowLocalFallback: store.allowLocalFallback,
     fallbackWhisperModel: store.fallbackWhisperModel,
@@ -241,6 +250,7 @@ function useSettingsInternal() {
     setUiLanguage: store.setUiLanguage,
     setLocalTranscriptionProvider: store.setLocalTranscriptionProvider,
     setParakeetModel: store.setParakeetModel,
+    setFunasrModel: store.setFunasrModel,
     setAllowOpenAIFallback: store.setAllowOpenAIFallback,
     setAllowLocalFallback: store.setAllowLocalFallback,
     setFallbackWhisperModel: store.setFallbackWhisperModel,

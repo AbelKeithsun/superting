@@ -294,6 +294,25 @@ contextBridge.exposeInMainWorld("electronAPI", {
   parakeetServerStop: () => ipcRenderer.invoke("parakeet-server-stop"),
   parakeetServerStatus: () => ipcRenderer.invoke("parakeet-server-status"),
 
+  // Local FunASR (SenseVoice) functions
+  transcribeLocalFunasr: (audioBlob, options) =>
+    ipcRenderer.invoke("transcribe-local-funasr", audioBlob, options),
+  checkFunasrInstallation: () => ipcRenderer.invoke("check-funasr-installation"),
+  downloadFunasrModel: (modelName) => ipcRenderer.invoke("download-funasr-model", modelName),
+  onFunasrDownloadProgress: registerListener("funasr-download-progress"),
+  checkFunasrModelStatus: (modelName) =>
+    ipcRenderer.invoke("check-funasr-model-status", modelName),
+  listFunasrModels: () => ipcRenderer.invoke("list-funasr-models"),
+  deleteFunasrModel: (modelName) => ipcRenderer.invoke("delete-funasr-model", modelName),
+  deleteAllFunasrModels: () => ipcRenderer.invoke("delete-all-funasr-models"),
+  cancelFunasrDownload: () => ipcRenderer.invoke("cancel-funasr-download"),
+  getFunasrDiagnostics: () => ipcRenderer.invoke("get-funasr-diagnostics"),
+
+  // FunASR server functions (faster repeated transcriptions)
+  funasrServerStart: (modelName) => ipcRenderer.invoke("funasr-server-start", modelName),
+  funasrServerStop: () => ipcRenderer.invoke("funasr-server-stop"),
+  funasrServerStatus: () => ipcRenderer.invoke("funasr-server-status"),
+
   // Diarization (speaker identification) functions
   downloadDiarizationModels: () => ipcRenderer.invoke("download-diarization-models"),
   getDiarizationModelStatus: () => ipcRenderer.invoke("get-diarization-model-status"),

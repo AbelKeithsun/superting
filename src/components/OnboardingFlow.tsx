@@ -33,6 +33,7 @@ import { getCachedPlatform, getPlatform } from "../utils/platform";
 import logger from "../utils/logger";
 import { ActivationModeSelector } from "./ui/ActivationModeSelector";
 import TranscriptionModelPicker from "./TranscriptionModelPicker";
+import type { LocalTranscriptionProvider } from "../types/electron";
 import { ACCESSIBILITY_SKIPPED_KEY, areRequiredPermissionsMet } from "../utils/permissions";
 
 interface OnboardingFlowProps {
@@ -74,6 +75,7 @@ export default function OnboardingFlow({ onComplete }: OnboardingFlowProps) {
     whisperModel,
     localTranscriptionProvider,
     parakeetModel,
+    funasrModel,
     cloudTranscriptionProvider,
     cloudTranscriptionModel,
     cloudTranscriptionBaseUrl,
@@ -174,7 +176,12 @@ export default function OnboardingFlow({ onComplete }: OnboardingFlowProps) {
   }, []);
 
   useEffect(() => {
-    const modelToCheck = localTranscriptionProvider === "nvidia" ? parakeetModel : whisperModel;
+    const modelToCheck =
+      localTranscriptionProvider === "nvidia"
+        ? parakeetModel
+        : localTranscriptionProvider === "funasr"
+          ? funasrModel
+          : whisperModel;
     if (!useLocalWhisper || !modelToCheck) {
       setIsModelDownloaded(false);
       return;
@@ -185,7 +192,9 @@ export default function OnboardingFlow({ onComplete }: OnboardingFlowProps) {
         const result =
           localTranscriptionProvider === "nvidia"
             ? await window.electronAPI?.checkParakeetModelStatus(modelToCheck)
-            : await window.electronAPI?.checkModelStatus(modelToCheck);
+            : localTranscriptionProvider === "funasr"
+              ? await window.electronAPI?.checkFunasrModelStatus(modelToCheck)
+              : await window.electronAPI?.checkModelStatus(modelToCheck);
         setIsModelDownloaded(result?.downloaded ?? false);
       } catch (error) {
         logger.error("Failed to check model status", { error }, "onboarding");
@@ -194,7 +203,7 @@ export default function OnboardingFlow({ onComplete }: OnboardingFlowProps) {
     };
 
     checkStatus();
-  }, [useLocalWhisper, whisperModel, parakeetModel, localTranscriptionProvider]);
+  }, [useLocalWhisper, whisperModel, parakeetModel, funasrModel, localTranscriptionProvider]);
 
   const activationStepIndex = 2;
 
@@ -397,11 +406,17 @@ export default function OnboardingFlow({ onComplete }: OnboardingFlowProps) {
                 updateTranscriptionSettings({ cloudTranscriptionModel: model })
               }
               selectedLocalModel={
-                localTranscriptionProvider === "nvidia" ? parakeetModel : whisperModel
+                localTranscriptionProvider === "nvidia"
+                  ? parakeetModel
+                  : localTranscriptionProvider === "funasr"
+                    ? funasrModel
+                    : whisperModel
               }
               onLocalModelSelect={(modelId) => {
                 if (localTranscriptionProvider === "nvidia") {
                   updateTranscriptionSettings({ parakeetModel: modelId });
+                } else if (localTranscriptionProvider === "funasr") {
+                  updateTranscriptionSettings({ funasrModel: modelId });
                 } else {
                   updateTranscriptionSettings({ whisperModel: modelId });
                 }
@@ -409,7 +424,7 @@ export default function OnboardingFlow({ onComplete }: OnboardingFlowProps) {
               selectedLocalProvider={localTranscriptionProvider}
               onLocalProviderSelect={(provider) =>
                 updateTranscriptionSettings({
-                  localTranscriptionProvider: provider as "whisper" | "nvidia",
+                  localTranscriptionProvider: provider as LocalTranscriptionProvider,
                 })
               }
               useLocalWhisper={useLocalWhisper}
@@ -553,7 +568,11 @@ export default function OnboardingFlow({ onComplete }: OnboardingFlowProps) {
       case 0:
         if (useLocalWhisper) {
           const modelToCheck =
-            localTranscriptionProvider === "nvidia" ? parakeetModel : whisperModel;
+            localTranscriptionProvider === "nvidia"
+              ? parakeetModel
+              : localTranscriptionProvider === "funasr"
+                ? funasrModel
+                : whisperModel;
           return modelToCheck !== "" && isModelDownloaded;
         } else {
           // For cloud mode, check if appropriate API key is set

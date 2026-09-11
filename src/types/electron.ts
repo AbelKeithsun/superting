@@ -1,4 +1,4 @@
-export type LocalTranscriptionProvider = "whisper" | "nvidia";
+export type LocalTranscriptionProvider = "whisper" | "nvidia" | "funasr";
 
 export type InferenceMode = "providers" | "local" | "self-hosted" | "enterprise";
 
@@ -355,6 +355,25 @@ export interface ParakeetDiagnosticsResult {
   models: string[];
 }
 
+// FunASR (SenseVoice) IPC payloads share the parakeet result shapes; the
+// transcription result adds SenseVoice metadata fields.
+export type FunasrCheckResult = ParakeetCheckResult;
+export type FunasrModelResult = ParakeetModelResult;
+export type FunasrModelDeleteResult = ParakeetModelDeleteResult;
+export type FunasrModelsListResult = ParakeetModelsListResult;
+export type FunasrDownloadProgressData = ParakeetDownloadProgressData;
+export type FunasrDiagnosticsResult = ParakeetDiagnosticsResult;
+
+export interface FunasrTranscriptionResult {
+  success: boolean;
+  text?: string;
+  message?: string;
+  error?: string;
+  lang?: string | null;
+  emotion?: string | null;
+  event?: string | null;
+}
+
 export interface PasteToolsResult {
   platform: "darwin" | "win32" | "linux";
   available: boolean;
@@ -522,6 +541,8 @@ declare global {
           cloudTranscriptionModel: string;
           cloudTranscriptionBaseUrl?: string;
           parakeetModel: string;
+          funasrModel?: string;
+          funasrUseItn?: boolean;
           whisperModel: string;
           customDictionary?: string[];
           customDictionaryAliases?: Array<{ from: string; to: string }>;
@@ -827,7 +848,7 @@ declare global {
       transcribeAudioFile: (
         filePath: string,
         options?: {
-          provider?: "whisper" | "nvidia";
+          provider?: LocalTranscriptionProvider;
           model?: string;
           language?: string;
           [key: string]: unknown;
@@ -952,6 +973,41 @@ declare global {
         error?: string;
       }>;
       getParakeetDiagnostics: () => Promise<ParakeetDiagnosticsResult>;
+
+      // FunASR operations (SenseVoice via sherpa-onnx)
+      transcribeLocalFunasr: (
+        audioBlob: ArrayBuffer,
+        options?: { model?: string; language?: string; useItn?: boolean }
+      ) => Promise<FunasrTranscriptionResult>;
+      checkFunasrInstallation: () => Promise<FunasrCheckResult>;
+      downloadFunasrModel: (modelName: string) => Promise<FunasrModelResult>;
+      onFunasrDownloadProgress: (
+        callback: (event: any, data: FunasrDownloadProgressData) => void
+      ) => () => void;
+      checkFunasrModelStatus: (modelName: string) => Promise<FunasrModelResult>;
+      listFunasrModels: () => Promise<FunasrModelsListResult>;
+      deleteFunasrModel: (modelName: string) => Promise<FunasrModelDeleteResult>;
+      deleteAllFunasrModels: () => Promise<{
+        success: boolean;
+        deleted_count?: number;
+        freed_bytes?: number;
+        freed_mb?: number;
+        error?: string;
+      }>;
+      cancelFunasrDownload: () => Promise<{
+        success: boolean;
+        message?: string;
+        error?: string;
+      }>;
+      getFunasrDiagnostics: () => Promise<FunasrDiagnosticsResult>;
+      funasrServerStart: (modelName: string) => Promise<{ success: boolean; port?: number }>;
+      funasrServerStop: () => Promise<{ success: boolean }>;
+      funasrServerStatus: () => Promise<{
+        available: boolean;
+        running: boolean;
+        port: number | null;
+        modelName: string | null;
+      }>;
 
       // Local AI model management
       modelGetAll: () => Promise<any[]>;

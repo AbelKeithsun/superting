@@ -17,6 +17,7 @@ import {
   TranscriptionProviderData,
   WHISPER_MODEL_INFO,
   PARAKEET_MODEL_INFO,
+  FUNASR_MODEL_INFO,
 } from "../models/ModelRegistry";
 import {
   MODEL_PICKER_COLORS,
@@ -210,6 +211,7 @@ const VALID_CLOUD_PROVIDER_IDS = CLOUD_PROVIDER_TABS.map((p) => p.id);
 const LOCAL_PROVIDER_TABS: Array<{ id: string; name: string; disabled?: boolean }> = [
   { id: "whisper", name: "OpenAI" },
   { id: "nvidia", name: "NVIDIA" },
+  { id: "funasr", name: "FunASR" },
 ];
 
 interface ModeToggleProps {
@@ -278,9 +280,11 @@ export default function TranscriptionModelPicker({
   const effectiveLocal = mode === "local" ? true : mode === "cloud" ? false : useLocalWhisper;
   const [localModels, setLocalModels] = useState<LocalModel[]>([]);
   const [parakeetModels, setParakeetModels] = useState<LocalModel[]>([]);
+  const [funasrModels, setFunasrModels] = useState<LocalModel[]>([]);
   const [internalLocalProvider, setInternalLocalProvider] = useState(selectedLocalProvider);
   const hasLoadedRef = useRef(false);
   const hasLoadedParakeetRef = useRef(false);
+  const hasLoadedFunasrRef = useRef(false);
   const [cudaStatus, setCudaStatus] = useState<CudaWhisperStatus | null>(null);
   const [cudaDownloading, setCudaDownloading] = useState(false);
   const [cudaProgress, setCudaProgress] = useState<DownloadProgress>({
@@ -298,8 +302,10 @@ export default function TranscriptionModelPicker({
   }, [selectedLocalProvider]);
   const isLoadingRef = useRef(false);
   const isLoadingParakeetRef = useRef(false);
+  const isLoadingFunasrRef = useRef(false);
   const loadLocalModelsRef = useRef<(() => Promise<void>) | null>(null);
   const loadParakeetModelsRef = useRef<(() => Promise<void>) | null>(null);
+  const loadFunasrModelsRef = useRef<(() => Promise<void>) | null>(null);
   const ensureValidCloudSelectionRef = useRef<(() => void) | null>(null);
   const selectedLocalModelRef = useRef(selectedLocalModel);
   const onLocalModelSelectRef = useRef(onLocalModelSelect);
@@ -374,6 +380,23 @@ export default function TranscriptionModelPicker({
     }
   }, []);
 
+  const loadFunasrModels = useCallback(async () => {
+    if (isLoadingFunasrRef.current) return;
+    isLoadingFunasrRef.current = true;
+
+    try {
+      const result = await window.electronAPI?.listFunasrModels();
+      if (result?.success) {
+        setFunasrModels(result.models);
+      }
+    } catch (error) {
+      logger.error("Failed to load FunASR models", { error }, "models");
+      setFunasrModels([]);
+    } finally {
+      isLoadingFunasrRef.current = false;
+    }
+  }, []);
+
   const ensureValidCloudSelection = useCallback(() => {
     const isValidProvider = VALID_CLOUD_PROVIDER_IDS.includes(selectedCloudProvider);
 
@@ -418,6 +441,9 @@ export default function TranscriptionModelPicker({
     loadParakeetModelsRef.current = loadParakeetModels;
   }, [loadParakeetModels]);
   useEffect(() => {
+    loadFunasrModelsRef.current = loadFunasrModels;
+  }, [loadFunasrModels]);
+  useEffect(() => {
     ensureValidCloudSelectionRef.current = ensureValidCloudSelection;
   }, [ensureValidCloudSelection]);
 
@@ -430,6 +456,9 @@ export default function TranscriptionModelPicker({
     } else if (internalLocalProvider === "nvidia" && !hasLoadedParakeetRef.current) {
       hasLoadedParakeetRef.current = true;
       loadParakeetModelsRef.current?.();
+    } else if (internalLocalProvider === "funasr" && !hasLoadedFunasrRef.current) {
+      hasLoadedFunasrRef.current = true;
+      loadFunasrModelsRef.current?.();
     }
   }, [effectiveLocal, internalLocalProvider]);
 
@@ -438,6 +467,7 @@ export default function TranscriptionModelPicker({
 
     hasLoadedRef.current = false;
     hasLoadedParakeetRef.current = false;
+    hasLoadedFunasrRef.current = false;
     ensureValidCloudSelectionRef.current?.();
   }, [effectiveLocal]);
 
@@ -445,10 +475,11 @@ export default function TranscriptionModelPicker({
     const handleModelsCleared = () => {
       loadLocalModels();
       loadParakeetModels();
+      loadFunasrModels();
     };
     window.addEventListener("superting-models-cleared", handleModelsCleared);
     return () => window.removeEventListener("superting-models-cleared", handleModelsCleared);
-  }, [loadLocalModels, loadParakeetModels]);
+  }, [loadLocalModels, loadParakeetModels, loadFunasrModels]);
 
   useEffect(() => {
     if (!effectiveLocal || internalLocalProvider !== "whisper") return;
@@ -519,6 +550,20 @@ export default function TranscriptionModelPicker({
     onDownloadComplete: loadParakeetModels,
   });
 
+  const {
+    downloadingModel: downloadingFunasrModel,
+    downloadProgress: funasrDownloadProgress,
+    downloadModel: downloadFunasrModel,
+    deleteModel: deleteFunasrModel,
+    isDownloadingModel: isDownloadingFunasrModel,
+    isInstalling: isInstallingFunasr,
+    cancelDownload: cancelFunasrDownload,
+    isCancelling: isCancellingFunasr,
+  } = useModelDownload({
+    modelType: "funasr",
+    onDownloadComplete: loadFunasrModels,
+  });
+
   const handleModeChange = useCallback(
     (isLocal: boolean) => {
       onModeChange(isLocal);
@@ -570,6 +615,15 @@ export default function TranscriptionModelPicker({
     (modelId: string) => {
       onLocalProviderSelect?.("nvidia");
       setInternalLocalProvider("nvidia");
+      onLocalModelSelect(modelId);
+    },
+    [onLocalModelSelect, onLocalProviderSelect]
+  );
+
+  const handleFunasrModelSelect = useCallback(
+    (modelId: string) => {
+      onLocalProviderSelect?.("funasr");
+      setInternalLocalProvider("funasr");
       onLocalModelSelect(modelId);
     },
     [onLocalModelSelect, onLocalProviderSelect]
@@ -668,6 +722,17 @@ export default function TranscriptionModelPicker({
       );
     }
 
+    if (downloadingFunasrModel && internalLocalProvider === "funasr") {
+      const modelInfo = FUNASR_MODEL_INFO[downloadingFunasrModel];
+      return (
+        <DownloadProgressBar
+          modelName={modelInfo?.name || downloadingFunasrModel}
+          progress={funasrDownloadProgress}
+          isInstalling={isInstallingFunasr}
+        />
+      );
+    }
+
     return null;
   }, [
     downloadingModel,
@@ -676,6 +741,9 @@ export default function TranscriptionModelPicker({
     downloadingParakeetModel,
     parakeetDownloadProgress,
     isInstallingParakeet,
+    downloadingFunasrModel,
+    funasrDownloadProgress,
+    isInstallingFunasr,
     effectiveLocal,
     internalLocalProvider,
   ]);
@@ -752,6 +820,80 @@ export default function TranscriptionModelPicker({
     },
     [showConfirmDialog, deleteParakeetModel, t]
   );
+
+  const handleFunasrDelete = useCallback(
+    (modelId: string) => {
+      showConfirmDialog({
+        title: t("transcription.deleteModel.title"),
+        description: t("transcription.deleteModel.description"),
+        onConfirm: async () => {
+          await deleteFunasrModel(modelId, async () => {
+            const result = await window.electronAPI?.listFunasrModels();
+            if (result?.success) {
+              setFunasrModels(result.models);
+            }
+          });
+        },
+        variant: "destructive",
+      });
+    },
+    [showConfirmDialog, deleteFunasrModel, t]
+  );
+
+  const renderFunasrModels = () => {
+    const modelsToRender =
+      funasrModels.length === 0
+        ? Object.entries(FUNASR_MODEL_INFO).map(([modelId, info]) => ({
+            model: modelId,
+            downloaded: false,
+            size_mb: info.sizeMb,
+          }))
+        : funasrModels;
+
+    return (
+      <div className="ow-model-list">
+        {modelsToRender.map((model) => {
+          const modelId = model.model;
+          const info = FUNASR_MODEL_INFO[modelId] ?? {
+            name: modelId,
+            description: t("transcription.fallback.funasrModelDescription"),
+            size: t("common.unknown"),
+            language: "zh",
+            recommended: false,
+          };
+
+          return (
+            <LocalModelCard
+              key={modelId}
+              modelId={modelId}
+              name={info.name}
+              description={info.description}
+              size={info.size}
+              actualSizeMb={model.size_mb}
+              isSelected={modelId === selectedLocalModel}
+              isDownloaded={model.downloaded ?? false}
+              isDownloading={isDownloadingFunasrModel(modelId)}
+              isCancelling={isCancellingFunasr}
+              recommended={info.recommended}
+              provider="funasr"
+              onSelect={() => handleFunasrModelSelect(modelId)}
+              onDelete={() => handleFunasrDelete(modelId)}
+              onDownload={() =>
+                downloadFunasrModel(modelId, (downloadedId) => {
+                  setFunasrModels((prev) =>
+                    prev.map((m) => (m.model === downloadedId ? { ...m, downloaded: true } : m))
+                  );
+                  handleFunasrModelSelect(downloadedId);
+                })
+              }
+              onCancel={cancelFunasrDownload}
+              styles={styles}
+            />
+          );
+        })}
+      </div>
+    );
+  };
 
   const renderParakeetModels = () => {
     const modelsToRender =
@@ -985,6 +1127,7 @@ export default function TranscriptionModelPicker({
           <div className="min-w-0">
             {internalLocalProvider === "whisper" && renderLocalModels()}
             {internalLocalProvider === "nvidia" && renderParakeetModels()}
+            {internalLocalProvider === "funasr" && renderFunasrModels()}
           </div>
         </>
       )}

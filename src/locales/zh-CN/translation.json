@@ -422,7 +422,8 @@
     "customProvider": "自定义",
     "fallback": {
       "whisperModelDescription": "模型",
-      "parakeetModelDescription": "NVIDIA Parakeet 模型"
+      "parakeetModelDescription": "NVIDIA Parakeet 模型",
+      "funasrModelDescription": "FunASR SenseVoice 模型"
     },
     "whisperModels": "Whisper 模型"
   },

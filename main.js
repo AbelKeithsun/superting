@@ -266,6 +266,7 @@ const DatabaseManager = require("./src/helpers/database");
 const ClipboardManager = require("./src/helpers/clipboard");
 const WhisperManager = require("./src/helpers/whisper");
 const ParakeetManager = require("./src/helpers/parakeet");
+const FunasrManager = require("./src/helpers/funasr");
 const DiarizationManager = require("./src/helpers/diarization");
 const TrayManager = require("./src/helpers/tray");
 const IPCHandlers = require("./src/helpers/ipcHandlers");
@@ -298,6 +299,7 @@ let databaseManager = null;
 let clipboardManager = null;
 let whisperManager = null;
 let parakeetManager = null;
+let funasrManager = null;
 let diarizationManager = null;
 let trayManager = null;
 let updateManager = null;
@@ -377,6 +379,7 @@ function initializeCoreManagers() {
     whisperCudaManager = new WhisperCudaManager();
   }
   parakeetManager = new ParakeetManager();
+  funasrManager = new FunasrManager();
   diarizationManager = new DiarizationManager();
   meetingDetectionEngine = new MeetingDetectionEngine(
     null,
@@ -403,6 +406,7 @@ function initializeCoreManagers() {
     clipboardManager,
     whisperManager,
     parakeetManager,
+    funasrManager,
     diarizationManager,
     windowManager,
     updateManager,
@@ -426,6 +430,7 @@ function initializeCoreManagers() {
 function registerSidecars() {
   if (whisperManager) sidecarRegistry.register("whisper", () => whisperManager.stopServer());
   if (parakeetManager) sidecarRegistry.register("parakeet", () => parakeetManager.stopServer());
+  if (funasrManager) sidecarRegistry.register("funasr", () => funasrManager.stopServer());
   if (diarizationManager) {
     sidecarRegistry.register("diarization", () => diarizationManager.shutdown());
   }
@@ -860,6 +865,14 @@ async function startApp() {
   };
   parakeetManager.initializeAtStartup(parakeetSettings).catch((err) => {
     debugLogger.debug("Parakeet startup init error (non-fatal)", { error: err.message });
+  });
+
+  const funasrSettings = {
+    localTranscriptionProvider: process.env.LOCAL_TRANSCRIPTION_PROVIDER || "",
+    funasrModel: process.env.FUNASR_MODEL,
+  };
+  funasrManager.initializeAtStartup(funasrSettings).catch((err) => {
+    debugLogger.debug("FunASR startup init error (non-fatal)", { error: err.message });
   });
 
   // TODO: drop legacy REASONING_PROVIDER / LOCAL_REASONING_MODEL fallbacks after 2 releases.
