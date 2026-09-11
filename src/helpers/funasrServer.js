@@ -3,6 +3,7 @@ const path = require("path");
 const debugLogger = require("./debugLogger");
 const { getModelsDirForService } = require("./modelDirUtils");
 const {
+  getFFmpegPath,
   isWavFormat,
   convertToWav,
   wavToFloat32Samples,
