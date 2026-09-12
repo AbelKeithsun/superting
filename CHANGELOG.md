@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Agent integration
+
+- **Agent CLI (`superting`)**: new zero-dependency local client (`cli/superting.js`, `npm run install:cli` → `~/.local/bin`) for agents to operate a running desktop app over the loopback CLI bridge — one HTTP round-trip per command, no MCP session handshake. Covers `notes list|get|search|create|update|append|delete` (including `--find/--replace` literal editing), `folders`, `transcriptions`, `tags`, `dict` (hotwords) and `alias` (replacement rules). JSON output by default; destructive commands require `--yes`; exit codes 0/1/2. Agent-facing skill docs rewritten in `agent-skills/openwhispr-cli/SKILL.md`.
+- **CLI bridge write access for dictionary + replacement rules**: `PUT/POST/DELETE /v1/dictionary[/words|/aliases]` and `GET /v1/tags` added to `cliBridge.js`; mutations broadcast `dictionary-updated` / `dictionary-aliases-updated` so the Settings UI refreshes live. Note creation via the bridge now forwards tags. Validation failures return HTTP 400 `validation_error` instead of 500.
+
 ## [1.7.2] - 2026-05-20
 
 A small patch on top of 1.7.1: zero unnecessary macOS Keychain prompts on first launch, working cloud transcription on Electron's `net.fetch`, the Note Formatting selector now actually controls model routing, Wave Terminal pastes via the terminal path, and a notes view stability fix.
