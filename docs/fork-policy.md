@@ -18,3 +18,29 @@ upstream but is published under its own GitHub identity.
 - Keep OpenWhispr attribution and MIT license notices intact.
 - Prefer local-first and BYOK behavior unless a SuperTing-owned hosted service is
   explicitly introduced.
+
+## Remote and Branch Topology
+
+Two remotes are configured locally; each has exactly one job:
+
+```
+OpenWhispr/openwhispr            upstream project (MIT, attribution only, no remote)
+        │ fork
+        ▼
+sysusugan/superting              remote: origin — the source repository
+        │ fork
+        ▼
+AbelKeithsun/superting           remote: abel — the development fork
+```
+
+- **`abel` is where work happens.** The development line of record is
+  `abel/main`: feature branches (`codex/<topic>`) target it via rebase-merged
+  PRs and are deleted from the remote immediately after merge.
+- **Local `main` tracks `abel/main`.** `origin/main` is currently a lagging
+  mirror; pushing it back (`git push origin main`) is an explicit manual sync
+  action, never an automatic one.
+- **Releases are cut from `abel/main`**: a `chore: release vX.Y.Z` commit on
+  `main`, a `vX.Y.Z` tag, and a GitHub Release with three assets (dmg, zip,
+  `superting-skills-<ver>.tgz`).
+- OpenWhispr stays attribution-only: no `upstream` remote, no routine merges
+  from it (see Maintenance Rules above).

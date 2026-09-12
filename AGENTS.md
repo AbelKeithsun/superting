@@ -121,7 +121,7 @@ SuperTing 是一款基于 Electron 的桌面听写应用，使用 whisper.cpp �
 
 ### Agent Skills（agent-skills/）
 
-- `superting-cli/` 与 `superting-api/`（旧名 openwhispr-* 已更名）。遵循渐进式披露：SKILL.md 保持精简（≤120 行，含触发 description、NEVER/MUST 守则、命令速查表、少量示例），细节放 `references/` 子目录按需加载（cli: `notes.md`/`dictionary.md`/`troubleshooting.md`；api: `routes.md`）。`--list` 自带 lint（长度上限、frontmatter 完整性、references 链接有效性）。发版时 `npm run pack:skills` 生成零依赖 `dist/superting-skills-<version>.tgz` 作为 release 资产上传。
+- `superting-cli/` 与 `superting-api/`（旧名 openwhispr-\* 已更名）。遵循渐进式披露：SKILL.md 保持精简（≤120 行，含触发 description、NEVER/MUST 守则、命令速查表、少量示例），细节放 `references/` 子目录按需加载（cli: `notes.md`/`dictionary.md`/`troubleshooting.md`；api: `routes.md`）。`--list` 自带 lint（长度上限、frontmatter 完整性、references 链接有效性）。发版时 `npm run pack:skills` 生成零依赖 `dist/superting-skills-<version>.tgz` 作为 release 资产上传。
 
 ### React 组件（src/components/）
 
@@ -592,6 +592,29 @@ CREATE TABLE transcriptions (
 - 任一次成功同步即恢复正常 2 分钟间隔
 
 ## 开发规范
+
+### 仓库与分支拓扑
+
+三仓库 fork 链，各司其职：
+
+```
+OpenWhispr/openwhispr            上游项目（MIT，仅来源归属）
+  └─ 不建 remote；其代码只经显式 cherry-pick 或人工审阅补丁进入（见 docs/fork-policy.md）
+        │ fork
+        ▼
+sysusugan/superting              remote: origin —— 源仓库（SuperTing 品牌主仓）
+        │ fork
+        ▼
+AbelKeithsun/superting           remote: abel —— 开发仓（日常分支、PR、发版都在这里）
+```
+
+规则（所有协作者与 AI 助手必须遵守）：
+
+- **开发主线是 `abel/main`**。功能分支命名 `codex/<主题>`，PR 以 `abel/main` 为 base，只允许 rebase merge；合并后立即删除远端分支。
+- **本地 `main` 跟踪 `abel/main`**。origin（源仓库）当前是滞后镜像（v2.0.x 的开发未回推）；`git push origin main` 是显式的手动同步动作，永不自动发生。
+- **发版**：发布提交（`chore: release vX.Y.Z`）直接在主检出 `main` 上做并推 `abel/main`，随后打 tag `vX.Y.Z` 发 GitHub Release（资产三件套：dmg、zip、`superting-skills-<ver>.tgz`）。
+- **worktree 分工**：`superting/` 主检出放 `main`（发版提交）；`superting-worktrees/codex-funasr-sensevoice` 是开发/构建工作区（带全量 node_modules）。临时构建分支 `temp/build-<版本>` 在发版完成后删除。
+- 常用检视命令：`git status -sb`（本地 main vs abel/main）；`git log --oneline abel/main ^origin/main`（列出未回推源仓库的提交）。
 
 ### Git 工作流
 
