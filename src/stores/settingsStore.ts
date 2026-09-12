@@ -5,6 +5,7 @@ import { ensureAgentNameInDictionary } from "../utils/agentName";
 import { useStreamingProvidersStore } from "./streamingProvidersStore";
 import logger from "../utils/logger";
 import whisperVadConstants from "../constants/whisperVad.json";
+import funasrVadConstants from "../constants/funasrVad.json";
 import type { LocalTranscriptionProvider, InferenceMode, SelfHostedType } from "../types/electron";
 import { PROMPT_KIND_LIST, type PromptKind } from "../config/prompts/registry";
 import {
@@ -184,6 +185,11 @@ const NUMERIC_SETTINGS = new Set([
   "whisperVadMaxSpeechDurationS",
   "whisperVadSpeechPadMs",
   "whisperVadSamplesOverlap",
+  "funasrVadThreshold",
+  "funasrVadMinSpeechDurationMs",
+  "funasrVadMinSilenceDurationMs",
+  "funasrVadMaxSpeechDurationS",
+  "funasrVadSpeechPadMs",
 ]);
 
 const WHISPER_VAD_DEFAULTS = whisperVadConstants.DEFAULTS;
@@ -196,6 +202,20 @@ const clampVadValue = (key: WhisperVadKey, raw: unknown): number => {
   const n = raw === null || raw === undefined || raw === "" ? fallback : Number(raw);
   if (!Number.isFinite(n)) return fallback;
   const { min, max, round } = WHISPER_VAD_LIMITS[key];
+  const clamped = Math.min(max, Math.max(min, n));
+  return round ? Math.round(clamped) : clamped;
+};
+
+const FUNASR_VAD_DEFAULTS = funasrVadConstants.DEFAULTS;
+const FUNASR_VAD_LIMITS = funasrVadConstants.LIMITS;
+
+type FunasrVadKey = keyof typeof FUNASR_VAD_DEFAULTS;
+
+const clampFunasrVadValue = (key: FunasrVadKey, raw: unknown): number => {
+  const fallback = FUNASR_VAD_DEFAULTS[key];
+  const n = raw === null || raw === undefined || raw === "" ? fallback : Number(raw);
+  if (!Number.isFinite(n)) return fallback;
+  const { min, max, round } = FUNASR_VAD_LIMITS[key];
   const clamped = Math.min(max, Math.max(min, n));
   return round ? Math.round(clamped) : clamped;
 };
@@ -442,6 +462,12 @@ export interface SettingsState
   whisperVadMaxSpeechDurationS: number;
   whisperVadSpeechPadMs: number;
   whisperVadSamplesOverlap: number;
+  funasrVadEnabled: boolean;
+  funasrVadThreshold: number;
+  funasrVadMinSpeechDurationMs: number;
+  funasrVadMinSilenceDurationMs: number;
+  funasrVadMaxSpeechDurationS: number;
+  funasrVadSpeechPadMs: number;
   panelStartPosition: "bottom-right" | "center" | "bottom-left";
   showTranscriptionPreview: boolean;
   autoPasteEnabled: boolean;
@@ -626,6 +652,12 @@ export interface SettingsState
   setWhisperVadMaxSpeechDurationS: (value: number) => void;
   setWhisperVadSpeechPadMs: (value: number) => void;
   setWhisperVadSamplesOverlap: (value: number) => void;
+  setFunasrVadEnabled: (value: boolean) => void;
+  setFunasrVadThreshold: (value: number) => void;
+  setFunasrVadMinSpeechDurationMs: (value: number) => void;
+  setFunasrVadMinSilenceDurationMs: (value: number) => void;
+  setFunasrVadMaxSpeechDurationS: (value: number) => void;
+  setFunasrVadSpeechPadMs: (value: number) => void;
   setPanelStartPosition: (position: "bottom-right" | "center" | "bottom-left") => void;
   setShowTranscriptionPreview: (value: boolean) => void;
   setAutoPasteEnabled: (value: boolean) => void;
@@ -851,6 +883,21 @@ export const useSettingsStore = create<SettingsState>()((set, get) => ({
   dictationSileroEnabled: readBoolean("dictationSileroEnabled", true),
   noteRecordingSileroEnabled: readBoolean("noteRecordingSileroEnabled", true),
   meetingSileroEnabled: readBoolean("meetingSileroEnabled", true),
+  funasrVadEnabled: readBoolean("funasrVadEnabled", false),
+  funasrVadThreshold: clampFunasrVadValue("threshold", readString("funasrVadThreshold", "0.5")),
+  funasrVadMinSpeechDurationMs: clampFunasrVadValue(
+    "minSpeechDurationMs",
+    readString("funasrVadMinSpeechDurationMs", "250")
+  ),
+  funasrVadMinSilenceDurationMs: clampFunasrVadValue(
+    "minSilenceDurationMs",
+    readString("funasrVadMinSilenceDurationMs", "500")
+  ),
+  funasrVadMaxSpeechDurationS: clampFunasrVadValue(
+    "maxSpeechDurationS",
+    readString("funasrVadMaxSpeechDurationS", "12")
+  ),
+  funasrVadSpeechPadMs: clampFunasrVadValue("speechPadMs", readString("funasrVadSpeechPadMs", "100")),
   whisperVadThreshold: clampVadValue("threshold", readString("whisperVadThreshold", "0.5")),
   whisperVadMinSpeechDurationMs: clampVadValue(
     "minSpeechDurationMs",
@@ -1373,6 +1420,35 @@ export const useSettingsStore = create<SettingsState>()((set, get) => ({
       window.electronAPI?.setWhisperVadConfig?.({ speechPadMs: next });
     }
   },
+  setFunasrVadEnabled: (value: boolean) => {
+    if (isBrowser) localStorage.setItem("funasrVadEnabled", String(value));
+    useSettingsStore.setState({ funasrVadEnabled: value });
+  },
+  setFunasrVadThreshold: (value: number) => {
+    const next = clampFunasrVadValue("threshold", value);
+    if (isBrowser) localStorage.setItem("funasrVadThreshold", String(next));
+    useSettingsStore.setState({ funasrVadThreshold: next });
+  },
+  setFunasrVadMinSpeechDurationMs: (value: number) => {
+    const next = clampFunasrVadValue("minSpeechDurationMs", value);
+    if (isBrowser) localStorage.setItem("funasrVadMinSpeechDurationMs", String(next));
+    useSettingsStore.setState({ funasrVadMinSpeechDurationMs: next });
+  },
+  setFunasrVadMinSilenceDurationMs: (value: number) => {
+    const next = clampFunasrVadValue("minSilenceDurationMs", value);
+    if (isBrowser) localStorage.setItem("funasrVadMinSilenceDurationMs", String(next));
+    useSettingsStore.setState({ funasrVadMinSilenceDurationMs: next });
+  },
+  setFunasrVadMaxSpeechDurationS: (value: number) => {
+    const next = clampFunasrVadValue("maxSpeechDurationS", value);
+    if (isBrowser) localStorage.setItem("funasrVadMaxSpeechDurationS", String(next));
+    useSettingsStore.setState({ funasrVadMaxSpeechDurationS: next });
+  },
+  setFunasrVadSpeechPadMs: (value: number) => {
+    const next = clampFunasrVadValue("speechPadMs", value);
+    if (isBrowser) localStorage.setItem("funasrVadSpeechPadMs", String(next));
+    useSettingsStore.setState({ funasrVadSpeechPadMs: next });
+  },
   setWhisperVadSamplesOverlap: (value: number) => {
     const next = clampVadValue("samplesOverlap", value);
     if (isBrowser) localStorage.setItem("whisperVadSamplesOverlap", String(next));
@@ -1534,6 +1610,12 @@ export interface ResolvedMeetingTranscription {
   localTranscriptionProvider: LocalTranscriptionProvider;
   parakeetModel: string;
   funasrModel: string;
+  funasrVadEnabled: boolean;
+  funasrVadThreshold: number;
+  funasrVadMinSpeechDurationMs: number;
+  funasrVadMinSilenceDurationMs: number;
+  funasrVadMaxSpeechDurationS: number;
+  funasrVadSpeechPadMs: number;
   cloudTranscriptionProvider: string;
   cloudTranscriptionModel: string;
   cloudTranscriptionBaseUrl: string;
@@ -1560,6 +1642,12 @@ export const selectResolvedMeetingTranscription = (
     localTranscriptionProvider: state.meetingLocalTranscriptionProvider,
     parakeetModel: state.meetingParakeetModel || state.parakeetModel,
     funasrModel: state.meetingFunasrModel || state.funasrModel,
+    funasrVadEnabled: state.funasrVadEnabled,
+    funasrVadThreshold: state.funasrVadThreshold,
+    funasrVadMinSpeechDurationMs: state.funasrVadMinSpeechDurationMs,
+    funasrVadMinSilenceDurationMs: state.funasrVadMinSilenceDurationMs,
+    funasrVadMaxSpeechDurationS: state.funasrVadMaxSpeechDurationS,
+    funasrVadSpeechPadMs: state.funasrVadSpeechPadMs,
     cloudTranscriptionProvider,
     cloudTranscriptionModel: state.meetingCloudTranscriptionModel || state.cloudTranscriptionModel,
     cloudTranscriptionBaseUrl:

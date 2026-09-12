@@ -1425,6 +1425,14 @@
             "label": "Chevauchement (s)",
             "info": "Audio prolongé d'un segment au suivant pour éviter les coupures brusques lors de la concaténation."
           }
+        },
+        "funasr": {
+          "title": "Détection d'activité vocale (FunASR)",
+          "description": "Détecte les limites de la parole avant la transcription FunASR : supprime les silences, coupe aux pauses, ignore les passages sans voix.",
+          "enabled": {
+            "title": "Activer le VAD pour FunASR",
+            "description": "S'applique à la dictée et aux enregistrements de notes transcrits avec FunASR (SenseVoice)."
+          }
         }
       }
     },

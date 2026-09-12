@@ -6066,6 +6066,7 @@ class IPCHandlers {
     let meetingLocalWin = null;
     let meetingLocalTranscript = "";
     let meetingLocalProvider = null;
+    let meetingLocalVadConfig = null;
     let meetingLocalModel = null;
     let meetingLocalLanguage = null;
     let meetingRealtimeProvider = null;
@@ -6526,6 +6527,7 @@ class IPCHandlers {
               this.funasrManager.transcribeLocalFunasr(wav, {
                 model: meetingLocalModel,
                 language: meetingLocalLanguage,
+                vadConfig: meetingLocalVadConfig,
                 signal,
               })
           );
@@ -6722,6 +6724,7 @@ class IPCHandlers {
       meetingLocalTranscript = "";
       meetingLocalProvider = null;
       meetingLocalModel = null;
+      meetingLocalVadConfig = null;
       meetingLocalLanguage = null;
       meetingRealtimeProvider = null;
       meetingRealtimeModel = null;
@@ -6941,6 +6944,8 @@ class IPCHandlers {
           meetingLocalProvider = options.localProvider || "whisper";
           meetingLocalModel = options.localModel || null;
           meetingLocalLanguage = options.language || null;
+          meetingLocalVadConfig =
+            options.localProvider === "funasr" ? options.funasrVadConfig || null : null;
           meetingLocalWin = BrowserWindow.fromWebContents(event.sender);
           meetingLocalBuffers = { mic: [], system: [] };
           meetingLocalTranscript = "";

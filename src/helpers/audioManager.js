@@ -895,7 +895,16 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
 
     try {
       const arrayBuffer = await audioBlob.arrayBuffer();
-      const { preferredLanguage, funasrUseItn } = getSettings();
+      const {
+        preferredLanguage,
+        funasrUseItn,
+        funasrVadEnabled,
+        funasrVadThreshold,
+        funasrVadMinSpeechDurationMs,
+        funasrVadMinSilenceDurationMs,
+        funasrVadMaxSpeechDurationS,
+        funasrVadSpeechPadMs,
+      } = getSettings();
 
       logger.debug(
         "FunASR transcription starting",
@@ -913,6 +922,14 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
         model,
         language: preferredLanguage,
         useItn: funasrUseItn,
+        vadConfig: {
+          enabled: funasrVadEnabled === true,
+          threshold: funasrVadThreshold,
+          minSpeechDurationMs: funasrVadMinSpeechDurationMs,
+          minSilenceDurationMs: funasrVadMinSilenceDurationMs,
+          maxSpeechDurationS: funasrVadMaxSpeechDurationS,
+          speechPadMs: funasrVadSpeechPadMs,
+        },
       });
       timings.transcriptionProcessingDurationMs = Math.round(
         performance.now() - transcriptionStart

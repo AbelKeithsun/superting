@@ -1426,6 +1426,14 @@
             "label": "Sample-Überlappung (s)",
             "info": "Audio, das von einem Segment ins nächste übertragen wird, um abrupte Schnitte beim Zusammenfügen zu vermeiden."
           }
+        },
+        "funasr": {
+          "title": "Sprachaktivitätserkennung (FunASR)",
+          "description": "Erkennt Sprachgrenzen vor der FunASR-Transkription: Stille entfernen, an Pausen trennen, Nicht-Sprache überspringen.",
+          "enabled": {
+            "title": "VAD für FunASR aktivieren",
+            "description": "Gilt für Diktate und Notizaufnahmen, die mit FunASR (SenseVoice) transkribiert werden."
+          }
         }
       }
     },

@@ -1427,6 +1427,14 @@
             "label": "Samples overlap (s)",
             "info": "Audio carried from each segment into the next to avoid abrupt cuts when concatenating."
           }
+        },
+        "funasr": {
+          "title": "Voice Activity Detection (FunASR)",
+          "description": "Detect speech boundaries before FunASR transcription: trim silence, split at pauses, and skip non-speech audio.",
+          "enabled": {
+            "title": "Enable VAD for FunASR",
+            "description": "Applies to dictation and note recordings transcribed with FunASR (SenseVoice)."
+          }
         }
       }
     },

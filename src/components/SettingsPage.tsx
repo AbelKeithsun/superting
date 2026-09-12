@@ -717,6 +717,18 @@ export default function SettingsPage({
     setWhisperVadSpeechPadMs,
     whisperVadSamplesOverlap,
     setWhisperVadSamplesOverlap,
+    funasrVadEnabled,
+    setFunasrVadEnabled,
+    funasrVadThreshold,
+    setFunasrVadThreshold,
+    funasrVadMinSpeechDurationMs,
+    setFunasrVadMinSpeechDurationMs,
+    funasrVadMinSilenceDurationMs,
+    setFunasrVadMinSilenceDurationMs,
+    funasrVadMaxSpeechDurationS,
+    setFunasrVadMaxSpeechDurationS,
+    funasrVadSpeechPadMs,
+    setFunasrVadSpeechPadMs,
   } = useSettings();
 
   const chatAgentKey = useSettingsStore((s) => s.chatAgentKey);
@@ -1309,6 +1321,106 @@ export default function SettingsPage({
             </div>
           </div>
         </SettingsPanelRow>
+      </SettingsPanel>
+    </div>
+  );
+
+  const renderFunasrVadSettings = () => (
+    <div>
+      <SectionHeader
+        title={t("settingsPage.transcription.vad.funasr.title")}
+        description={t("settingsPage.transcription.vad.funasr.description")}
+      />
+      <SettingsPanel>
+        <SettingsPanelRow>
+          <SettingsRow
+            label={t("settingsPage.transcription.vad.funasr.enabled.title")}
+            description={t("settingsPage.transcription.vad.funasr.enabled.description")}
+          >
+            <Toggle checked={funasrVadEnabled} onChange={setFunasrVadEnabled} />
+          </SettingsRow>
+        </SettingsPanelRow>
+        <div
+          className={cn(
+            "space-y-3",
+            !funasrVadEnabled && "opacity-50 pointer-events-none"
+          )}
+        >
+          <SettingsPanelRow>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 w-full">
+              <div className="space-y-1.5">
+                <VADLabelWithInfo
+                  label={t("settingsPage.transcription.vad.fields.threshold.label")}
+                  description={t("settingsPage.transcription.vad.fields.threshold.info")}
+                />
+                <Input
+                  type="number"
+                  step="0.01"
+                  min="0.1"
+                  max="0.95"
+                  value={funasrVadThreshold}
+                  onChange={(e) => setFunasrVadThreshold(Number(e.target.value))}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <VADLabelWithInfo
+                  label={t("settingsPage.transcription.vad.fields.minSpeechDurationMs.label")}
+                  description={t("settingsPage.transcription.vad.fields.minSpeechDurationMs.info")}
+                />
+                <Input
+                  type="number"
+                  step="10"
+                  min="50"
+                  max="2000"
+                  value={funasrVadMinSpeechDurationMs}
+                  onChange={(e) => setFunasrVadMinSpeechDurationMs(Number(e.target.value))}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <VADLabelWithInfo
+                  label={t("settingsPage.transcription.vad.fields.minSilenceDurationMs.label")}
+                  description={t("settingsPage.transcription.vad.fields.minSilenceDurationMs.info")}
+                />
+                <Input
+                  type="number"
+                  step="10"
+                  min="100"
+                  max="5000"
+                  value={funasrVadMinSilenceDurationMs}
+                  onChange={(e) => setFunasrVadMinSilenceDurationMs(Number(e.target.value))}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <VADLabelWithInfo
+                  label={t("settingsPage.transcription.vad.fields.maxSpeechDurationS.label")}
+                  description={t("settingsPage.transcription.vad.fields.maxSpeechDurationS.info")}
+                />
+                <Input
+                  type="number"
+                  step="1"
+                  min="1"
+                  max="60"
+                  value={funasrVadMaxSpeechDurationS}
+                  onChange={(e) => setFunasrVadMaxSpeechDurationS(Number(e.target.value))}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <VADLabelWithInfo
+                  label={t("settingsPage.transcription.vad.fields.speechPadMs.label")}
+                  description={t("settingsPage.transcription.vad.fields.speechPadMs.info")}
+                />
+                <Input
+                  type="number"
+                  step="10"
+                  min="0"
+                  max="1000"
+                  value={funasrVadSpeechPadMs}
+                  onChange={(e) => setFunasrVadSpeechPadMs(Number(e.target.value))}
+                />
+              </div>
+            </div>
+          </SettingsPanelRow>
+        </div>
       </SettingsPanel>
     </div>
   );
@@ -2849,6 +2961,9 @@ EOF`,
                 {transcriptionMode === "local" &&
                   localTranscriptionProvider === "whisper" &&
                   renderWhisperVadSettings()}
+                {transcriptionMode === "local" &&
+                  localTranscriptionProvider === "funasr" &&
+                  renderFunasrVadSettings()}
               </div>
             )}
             renderNoteRecording={() => (
@@ -2857,6 +2972,9 @@ EOF`,
                 {transcriptionMode === "local" &&
                   localTranscriptionProvider === "whisper" &&
                   renderWhisperVadSettings()}
+                {transcriptionMode === "local" &&
+                  localTranscriptionProvider === "funasr" &&
+                  renderFunasrVadSettings()}
               </div>
             )}
           />

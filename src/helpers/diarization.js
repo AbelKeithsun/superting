@@ -987,4 +987,19 @@ class DiarizationManager {
   }
 }
 
+
+// Standalone resolver so other helpers (e.g. FunASR VAD) can reuse the silero
+// model without instantiating the diarization manager. Prefers the bundled
+// copy, falls back to the per-user model cache. Returns null when absent.
+function resolveSileroVadModelPath() {
+  if (process.resourcesPath) {
+    const bundled = path.join(process.resourcesPath, "bin", "diarization-models", SILERO_VAD_ONNX);
+    if (fs.existsSync(bundled)) return bundled;
+  }
+  const cached = path.join(getModelsDirForService("diarization"), SILERO_VAD_ONNX);
+  return fs.existsSync(cached) ? cached : null;
+}
+
 module.exports = DiarizationManager;
+module.exports.resolveSileroVadModelPath = resolveSileroVadModelPath;
+

@@ -977,7 +977,19 @@ declare global {
       // FunASR operations (SenseVoice via sherpa-onnx)
       transcribeLocalFunasr: (
         audioBlob: ArrayBuffer,
-        options?: { model?: string; language?: string; useItn?: boolean }
+        options?: {
+          model?: string;
+          language?: string;
+          useItn?: boolean;
+          vadConfig?: {
+            enabled: boolean;
+            threshold: number;
+            minSpeechDurationMs: number;
+            minSilenceDurationMs: number;
+            maxSpeechDurationS: number;
+            speechPadMs: number;
+          };
+        }
       ) => Promise<FunasrTranscriptionResult>;
       checkFunasrInstallation: () => Promise<FunasrCheckResult>;
       downloadFunasrModel: (modelName: string) => Promise<FunasrModelResult>;
