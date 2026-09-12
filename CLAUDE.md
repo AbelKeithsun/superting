@@ -115,7 +115,12 @@ SuperTing is an Electron-based desktop dictation application that uses whisper.c
 
 ### Agent CLI (cli/)
 
-- **superting.js**: Zero-dependency Node CLI (`bin: superting`, installed via `npm run install:cli` → symlink in `~/.local/bin`). One loopback HTTP round-trip per command — the fast agent channel that replaces MCP for interactive use. JSON output by default (`--format text` for humans), exit 0/1/2 (ok / bridge-app error / usage), destructive commands (`delete`, `dict|alias remove|replace`) require `--yes`. Command groups: `health`, `notes list|get|search|create|update|append|delete` (`update` supports `--find/--replace` literal replacement on content), `folders list|create`, `transcriptions list|get`, `tags list`, `dict list|add|remove|replace`, `alias list|add|remove|replace`. Agent-facing docs live in `agent-skills/openwhispr-cli/SKILL.md`.
+- **superting.js**: Zero-dependency Node CLI (`bin: superting`, installed via `npm run install:cli` → symlink in `~/.local/bin`). One loopback HTTP round-trip per command — the fast agent channel that replaces MCP for interactive use. JSON output by default (`--format text` for humans), exit 0/1/2 (ok / bridge-app error / usage), destructive commands (`delete`, `dict|alias remove|replace`) require `--yes`. Command groups: `health`, `notes list|get|search|create|update|append|delete` (`update` supports `--find/--replace` literal replacement on content), `folders list|create`, `transcriptions list|get`, `tags list`, `dict list|add|remove|replace`, `alias list|add|remove|replace`.
+- **install-skills.js** (`bin: superting-skills`): zero-dependency skills installer. Copies the bundled `agent-skills/` into an agent skills directory and stamps the package.json version into each SKILL.md frontmatter so skills update in lockstep with the CLI. Targets: default `<cwd>/.claude/skills` (current project), `--project <dir>`, `--global` (`~/.agents/skills`, override with `SUPERTING_SKILLS_GLOBAL_DIR`), `--target <dir>`; operations `--list` / `--check` / `--remove`; `--force` overwrites local modifications (detected via the sha256 manifest `.superting-skills-meta.json`). One-liner remote install (version pinned by the release asset): `npx -p https://github.com/AbelKeithsun/superting/releases/download/v<ver>/superting-skills-<ver>.tgz superting-skills --global`. In-repo shortcut: `npm run install:skills`.
+
+### Agent Skills (agent-skills/)
+
+- `superting-cli/` and `superting-api/` (formerly openwhispr-*). Progressive disclosure: SKILL.md stays lean (≤120 lines — trigger description, NEVER/MUST rules, command cheat sheet, few examples); detail lives in `references/` loaded on demand (cli: `notes.md`/`dictionary.md`/`troubleshooting.md`; api: `routes.md`). `--list` self-lints (line cap, frontmatter completeness, references links). At release time `npm run pack:skills` emits the zero-dependency `dist/superting-skills-<version>.tgz` release asset.
 
 ### React Components (src/components/)
 
@@ -226,6 +231,7 @@ Always-on offline semantic search that finds notes by meaning, not just keywords
 - **build-windows-key-listener.js**: Compiles Windows key listener (for local development)
 - **run-electron.js**: Development script to launch Electron with proper environment. On macOS it must launch through LaunchServices (`open -n -W`) — a directly spawned binary gets no TCC microphone prompt and records silent zeros
 - **install-cli.js**: Installs the agent CLI symlink into `~/.local/bin` (override dir with `SUPERTING_CLI_BIN_DIR`; `--copy` for read-only checkouts, `--force` to overwrite a foreign `superting` binary)
+- **pack-skills.js**: Packs the zero-dependency `dist/superting-skills-<version>.tgz` (installer + agent-skills) for release-asset upload and `npx -p <asset-url>` installs
 - **lib/download-utils.js**: Shared utilities for downloading and extracting files
   - `fetchLatestRelease(repo, options)`: Fetches latest release from GitHub API
   - `downloadFile(url, dest)`: Downloads file with progress and retry logic

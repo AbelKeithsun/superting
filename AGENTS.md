@@ -116,7 +116,12 @@ SuperTing 是一款基于 Electron 的桌面听写应用，使用 whisper.cpp �
 
 ### Agent CLI（cli/）
 
-- **superting.js**: 零依赖 Node CLI（`bin: superting`，经 `npm run install:cli` 安装 → `~/.local/bin` 符号链接）。每条命令一次回环 HTTP 调用 — 取代 MCP 的快速 agent 通道。默认 JSON 输出（`--format text` 为人类可读），退出码 0/1/2（成功 / 桥接或应用错误 / 用法错误），破坏性命令（`delete`、`dict|alias remove|replace`）需 `--yes`。命令组：`health`、`notes list|get|search|create|update|append|delete`（`update` 支持对 content 的 `--find/--replace` 字面量替换）、`folders list|create`、`transcriptions list|get`、`tags list`、`dict list|add|remove|replace`、`alias list|add|remove|replace`。面向 agent 的文档见 `agent-skills/openwhispr-cli/SKILL.md`。
+- **superting.js**: 零依赖 Node CLI（`bin: superting`，经 `npm run install:cli` 安装 → `~/.local/bin` 符号链接）。每条命令一次回环 HTTP 调用 — 取代 MCP 的快速 agent 通道。默认 JSON 输出（`--format text` 为人类可读），退出码 0/1/2（成功 / 桥接或应用错误 / 用法错误），破坏性命令（`delete`、`dict|alias remove|replace`）需 `--yes`。命令组：`health`、`notes list|get|search|create|update|append|delete`（`update` 支持对 content 的 `--find/--replace` 字面量替换）、`folders list|create`、`transcriptions list|get`、`tags list`、`dict list|add|remove|replace`、`alias list|add|remove|replace`。
+- **install-skills.js**（`bin: superting-skills`）: 零依赖 skill 安装器，把 `agent-skills/` 下的 skill 安装到 agent 技能目录，并把 package.json 版本号注入 SKILL.md frontmatter，使 skill 与 CLI 同版本更新。目标：默认 `<cwd>/.claude/skills`（项目）、`--project <dir>`、`--global`（`~/.agents/skills`，可用 `SUPERTING_SKILLS_GLOBAL_DIR` 覆盖）、`--target <dir>`；操作：`--list` / `--check` / `--remove`；`--force` 覆盖本地修改（以 sha256 manifest `.superting-skills-meta.json` 检测改动）。远程一条命令安装（版本由 release 资产锁定）：`npx -p https://github.com/AbelKeithsun/superting/releases/download/v<ver>/superting-skills-<ver>.tgz superting-skills --global`。本仓库内快捷方式：`npm run install:skills`。
+
+### Agent Skills（agent-skills/）
+
+- `superting-cli/` 与 `superting-api/`（旧名 openwhispr-* 已更名）。遵循渐进式披露：SKILL.md 保持精简（≤120 行，含触发 description、NEVER/MUST 守则、命令速查表、少量示例），细节放 `references/` 子目录按需加载（cli: `notes.md`/`dictionary.md`/`troubleshooting.md`；api: `routes.md`）。`--list` 自带 lint（长度上限、frontmatter 完整性、references 链接有效性）。发版时 `npm run pack:skills` 生成零依赖 `dist/superting-skills-<version>.tgz` 作为 release 资产上传。
 
 ### React 组件（src/components/）
 
@@ -230,6 +235,7 @@ SuperTing 是一款基于 Electron 的桌面听写应用，使用 whisper.cpp �
 - **build-windows-key-listener.js**: 编译 Windows 按键监听器（本地开发用）
 - **run-electron.js**: 以正确环境启动 Electron 的开发脚本。macOS 上必须经 LaunchServices（`open -n -W`）启动 — 直接 spawn 的二进制拿不到 TCC 麦克风授权弹窗，录进去的是静音零样本
 - **install-cli.js**: 将 agent CLI 符号链接安装到 `~/.local/bin`（用 `SUPERTING_CLI_BIN_DIR` 覆盖目录；只读检出用 `--copy`，覆盖外部 `superting` 二进制用 `--force`）
+- **pack-skills.js**: 打包零依赖 `dist/superting-skills-<version>.tgz`（安装器 + agent-skills，供 release 资产上传与 `npx -p <资产URL>` 安装）
 - **lib/download-utils.js**: 下载与解压的共享工具
   - `fetchLatestRelease(repo, options)`: 从 GitHub API 拉取最新 release
   - `downloadFile(url, dest)`: 带进度与重试的文件下载

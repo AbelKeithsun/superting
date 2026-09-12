@@ -14,6 +14,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Agent integration
+
+- **`superting-skills` installer + versioned skill distribution**: the bundled agent skills now install with a single npx command, versioned in lockstep with the CLI. `npx -p https://github.com/AbelKeithsun/superting/releases/download/v<ver>/superting-skills-<ver>.tgz superting-skills [--global | --project <dir> | --target <dir>]` — the tarball is a zero-dependency release asset (`npm run pack:skills`) so installs pull ~11 KB, not the app's dependency tree. Targets: current project `.claude/skills` (default), `--project`, `--global` (`~/.agents/skills`), `--target`; operations `--list` / `--check` / `--remove`; `--force` overrides locally modified skills (sha256 manifest detection). In-repo shortcut: `npm run install:skills`.
+- **Skills restructured for progressive disclosure**: `agent-skills/openwhispr-*` renamed to `superting-cli` / `superting-api`; each SKILL.md is now a lean router (trigger description, NEVER/MUST rules, command cheat sheet, ~90 lines) with detail split into `references/` files agents read on demand (`notes.md`, `dictionary.md`, `troubleshooting.md`, `routes.md`). The installer lints skill length/frontmatter/reference links, and `--check` compares installed vs release versions.
+
 ## [1.7.2] - 2026-05-20
 
 A small patch on top of 1.7.1: zero unnecessary macOS Keychain prompts on first launch, working cloud transcription on Electron's `net.fetch`, the Note Formatting selector now actually controls model routing, Wave Terminal pastes via the terminal path, and a notes view stability fix.
