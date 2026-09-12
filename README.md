@@ -173,9 +173,10 @@ SuperTing 可以把桌面上的语音输入变成文本、笔记和行动项。�
 ### 4. Agent 数据中心
 
 - 内置本地 MCP server（`@modelcontextprotocol/sdk`），把笔记、转录、搜索能力开放给任何 agent
+- **Agent CLI（`superting` 命令，推荐）**：零依赖本地客户端，直接读写听记笔记（查找替换/追加）、词典热词、热词替换规则等；每条命令一次本地回环 HTTP 调用，无 MCP 会话握手，响应快、开销低。`npm run install:cli` 安装，用法见 `agent-skills/openwhispr-cli/SKILL.md`
 - 支持 Codex、Claude Desktop、Cursor 等 MCP 客户端
 - 配合自定义 LLM API（OpenAI / Anthropic / Gemini / DeepSeek / 通义 / 智谱 / Kimi）完成周报、纪要、复盘、问答
-- 未来规划：本地 agent skill 化的工作流封装
+- 本地 agent skill 封装常用工作流（`agent-skills/` 目录：`openwhispr-cli` + `openwhispr-api`）
 
 ## 快速开始
 

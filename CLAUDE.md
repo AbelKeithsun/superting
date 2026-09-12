@@ -110,8 +110,12 @@ SuperTing is an Electron-based desktop dictation application that uses whisper.c
 - **vectorIndex.js**: Qdrant collection management — upsert, delete, search, batch reindex
 - **windowConfig.js**: Centralized window configuration
 - **windowManager.js**: Window creation and lifecycle management
-- **cliBridge.js**: Loopback HTTP server on ports 8200–8219, bearer-token auth (token at `~/.superting/cli-bridge.json`), 127.0.0.1-only. Used by the unified CLI to talk to a running desktop app.
+- **cliBridge.js**: Loopback HTTP server on ports 8200–8219, bearer-token auth (token at `~/.superting/cli-bridge.json`), 127.0.0.1-only. Used by the agent CLI (`cli/superting.js`) to talk to a running desktop app. Routes cover notes CRUD (create broadcasts `note-added` and feeds the vector index), folders, transcriptions, tags, and read/write dictionary hotwords + replacement rules (mutations broadcast `dictionary-updated` / `dictionary-aliases-updated` so the Settings UI refreshes live). Validation failures return HTTP 400 `validation_error`.
 - **postMigrationDetector.js**: Detects users returning from the pre-Gizmo bundle ID via a `.bundle-migrated` sentinel in userData; consumed by `ipcHandlers.js` to drive the `PostMigrationOnboarding` modal
+
+### Agent CLI (cli/)
+
+- **superting.js**: Zero-dependency Node CLI (`bin: superting`, installed via `npm run install:cli` → symlink in `~/.local/bin`). One loopback HTTP round-trip per command — the fast agent channel that replaces MCP for interactive use. JSON output by default (`--format text` for humans), exit 0/1/2 (ok / bridge-app error / usage), destructive commands (`delete`, `dict|alias remove|replace`) require `--yes`. Command groups: `health`, `notes list|get|search|create|update|append|delete` (`update` supports `--find/--replace` literal replacement on content), `folders list|create`, `transcriptions list|get`, `tags list`, `dict list|add|remove|replace`, `alias list|add|remove|replace`. Agent-facing docs live in `agent-skills/openwhispr-cli/SKILL.md`.
 
 ### React Components (src/components/)
 
@@ -221,6 +225,7 @@ Always-on offline semantic search that finds notes by meaning, not just keywords
 - **build-macos-mic-listener.js**: Compiles macOS mic listener from Swift source
 - **build-windows-key-listener.js**: Compiles Windows key listener (for local development)
 - **run-electron.js**: Development script to launch Electron with proper environment. On macOS it must launch through LaunchServices (`open -n -W`) — a directly spawned binary gets no TCC microphone prompt and records silent zeros
+- **install-cli.js**: Installs the agent CLI symlink into `~/.local/bin` (override dir with `SUPERTING_CLI_BIN_DIR`; `--copy` for read-only checkouts, `--force` to overwrite a foreign `superting` binary)
 - **lib/download-utils.js**: Shared utilities for downloading and extracting files
   - `fetchLatestRelease(repo, options)`: Fetches latest release from GitHub API
   - `downloadFile(url, dest)`: Downloads file with progress and retry logic

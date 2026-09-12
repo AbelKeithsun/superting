@@ -80,13 +80,61 @@ function unwrapMutationResult(result, label) {
   return result[label];
 }
 
+function validationError(message) {
+  const err = new Error(message);
+  err.code = "VALIDATION";
+  return err;
+}
+
+function parseWordList(value) {
+  const words = Array.isArray(value?.words) ? value.words : Array.isArray(value) ? value : null;
+  if (!words) {
+    throw validationError("Expected a JSON array of words (or {\"words\": [...]})");
+  }
+  const cleaned = [];
+  for (const word of words) {
+    if (typeof word !== "string" || !word.trim()) {
+      throw validationError("Dictionary words must be non-empty strings");
+    }
+    cleaned.push(word.trim());
+  }
+  return cleaned;
+}
+
+function parseAliasList(value) {
+  const aliases = Array.isArray(value?.aliases) ? value.aliases : Array.isArray(value) ? value : null;
+  if (!aliases) {
+    throw validationError("Expected a JSON array of aliases (or {\"aliases\": [...]})");
+  }
+  const cleaned = [];
+  for (const alias of aliases) {
+    const from = typeof alias?.from === "string" ? alias.from.trim() : "";
+    const to = typeof alias?.to === "string" ? alias.to.trim() : "";
+    if (!from || !to) {
+      throw validationError("Aliases must be objects with non-empty \"from\" and \"to\" strings");
+    }
+    cleaned.push({ from, to });
+  }
+  return cleaned;
+}
+
+function parseSingleAlias(body) {
+  const from = typeof body?.from === "string" ? body.from.trim() : "";
+  const to = typeof body?.to === "string" ? body.to.trim() : "";
+  if (!from || !to) {
+    throw validationError("Expected {\"from\": \"...\", \"to\": \"...\"} with non-empty strings");
+  }
+  return { from, to };
+}
+
 class CliBridge {
-  constructor(ipcHandlers) {
+  constructor(ipcHandlers, options = {}) {
     this.ipcHandlers = ipcHandlers;
     this.server = null;
     this.port = null;
     this.token = null;
-    this.bridgeFilePath = getBridgeFilePath();
+    this.bridgeFilePath = options.bridgeFilePath || getBridgeFilePath();
+    this.findPort = options.portFinder || findAvailablePort;
     this.routes = this._buildRouteTable();
   }
 
@@ -94,7 +142,7 @@ class CliBridge {
     if (this.server) return;
 
     this.token = crypto.randomBytes(32).toString("hex");
-    this.port = await findAvailablePort();
+    this.port = await this.findPort();
     this.server = http.createServer((req, res) => {
       this._handleRequest(req, res).catch((err) => {
         debugLogger.error("CLI bridge handler error", { error: err.message }, "cli-bridge");
@@ -212,6 +260,10 @@ class CliBridge {
       sendV1Error(res, 404, "not_found", err.message);
       return;
     }
+    if (err.code === "VALIDATION") {
+      sendV1Error(res, 400, "validation_error", err.message);
+      return;
+    }
     debugLogger.error("CLI bridge route error", { error: err.message }, "cli-bridge");
     sendV1Error(res, 500, "internal_error", err.message || "Internal server error");
   }
@@ -311,7 +363,9 @@ class CliBridge {
             body.note_type ?? "personal",
             body.source_file ?? null,
             body.audio_duration_seconds ?? null,
-            body.folder_id ?? null
+            body.folder_id ?? null,
+            null,
+            Array.isArray(body.tags) ? body.tags : []
           );
           const note = unwrapMutationResult(result, "note");
           setImmediate(() => ipc.broadcastToWindows("note-added", note));
@@ -344,6 +398,82 @@ class CliBridge {
       }),
       exact("GET", "/v1/dictionary/aliases", () => {
         return { data: db.getDictionaryAliases() };
+      }),
+      exact("PUT", "/v1/dictionary", ({ body }) => {
+        const words = parseWordList(body);
+        requireSuccess(db.setDictionary(words), "Failed to save dictionary");
+        const dictionary = db.getDictionary();
+        setImmediate(() => ipc.broadcastToWindows("dictionary-updated", dictionary));
+        return { data: dictionary };
+      }),
+      exact("POST", "/v1/dictionary/words", ({ body }) => {
+        const additions = parseWordList(body?.words ?? body);
+        const current = db.getDictionary();
+        const known = new Set(current.map((word) => word.toLowerCase()));
+        const added = [];
+        for (const word of additions) {
+          const key = word.toLowerCase();
+          if (known.has(key)) continue;
+          known.add(key);
+          current.push(word);
+          added.push(word);
+        }
+        if (added.length > 0) {
+          requireSuccess(db.setDictionary(current), "Failed to save dictionary");
+          setImmediate(() => ipc.broadcastToWindows("dictionary-updated", db.getDictionary()));
+        }
+        return { data: { added, dictionary: db.getDictionary() } };
+      }),
+      exact("DELETE", "/v1/dictionary/words", ({ query }) => {
+        const requested = query.getAll("word").map((word) => word.trim()).filter(Boolean);
+        if (requested.length === 0) {
+          throw validationError("Provide at least one ?word= query parameter");
+        }
+        const removeSet = new Set(requested.map((word) => word.toLowerCase()));
+        const current = db.getDictionary();
+        const kept = current.filter((word) => !removeSet.has(word.toLowerCase()));
+        const removed = current.filter((word) => removeSet.has(word.toLowerCase()));
+        if (removed.length > 0) {
+          requireSuccess(db.setDictionary(kept), "Failed to save dictionary");
+          setImmediate(() => ipc.broadcastToWindows("dictionary-updated", db.getDictionary()));
+        }
+        return { data: { removed, dictionary: db.getDictionary() } };
+      }),
+      exact("PUT", "/v1/dictionary/aliases", ({ body }) => {
+        const aliases = parseAliasList(body);
+        requireSuccess(db.setDictionaryAliases(aliases), "Failed to save aliases");
+        const saved = db.getDictionaryAliases();
+        setImmediate(() => ipc.broadcastToWindows("dictionary-aliases-updated", saved));
+        return { data: saved };
+      }),
+      exact("POST", "/v1/dictionary/aliases", ({ body }) => {
+        const { from, to } = parseSingleAlias(body);
+        const current = db.getDictionaryAliases().filter(
+          (alias) => alias.from.toLowerCase() !== from.toLowerCase()
+        );
+        current.push({ from, to });
+        requireSuccess(db.setDictionaryAliases(current), "Failed to save aliases");
+        const saved = db.getDictionaryAliases();
+        setImmediate(() => ipc.broadcastToWindows("dictionary-aliases-updated", saved));
+        return { data: saved };
+      }),
+      exact("DELETE", "/v1/dictionary/aliases", ({ query }) => {
+        const requested = query.getAll("from").map((from) => from.trim()).filter(Boolean);
+        if (requested.length === 0) {
+          throw validationError("Provide at least one ?from= query parameter");
+        }
+        const removeSet = new Set(requested.map((from) => from.toLowerCase()));
+        const current = db.getDictionaryAliases();
+        const kept = current.filter((alias) => !removeSet.has(alias.from.toLowerCase()));
+        const removed = current.filter((alias) => removeSet.has(alias.from.toLowerCase()));
+        if (removed.length > 0) {
+          requireSuccess(db.setDictionaryAliases(kept), "Failed to save aliases");
+          setImmediate(() => ipc.broadcastToWindows("dictionary-aliases-updated", db.getDictionaryAliases()));
+        }
+        return { data: { removed, aliases: db.getDictionaryAliases() } };
+      }),
+      exact("GET", "/v1/tags", () => {
+        return { data: db.getTags(), has_more: false, next_cursor: null };
       }),
       exact(
         "POST",

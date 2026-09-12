@@ -1,55 +1,92 @@
 ---
 name: superting-cli
-description: Use the local SuperTing CLI against the desktop app's loopback bridge.
+description: Operate the local SuperTing desktop app (listening notes, hotwords, replacement rules) through the `superting` CLI client.
 ---
 
-# SuperTing Local CLI
+# SuperTing Agent CLI
 
-Use this skill when a task should operate on the user's local SuperTing desktop
-data through the CLI. The CLI is a local client for the desktop loopback bridge.
-It should not require a hosted account.
+Use the `superting` CLI when a task should read or edit the user's local
+SuperTing data: listening notes (听记笔记), dictation transcriptions, folders,
+tags, dictionary hotwords (词典/热词), and hotword replacement rules (热词替换).
+The CLI is the preferred agent channel — it is a local client for the desktop
+app's loopback bridge (single fast HTTP round-trip per command, no MCP session
+handshake), and writes flow through the app so the UI refreshes and vector
+indexing still run.
+
+## 严格禁止 (NEVER DO)
+
+- Do not use MCP, curl, or the raw HTTP bridge when a CLI command exists.
+- Never guess note/folder/transcription ids — always extract ids from command
+  output (`notes list`, `notes search`, `folders list`, …).
+- Never run destructive commands (`delete`, `dict replace`, `alias replace`,
+  `dict remove`, `alias remove`) without user confirmation; only add `--yes`
+  after the user agrees.
+- Do not pass credentials anywhere: the bridge is loopback-only with a token
+  from the local bridge file; there is no hosted service.
+
+## 严格要求 (MUST DO)
+
+- Start every session with `superting health` when in doubt about whether the
+  app is running.
+- All output is JSON by default; parse it, don't eyeball it.
+- Prefer `notes list` / `notes search` (with content previews) before
+  `notes get` to keep output small; use `--full` only when previews are cut.
+- For note editing, `notes update --find ... --replace ...` performs literal
+  all-occurrence replacement — check the printed resulting note afterwards.
 
 ## Preconditions
 
-1. SuperTing desktop is running.
-2. The bridge file exists at `~/.superting/cli-bridge.json`.
-3. The CLI is installed and available on `PATH`.
+1. SuperTing desktop app is running (it writes the bridge file on launch).
+2. `superting` is on PATH (`npm run install:cli` in the repo installs a
+   symlink to `~/.local/bin`).
 
-Check the CLI:
+If the bridge file is missing the CLI errors with `bridge_not_running` —
+tell the user to start the SuperTing app; do not retry in a loop.
+
+## Command Reference
+
+Run `superting --help` for the authoritative list. Summary:
+
+| Area | Commands |
+| --- | --- |
+| Health | `health` |
+| Notes | `notes list [--limit --type --folder-id --full]`, `notes get <id>`, `notes search <query>`, `notes create --title … [--content --type --folder-id --tags]`, `notes update <id> [--title --content --transcript --folder-id --tags --find --replace]`, `notes append <id> --text`, `notes delete <id> --yes` |
+| Folders | `folders list`, `folders create --name` |
+| Transcriptions | `transcriptions list [--limit]`, `transcriptions get <id>` |
+| Tags | `tags list` |
+| Dictionary (hotwords) | `dict list`, `dict add <word…>`, `dict remove <word…> --yes`, `dict replace --words a,b --yes` |
+| Replacement rules | `alias list`, `alias add <from> <to>`, `alias remove <from…> --yes`, `alias replace --json '[{"from":"a","to":"b"}]' --yes` |
+
+Semantics worth knowing:
+
+- **Dictionary words** are passed to the ASR engine as hint context, improving
+  recognition of names/jargon. Adds dedupe case-insensitively.
+- **Replacement rules** (`alias`) rewrite transcription text after ASR
+  (`from` → `to`). Adding a rule whose `from` already exists overwrites it.
+- `notes update --find/--replace` only touches `content`; use `--transcript`
+  to replace the raw transcript field.
+
+## Example Session
 
 ```sh
-superting --version
-superting --help
+superting health
+superting notes search "funasr" --limit 5
+superting notes update 3 --find "Fun ASR" --replace "FunASR"
+superting dict add 超级听记 sherpa-onnx SenseVoice
+superting alias add "super ting" "SuperTing"
+superting alias list
 ```
 
-Check the local bridge directly when diagnosing CLI issues:
+## Error Handling
 
-```sh
-bridge="${HOME}/.superting/cli-bridge.json"
-port="$(jq -r .port "$bridge")"
-token="$(jq -r .token "$bridge")"
-curl -sS -H "Authorization: Bearer ${token}" "http://127.0.0.1:${port}/v1/health"
-```
-
-## Local Workflows
-
-Prefer CLI commands for common local workflows when the installed CLI supports
-them:
-
-```sh
-superting --local notes list
-superting --local notes search "meeting"
-superting --local transcriptions list
-```
-
-If the installed CLI does not expose a command for the needed operation, use the
-local API bridge directly via the `superting-api` skill pattern.
+- Exit code 0 = success, 2 = usage error (bad flags/args), 1 = bridge or app
+  error. Errors print `{"error":{"code","message"}}` to stderr.
+- `bridge_not_running`: app not running or bridge file moved.
+- `not_found` (HTTP 404): id doesn't exist — re-list, don't guess.
+- `validation_error` (HTTP 400): malformed payload.
 
 ## Design Rules
 
-- Keep all data local to the desktop app and local bridge.
-- Do not introduce login, hosted sync, payment, telemetry, or remote account flows.
-- For MCP use cases, wrap the local CLI or local bridge rather than calling a
-  hosted SuperTing endpoint.
-- Preserve user data ownership: read from local SQLite-backed APIs and write
-  through the desktop app bridge so normal UI refresh and vector indexing still run.
+- Keep all data local; never introduce hosted sync, telemetry, or logins.
+- When no CLI command covers the need, the raw bridge routes in the
+  `superting-api` skill are the fallback (same loopback bridge).

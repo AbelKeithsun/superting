@@ -111,8 +111,12 @@ SuperTing 是一款基于 Electron 的桌面听写应用，使用 whisper.cpp �
 - **vectorIndex.js**: Qdrant collection 管理 — upsert、删除、搜索、批量重建索引
 - **windowConfig.js**: 集中的窗口配置
 - **windowManager.js**: 窗口创建与生命周期管理
-- **cliBridge.js**: 回环 HTTP 服务器，端口 8200–8219，Bearer token 认证（token 位于 `~/.superting/cli-bridge.json`），仅允许 127.0.0.1。供统一 CLI 与运行中的桌面应用通信。
+- **cliBridge.js**: 回环 HTTP 服务器，端口 8200–8219，Bearer token 认证（token 位于 `~/.superting/cli-bridge.json`），仅允许 127.0.0.1。供 agent CLI（`cli/superting.js`）与运行中的桌面应用通信。路由覆盖笔记 CRUD（create 会广播 `note-added` 并写入向量索引）、folders、transcriptions、tags，以及可读写的词典热词与替换规则（变更会广播 `dictionary-updated` / `dictionary-aliases-updated`，设置界面实时刷新）。校验失败返回 HTTP 400 `validation_error`。
 - **postMigrationDetector.js**: 通过 userData 中的 `.bundle-migrated` 哨兵文件检测从旧 Gizmo bundle ID 迁移回来的用户；由 `ipcHandlers.js` 消费以触发 `PostMigrationOnboarding` 弹窗
+
+### Agent CLI（cli/）
+
+- **superting.js**: 零依赖 Node CLI（`bin: superting`，经 `npm run install:cli` 安装 → `~/.local/bin` 符号链接）。每条命令一次回环 HTTP 调用 — 取代 MCP 的快速 agent 通道。默认 JSON 输出（`--format text` 为人类可读），退出码 0/1/2（成功 / 桥接或应用错误 / 用法错误），破坏性命令（`delete`、`dict|alias remove|replace`）需 `--yes`。命令组：`health`、`notes list|get|search|create|update|append|delete`（`update` 支持对 content 的 `--find/--replace` 字面量替换）、`folders list|create`、`transcriptions list|get`、`tags list`、`dict list|add|remove|replace`、`alias list|add|remove|replace`。面向 agent 的文档见 `agent-skills/openwhispr-cli/SKILL.md`。
 
 ### React 组件（src/components/）
 
@@ -225,6 +229,7 @@ SuperTing 是一款基于 Electron 的桌面听写应用，使用 whisper.cpp �
 - **build-macos-mic-listener.js**: 从 Swift 源码编译 macOS 麦克风监听器
 - **build-windows-key-listener.js**: 编译 Windows 按键监听器（本地开发用）
 - **run-electron.js**: 以正确环境启动 Electron 的开发脚本。macOS 上必须经 LaunchServices（`open -n -W`）启动 — 直接 spawn 的二进制拿不到 TCC 麦克风授权弹窗，录进去的是静音零样本
+- **install-cli.js**: 将 agent CLI 符号链接安装到 `~/.local/bin`（用 `SUPERTING_CLI_BIN_DIR` 覆盖目录；只读检出用 `--copy`，覆盖外部 `superting` 二进制用 `--force`）
 - **lib/download-utils.js**: 下载与解压的共享工具
   - `fetchLatestRelease(repo, options)`: 从 GitHub API 拉取最新 release
   - `downloadFile(url, dest)`: 带进度与重试的文件下载

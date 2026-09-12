@@ -80,7 +80,11 @@
     "clean": "node cleanup.js",
     "test": "node scripts/sqlite-abi.js check && node --test \"test/**/*.test.js\" \"test/**/*.test.mjs\" \"test/**/*.test.ts\"",
     "rebuild:node-native": "node scripts/sqlite-abi.js rebuild",
-    "check:sqlite-abi": "node scripts/sqlite-abi.js status"
+    "check:sqlite-abi": "node scripts/sqlite-abi.js status",
+    "install:cli": "node scripts/install-cli.js"
+  },
+  "bin": {
+    "superting": "cli/superting.js"
   },
   "keywords": [
     "dictation",
