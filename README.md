@@ -188,6 +188,8 @@ npm run dev
 
 要求 Node.js 24+。本仓库 `.nvmrc` 已固定 Node 版本。
 
+> **macOS 开发者注意**：开发模式下应用通过 `open`（LaunchServices）启动。不要绕过本脚本直接运行 Electron 二进制——那样启动的应用拿不到 macOS 麦克风授权弹窗，录音会得到全零静音数据（表现为听写一直提示未检测到语音）。
+
 ## 常用命令
 
 ```bash
