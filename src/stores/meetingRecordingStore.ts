@@ -121,6 +121,17 @@ const getMeetingTranscriptionOptions = () => {
     return {
       provider: "local" as const,
       localProvider: resolved.localTranscriptionProvider,
+      funasrVadConfig:
+        resolved.localTranscriptionProvider === "funasr"
+          ? {
+              enabled: true,
+              threshold: resolved.funasrVadThreshold,
+              minSpeechDurationMs: resolved.funasrVadMinSpeechDurationMs,
+              minSilenceDurationMs: resolved.funasrVadMinSilenceDurationMs,
+              maxSpeechDurationS: resolved.funasrVadMaxSpeechDurationS,
+              speechPadMs: resolved.funasrVadSpeechPadMs,
+            }
+          : { enabled: false },
       localModel:
         resolved.localTranscriptionProvider === "nvidia"
           ? resolved.parakeetModel || "parakeet-tdt-0.6b-v3"

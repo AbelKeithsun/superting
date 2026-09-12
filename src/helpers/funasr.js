@@ -279,6 +279,7 @@ class FunasrManager {
       modelName: model,
       language: options.language,
       useItn: options.useItn,
+      vadConfig: options.vadConfig,
       signal: options.signal,
     });
     const elapsed = Date.now() - startTime;

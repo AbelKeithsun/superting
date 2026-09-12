@@ -2,6 +2,8 @@ const fs = require("fs");
 const os = require("os");
 const path = require("path");
 
+const { segmentsFromProbabilities, WINDOW_SAMPLES: VAD_WINDOW_SAMPLES } = require("./vadSegmenter");
+
 let logStream = null;
 
 function openLog() {
@@ -35,6 +37,8 @@ const intraOpNumThreads = Math.min(4, Math.max(2, Math.floor((os.cpus()?.length 
 let port = null;
 let ort = null;
 let speakerSession = null;
+let vadSession = null;
+let vadSessionModelPath = null;
 let speakerInputName = null;
 let textSession = null;
 let textTokenizer = null;
@@ -338,12 +342,72 @@ async function textEmbed({ text }) {
   return { embeddingBuffer: embedding.buffer };
 }
 
+// Silero VAD (v3 ONNX, 16 kHz): 512-sample windows, LSTM state h/c [2,1,64]
+// carried across windows so probabilities are context-aware.
+const VAD_STATE_SHAPE = [2, 1, 64];
+const VAD_WINDOW = VAD_WINDOW_SAMPLES;
+
+async function vadLoad({ modelPath }) {
+  if (vadSession && vadSessionModelPath === modelPath) return { ok: true };
+  loadOrt();
+  vadSession = await ort.InferenceSession.create(modelPath, SESSION_OPTIONS);
+  vadSessionModelPath = modelPath;
+  log("info", "vad session loaded", { modelPath });
+  return { ok: true };
+}
+
+async function vadSegment({ samplesBytes, config = {}, sampleRate = 16000 }) {
+  if (!vadSession) throw new Error("vad session not loaded");
+  // Electron's port serialization flattens typed arrays to Uint8Array bytes,
+  // so float32 samples travel as bytes and are reconstituted here.
+  if (!(samplesBytes instanceof Uint8Array) || samplesBytes.byteLength < VAD_WINDOW * 4) {
+    return { segments: [] };
+  }
+  const samples = new Float32Array(
+    samplesBytes.buffer,
+    samplesBytes.byteOffset,
+    samplesBytes.byteLength / 4
+  );
+
+  let h = new ort.Tensor("float32", new Float32Array(2 * 1 * 64), VAD_STATE_SHAPE);
+  let c = new ort.Tensor("float32", new Float32Array(2 * 1 * 64), VAD_STATE_SHAPE);
+  const probs = [];
+
+  for (let off = 0; off + VAD_WINDOW <= samples.length; off += VAD_WINDOW) {
+    const res = await vadSession.run({
+      x: new ort.Tensor("float32", samples.subarray(off, off + VAD_WINDOW), [1, VAD_WINDOW]),
+      h,
+      c,
+    });
+    probs.push(res.prob.data[0]);
+    h = res.new_h;
+    c = res.new_c;
+  }
+
+  const segments = segmentsFromProbabilities(probs, {
+    windowSamples: VAD_WINDOW,
+    sampleRate,
+    totalSamples: samples.length,
+    ...config,
+  });
+  log("info", "vad.segment result", {
+    windows: probs.length,
+    samplesLen: samples.length,
+    sampleRate,
+    probMax: Math.max(...probs).toFixed(3),
+    segments: segments.map((sg) => [sg.startSample, sg.endSample]),
+  });
+  return { segments };
+}
+
 const handlers = {
-  ping: () => ({ ok: true, sessions: { speaker: !!speakerSession, text: !!textSession } }),
+  ping: () => ({ ok: true, sessions: { speaker: !!speakerSession, text: !!textSession, vad: !!vadSession } }),
   "speaker.load": speakerLoad,
   "speaker.extract": speakerExtract,
   "text.load": textLoad,
   "text.embed": textEmbed,
+  "vad.load": vadLoad,
+  "vad.segment": vadSegment,
   shutdown: () => {
     log("info", "shutdown requested");
     setImmediate(() => process.exit(0));

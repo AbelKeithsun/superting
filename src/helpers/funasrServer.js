@@ -11,6 +11,9 @@ const {
   throwIfAborted,
 } = require("./ffmpegUtils");
 const { getSafeTempDir } = require("./safeTempDir");
+const onnxWorkerClient = require("./onnxWorkerClient");
+const { resolveSileroVadModelPath } = require("./diarization");
+const { sanitizeFunasrVadConfig } = require("./funasrVadConfig");
 const FunasrWsServer = require("./funasrWsServer");
 
 const SAMPLE_RATE = 16000;
@@ -95,6 +98,7 @@ class FunasrServerManager {
   async transcribe(audioBuffer, options = {}) {
     const { modelName = "sensevoice-small", language = "auto", useItn = true } = options;
     const { signal } = options;
+    const vadConfig = sanitizeFunasrVadConfig(options.vadConfig);
     throwIfAborted(signal);
 
     const modelDir = path.join(this.getModelsDir(), modelName);
@@ -129,6 +133,48 @@ class FunasrServerManager {
       debugLogger.debug("FunASR audio analysis", { durationSeconds, rms });
       if (rms < SILENCE_RMS_THRESHOLD) {
         return { text: "", elapsed: 0 };
+      }
+
+      // Optional silero VAD pass: replace blind fixed windows with speech
+      // boundaries (trims silence, splits at pauses). Falls back to the
+      // fixed-window paths below when disabled, unavailable, or on error.
+      if (vadConfig.enabled) {
+        const regions = await this._segmentWithVad(samples, vadConfig, { signal });
+        if (regions) {
+          if (!regions.length) {
+            debugLogger.debug("FunASR VAD found no speech regions", {
+              durationSeconds,
+              rms,
+            });
+            return { text: "", elapsed: 0 };
+          }
+          const slices = [];
+          for (const region of regions) {
+            // Regions are in sample units; `samples` is the float32 byte buffer.
+            const startByte = region.startSample * BYTES_PER_SAMPLE;
+            const endByte = Math.min(region.endSample * BYTES_PER_SAMPLE, samples.length);
+            for (let off = startByte; off < endByte; off += MAX_SEGMENT_BYTES) {
+              slices.push(samples.subarray(off, Math.min(off + MAX_SEGMENT_BYTES, endByte)));
+            }
+          }
+          debugLogger.debug("FunASR VAD segmentation", {
+            durationSeconds,
+            regions: regions.length,
+            slices: slices.length,
+          });
+
+          const texts = [];
+          let vadTotalElapsed = 0;
+          for (const slice of slices) {
+            throwIfAborted(signal);
+            const result = await this.wsServer.transcribe(slice, SAMPLE_RATE, { signal });
+            vadTotalElapsed += result.elapsed || 0;
+            if (result.text) {
+              texts.push(result.text);
+            }
+          }
+          return { text: joinSegmentTexts(texts), elapsed: vadTotalElapsed };
+        }
       }
 
       if (samples.length <= MAX_SEGMENT_BYTES) {
@@ -170,6 +216,43 @@ class FunasrServerManager {
       return { text: joinSegmentTexts(texts), elapsed: totalElapsed };
     } finally {
       this._cleanupFiles(filesToCleanup);
+    }
+  }
+
+  // Runs silero VAD in the onnx worker and returns speech regions as
+  // { startSample, endSample }. Returns null when the VAD is unavailable so the
+  // caller falls back to fixed-window segmentation instead of failing.
+  async _segmentWithVad(samples, vadConfig, { signal } = {}) {
+    const modelPath = resolveSileroVadModelPath();
+    if (!modelPath) {
+      debugLogger.warn("FunASR VAD enabled but silero model not found; using fixed windows");
+      return null;
+    }
+    try {
+      throwIfAborted(signal);
+      await onnxWorkerClient.request("vad.load", { modelPath });
+      const { segments } = await onnxWorkerClient.request("vad.segment", {
+        samplesBytes: new Uint8Array(
+          samples.buffer,
+          samples.byteOffset,
+          samples.byteLength
+        ),
+        sampleRate: SAMPLE_RATE,
+        config: {
+          threshold: vadConfig.threshold,
+          minSpeechDurationMs: vadConfig.minSpeechDurationMs,
+          minSilenceDurationMs: vadConfig.minSilenceDurationMs,
+          maxSpeechDurationS: vadConfig.maxSpeechDurationS,
+          speechPadMs: vadConfig.speechPadMs,
+        },
+      });
+      return segments;
+    } catch (err) {
+      if (signal?.aborted) throw err;
+      debugLogger.warn("FunASR VAD segmentation failed; using fixed windows", {
+        error: err.message,
+      });
+      return null;
     }
   }
 

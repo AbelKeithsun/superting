@@ -1429,6 +1429,14 @@
             "label": "样本重叠 (秒)",
             "info": "将每个片段延伸到下一个片段的音频量，避免拼接时出现突兀的截断。"
           }
+        },
+        "funasr": {
+          "title": "语音活动检测（FunASR）",
+          "description": "在 FunASR 转写前检测语音边界：去除静音、按停顿断句、跳过非语音片段。",
+          "enabled": {
+            "title": "为 FunASR 启用 VAD",
+            "description": "适用于使用 FunASR（SenseVoice）转写的听写和笔记录音。"
+          }
         }
       }
     },

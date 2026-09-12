@@ -1412,6 +1412,14 @@
             "label": "Sobreposição de amostras (s)",
             "info": "Áudio estendido de um segmento para o próximo, evitando cortes bruscos na concatenação."
           }
+        },
+        "funasr": {
+          "title": "Detecção de atividade de voz (FunASR)",
+          "description": "Detecta os limites da fala antes da transcrição com FunASR: remove silêncios, divide nas pausas e ignora áudio sem fala.",
+          "enabled": {
+            "title": "Ativar VAD para FunASR",
+            "description": "Aplica-se ao ditado e às gravações de notas transcritas com FunASR (SenseVoice)."
+          }
         }
       }
     },

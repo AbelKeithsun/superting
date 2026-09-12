@@ -1425,6 +1425,14 @@
             "label": "Sovrapposizione campioni (s)",
             "info": "Audio esteso da un segmento al successivo per evitare tagli netti nella concatenazione."
           }
+        },
+        "funasr": {
+          "title": "Rilevamento dell'attività vocale (FunASR)",
+          "description": "Rileva i confini del parlato prima della trascrizione FunASR: rimuove il silenzio, suddivide alle pause, salta l'audio non vocale.",
+          "enabled": {
+            "title": "Attiva VAD per FunASR",
+            "description": "Si applica al dettato e alle registrazioni di note trascritte con FunASR (SenseVoice)."
+          }
         }
       }
     },

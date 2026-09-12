@@ -1425,6 +1425,14 @@
             "label": "Solapamiento de muestras (s)",
             "info": "Audio que se extiende de un segmento al siguiente para evitar cortes bruscos al concatenarlos."
           }
+        },
+        "funasr": {
+          "title": "Detección de actividad de voz (FunASR)",
+          "description": "Detecta los límites del habla antes de la transcripción con FunASR: recorta silencios, divide en pausas y omite el audio sin voz.",
+          "enabled": {
+            "title": "Activar VAD para FunASR",
+            "description": "Se aplica al dictado y a las grabaciones de notas transcritas con FunASR (SenseVoice)."
+          }
         }
       }
     },
