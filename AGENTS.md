@@ -220,7 +220,7 @@ Always-on offline semantic search that finds notes by meaning, not just keywords
 - **build-globe-listener.js**: Compiles macOS Globe key listener from Swift source
 - **build-macos-mic-listener.js**: Compiles macOS mic listener from Swift source
 - **build-windows-key-listener.js**: Compiles Windows key listener (for local development)
-- **run-electron.js**: Development script to launch Electron with proper environment
+- **run-electron.js**: Development script to launch Electron with proper environment. On macOS it must launch through LaunchServices (`open -n -W`) — a directly spawned binary gets no TCC microphone prompt and records silent zeros
 - **lib/download-utils.js**: Shared utilities for downloading and extracting files
   - `fetchLatestRelease(repo, options)`: Fetches latest release from GitHub API
   - `downloadFile(url, dest)`: Downloads file with progress and retry logic

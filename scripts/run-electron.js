@@ -42,17 +42,49 @@ if (
 // Chromium flags must come before the app path, app args after.
 const chromiumFlags = args.filter((a) => a.startsWith("--ozone-platform="));
 const appArgs = args.filter((a) => !a.startsWith("--ozone-platform="));
-const child = spawn(electronPath, [...chromiumFlags, appDir, ...appArgs], {
-  stdio: "inherit",
-  env: process.env,
-  cwd: appDir,
-});
 
-child.on("close", (code) => {
-  process.exit(code || 0);
-});
+if (process.platform === "darwin") {
+  // On macOS the dev app must be launched through LaunchServices (`open`).
+  // An Electron binary spawned directly from a shell never gets a TCC
+  // microphone prompt and macOS hands it a stream of silent zeros, so local
+  // dictation (whisper/funasr/parakeet) records nothing in dev builds.
+  // `open -n -W` creates a fresh instance through LaunchServices and waits
+  // for it to exit so `concurrently` keeps the renderer dev server alive.
+  const appBundle = path.resolve(path.dirname(electronPath), "..");
+  console.log(
+    "[run-electron] macOS: launching via LaunchServices (open) so the dev app gets a real microphone identity"
+  );
+  const child = spawn(
+    "open",
+    ["-n", "-W", appBundle, "--args", appDir, ...appArgs],
+    {
+      stdio: "inherit",
+      env: process.env,
+      cwd: appDir,
+    }
+  );
 
-child.on("error", (err) => {
-  console.error("[run-electron] Failed to start Electron:", err);
-  process.exit(1);
-});
+  child.on("close", (code) => {
+    process.exit(code || 0);
+  });
+
+  child.on("error", (err) => {
+    console.error("[run-electron] Failed to start Electron:", err);
+    process.exit(1);
+  });
+} else {
+  const child = spawn(electronPath, [...chromiumFlags, appDir, ...appArgs], {
+    stdio: "inherit",
+    env: process.env,
+    cwd: appDir,
+  });
+
+  child.on("close", (code) => {
+    process.exit(code || 0);
+  });
+
+  child.on("error", (err) => {
+    console.error("[run-electron] Failed to start Electron:", err);
+    process.exit(1);
+  });
+}
