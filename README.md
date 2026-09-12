@@ -105,7 +105,7 @@
 - ✅ **Agent 查询个人数据中心**（`search_notes` 工具已实现，Qdrant + FTS5 双路召回）
 - ✅ **个人工作流自动总结能力**（周报、方案、文章、项目复盘、会议纪要已支持）
 - ✅ **个人知识库检索和问答**（本地向量索引 + 关键字搜索 + RRF 融合）
-- ✅ **Skill 机制封装常用工作流**（`agent-skills/` 目录，已实现两个 skill：`openwhispr-api` + `openwhispr-cli`）
+- ✅ **Skill 机制封装常用工作流**（`agent-skills/` 目录，已实现两个 skill：`superting-api` + `superting-cli`（渐进式披露结构，`superting-skills` 安装器随版本发布））
 - ✅ **对接本地 Codex、Claude 等 agent 系统**（本地 MCP server + LLM provider roster）
 
 **未来探索方向：**
@@ -173,10 +173,17 @@ SuperTing 可以把桌面上的语音输入变成文本、笔记和行动项。�
 ### 4. Agent 数据中心
 
 - 内置本地 MCP server（`@modelcontextprotocol/sdk`），把笔记、转录、搜索能力开放给任何 agent
-- **Agent CLI（`superting` 命令，推荐）**：零依赖本地客户端，直接读写听记笔记（查找替换/追加）、词典热词、热词替换规则等；每条命令一次本地回环 HTTP 调用，无 MCP 会话握手，响应快、开销低。`npm run install:cli` 安装，用法见 `agent-skills/openwhispr-cli/SKILL.md`
+- **Agent CLI（`superting` 命令，推荐）**：零依赖本地客户端，直接读写听记笔记（查找替换/追加）、词典热词、热词替换规则等；每条命令一次本地回环 HTTP 调用，无 MCP 会话握手，响应快、开销低。`npm run install:cli` 安装，用法见 `agent-skills/superting-cli/SKILL.md`
+- **Agent Skills 一条命令安装**（与 CLI 同版本发布，渐进式披露结构）：
+  ```sh
+  npx -p https://github.com/AbelKeithsun/superting/releases/download/v<版本>/superting-skills-<版本>.tgz superting-skills --global   # 全局 ~/.agents/skills
+  npx -p <同一资产URL> superting-skills                 # 当前项目 ./.claude/skills
+  npx -p <同一资产URL> superting-skills --project <dir>  # 指定项目
+  npx -p <同一资产URL> superting-skills --check          # 检查版本
+  ```
 - 支持 Codex、Claude Desktop、Cursor 等 MCP 客户端
 - 配合自定义 LLM API（OpenAI / Anthropic / Gemini / DeepSeek / 通义 / 智谱 / Kimi）完成周报、纪要、复盘、问答
-- 本地 agent skill 封装常用工作流（`agent-skills/` 目录：`openwhispr-cli` + `openwhispr-api`）
+- 本地 agent skill 封装常用工作流（`agent-skills/` 目录：`superting-cli` + `superting-api`）
 
 ## 快速开始
 
