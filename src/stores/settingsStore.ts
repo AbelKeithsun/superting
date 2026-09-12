@@ -1552,7 +1552,10 @@ export const selectResolvedMeetingTranscription = (
   const cloudTranscriptionProvider = catalog?.[0]?.id ?? "";
 
   return {
-    useLocalWhisper: state.meetingUseLocalWhisper,
+    // meetingTranscriptionMode defaults to "local" while meetingUseLocalWhisper
+    // defaults to false, so a fresh install renders the Local card selected but
+    // still routed note/meeting recording to cloud realtime. Honor either signal.
+    useLocalWhisper: state.meetingUseLocalWhisper || state.meetingTranscriptionMode === "local",
     whisperModel: state.meetingWhisperModel || state.whisperModel,
     localTranscriptionProvider: state.meetingLocalTranscriptionProvider,
     parakeetModel: state.meetingParakeetModel || state.parakeetModel,
