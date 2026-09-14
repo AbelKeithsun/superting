@@ -1,0 +1,26 @@
+=== G1/T1.5 音质验收证据(afinfo) · 2026-09-14 ===
+
+命令: afinfo "/Users/mac/Library/Application Support/SuperTing-development/audio/SuperTing-meeting-2026-09-14-20-51-47-2.wav"
+--- 原始输出 ---
+File:           /Users/mac/Library/Application Support/SuperTing-development/audio/SuperTing-meeting-2026-09-14-20-51-47-2.wav
+File type ID:   WAVE
+Num Tracks:     1
+----
+Data format:     1 ch,  48000 Hz, Int16
+                no channel layout.
+estimated duration: 690.335667 sec
+audio bytes: 66272224
+audio packets: 33136112
+bit rate: 768000 bits per second
+packet size upper bound: 2
+maximum packet size: 2
+audio data file offset: 44
+optimized
+source bit depth: I16
+----
+
+--- 旧版对照(2026-09-12 v2.0.4 时代的 webm 压缩件,24kHz/24kbps) ---
+
+结论: 新链路留存 WAV 为 48000 Hz / Int16(1ch, mic-only 会话; stereo 需双源,本次演练无系统音频源)。
+      48 kHz 留存管线启动日志: [INFO][meeting][renderer] 48 kHz retention capture started { mic: true }
+      运行时日志文件: ~/Library/Application Support/SuperTing-development/logs/debug-2026-09-14T12-47-06-898Z.log

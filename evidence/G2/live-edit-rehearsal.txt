@@ -1,0 +1,25 @@
+=== G2/T2.5 实时编辑 GUI 演练证据 · 2026-09-14 ===
+
+环境: worktree dev 实例(SuperTing-development 隔离 userData), 本地 whisper small, macOS 内置麦克风 + say TTS 语音源
+日志: logs/debug-2026-09-14T12-47-06-898Z.log
+
+1) 实时转写出现定稿段(GUI 可见, 时间戳 00:15-00:35 五段)。
+2) 会中内联编辑: 点击定稿段 → textarea 打开 → 全选输入修正文本 → Cmd+Enter 提交 → 实时视图立即更新。
+   第一次编辑(00:30 段): '第二个话题是实际。' → '第二个话题是时间表，我们计划下个月初完成全部开发工作。'
+   第二次编辑: → '先讨论产品发布计划，请章卫同学介绍进度。'
+3) 停止后 DB 落库验证:
+436.359|大家好,今天我们开一个短会。|
+441.206|先討論產品發布計畫,請張偉同學介紹進度。|
+446.34|第二个话题是实际。|
+451.187|先讨论产品发布计划，请章卫同学介绍进度。|1
+456.138|你正式發布|
+
+4) 学习链路端到端(日志 13:01:35): [AutoLearn] Meeting edit produced no pairs ——
+   IPC learn-meeting-correction 已到达主进程并执行提取器;该次编辑为繁简混杂整句改写(相似度<0.6),按规格正确拒绝。
+   正向学习(2-8字连续差异)已在单测验证: node -e extractCorrectionPairs 测试 '和章卫开会'←'和张伟开会' => [{from:张伟,to:章卫}] PASS
+
+5) 会议词典热词注入(本地 whisper): 日志多次 'Using custom dictionary prompt' —— customDictionary 以 initialPrompt 传入。
+
+6) 遗留:
+   a. corrections-learned-quiet 的正向 GUI 闭环(词典/别名双写 + toast + 撤销)未在演练中复现(两次编辑都被提取器按规格拒绝),待补一次最小差异编辑的 GUI 演练。
+   b. 录音中 30s 定时落库存在段落重追加/时间戳偏移行为(offsetAppendedTranscriptSegments, 既有逻辑,非本次引入),与编辑交互时会产生编辑段与原文段并存的显示,建议后续修复。
