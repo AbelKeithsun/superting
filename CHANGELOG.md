@@ -5,6 +5,29 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.5] - Unreleased
+
+### Meeting audio quality
+
+- **Retention no longer records the echo-gated signal.** Archived meeting audio comes from a dedicated 48 kHz capture pipeline that bypasses ASR gating entirely (new `meeting-retention-audio-send` channel); the 24 kHz main-process fallback also records the pre-gate buffer. Echo-bleed muting can no longer erase local speech during double-talk.
+- **48 kHz retention capture with channel-aware worklet.** The retention AudioContext runs at 48 kHz on its own pipeline; system audio channels are averaged so a hard-panned right channel is no longer lost. The 24 kHz ASR path is untouched.
+- **Encoding tiers** (`meetingAudioQuality`): Standard (Opus 48 kHz / 64 kbps), High fidelity (default, 48 kHz / 128 kbps, `application audio` — no more 24 kbps/voip), and Lossless WAV (48 kHz / 16-bit, `-lossless.wav` marker; skipped by every automatic compression pass). Quality applies to new recordings only; existing recordings are not re-encoded.
+- **Mix strategies** (`meetingAudioMix`): stereo (default — mic left / system right), mono mix, and system-priority sum, with a soft-knee limiter and quiet-recording normalization in the retained writer.
+- **Cloud ASR sample-rate declaration.** Meeting streams declare `sampleRate: 24000` in `connectOpts`, fixing Deepgram/AssemblyAI decoding 24 kHz audio as 16 kHz (OpenAI Realtime already expected 24 kHz).
+
+### Live transcript editing + correction learning
+
+- **In-meeting editing of finalized segments.** Final live segments are inline-editable (click; Esc cancels, Cmd/Ctrl+Enter or blur commits; partial rows stay read-only). Edits write through the store (`updateSegmentText` with `editedByUser`/`originalText`), so the 30-second persistence tick and the stop flush serialize the edited text.
+- **Merge protection against ghost rows.** Transcript merging keeps the edited side of a segment, matches raw diarization output back via `originalText` and a monotonic ±3s window with cross-domain timestamp alignment, folds near-duplicate raw segments into edited ones instead of appending ghost rows, and retracts match on source+timestamp rather than text. Diarization completing mid-edit is deferred until the edit session ends.
+- **Correction learning that works in meetings.** CJK-aware `extractCorrectionPairs` (word-LCS for Latin; contiguous 2–8 char diff runs with ≥0.6 similarity for CJK; whole-sentence rewrites rejected) feeds `learn-meeting-correction`, which dual-writes a dictionary hotword + a replacement alias, refreshes the in-flight meeting's live correction arrays, and notifies through the quiet in-note toast (`corrections-learned-quiet`) with undo — the dictation overlay never pops up mid-meeting.
+- **Meeting ASR consumes hotwords.** Cloud streams carry the dictionary as keyterms (Deepgram `keyterm`, AssemblyAI `keyterms_prompt`, OpenAI Realtime transcription prompt); local whisper receives it as the initial prompt; finalized segments pass through `applyMeetingDictionaryCorrections`.
+
+### People & voiceprints
+
+- **Cross-meeting contact identities.** New `people` (name required; email/phone/organization/notes optional and fill-in-later) and `voiceprints` (1:N local-only templates) tables; legacy contacts / speaker_profiles / speaker_names merge into them idempotently on startup. Full CRUD + merge in Settings → People.
+- **Name-first participants.** Note participants can be added with just a name (`personId` linkage, no email requirement); grouping by organization with email-domain fallback; no Gravatar request for email-less participants.
+- **Voiceprint reuse without email.** Speaker assignment mirrors samples into the person's voiceprints; live recognition preloads templates by attendee `personId` in addition to legacy email matching, so a named participant is recognized in later meetings. Live/batch match thresholds unified in shared constants.
+
 ## [2.0.3] - 2026-09-12
 
 ### Agent integration
