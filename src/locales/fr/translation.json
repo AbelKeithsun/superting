@@ -2033,6 +2033,14 @@
       "mixMono": "Mixage mono",
       "mixSystemPriority": "Priorité système",
       "newRecordingsOnly": "Les changements de qualité ne s'appliquent qu'aux nouveaux enregistrements ; les existants ne sont pas réencodés."
+    },
+    "transcript": {
+      "liveEdit": {
+        "learned": "Appris : {{from}} → {{to}}",
+        "learnedMultiple": "{{count}} corrections apprises",
+        "undo": "Annuler",
+        "dismiss": "Fermer"
+      }
     }
   },
   "dictionary": {

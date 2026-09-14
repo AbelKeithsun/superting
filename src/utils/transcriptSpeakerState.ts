@@ -104,12 +104,18 @@ export const lockTranscriptSpeaker = (
   });
 
 const mergeSpeakerFields = (existing: TranscriptSegment, incoming: TranscriptSegment) => {
-  const merged = { ...incoming } as TranscriptSegment;
+  // Text (and any user edits) always stay from `existing`: diarization output
+  // carries the raw ASR wording, which would revert a live user edit and, when
+  // the edited segment no longer matches, append a duplicate "ghost" row.
+  const merged = { ...existing } as TranscriptSegment;
   const existingFields = existing as Record<SpeakerStateField, unknown>;
+  const incomingFields = incoming as Record<SpeakerStateField, unknown>;
   const mergedFields = merged as Record<SpeakerStateField, unknown>;
 
   for (const field of SPEAKER_STATE_FIELDS) {
-    if (mergedFields[field] === undefined && existingFields[field] !== undefined) {
+    if (incomingFields[field] !== undefined) {
+      mergedFields[field] = incomingFields[field];
+    } else if (mergedFields[field] === undefined && existingFields[field] !== undefined) {
       mergedFields[field] = existingFields[field];
     }
   }
@@ -125,6 +131,64 @@ const mergeSpeakerFields = (existing: TranscriptSegment, incoming: TranscriptSeg
   return normalizeTranscriptSegment(merged);
 };
 
+// Timestamps drift between renderer clocks and diarization timelines; allow a
+// small window when correlating raw engine segments with stored ones.
+const MERGE_TIMESTAMP_WINDOW_MS = 3000;
+// An unmatched incoming segment this close to a user-edited stored segment of
+// the same source is the raw-ASR twin of that edit — enrich the stored segment
+// instead of appending a ghost duplicate.
+const GHOST_GUARD_WINDOW_MS = 2000;
+
+// Persisted transcripts store relative seconds while live diarization output
+// carries absolute epoch milliseconds. Window matching needs one domain, so
+// re-anchor the incoming timeline onto the existing one end-to-end (session
+// ends coincide; within-session spacing is preserved).
+const ABSOLUTE_MS_THRESHOLD = 1_000_000_000_000;
+const RELATIVE_SECONDS_MAX = 1_000_000_000;
+
+const alignTimestampDomains = (
+  existingSegments: TranscriptSegment[],
+  incomingSegments: TranscriptSegment[]
+): TranscriptSegment[] => {
+  const existingTs = existingSegments
+    .map((s) => s.timestamp)
+    .filter((t): t is number => typeof t === "number" && Number.isFinite(t));
+  const incomingTs = incomingSegments
+    .map((s) => s.timestamp)
+    .filter((t): t is number => typeof t === "number" && Number.isFinite(t));
+  if (existingTs.length === 0 || incomingTs.length === 0) return incomingSegments;
+
+  const existingMax = Math.max(...existingTs);
+  const incomingMin = Math.min(...incomingTs);
+  const incomingIsAbsolute = incomingMin > ABSOLUTE_MS_THRESHOLD;
+  const existingIsAbsolute = existingMax > ABSOLUTE_MS_THRESHOLD;
+  if (incomingIsAbsolute === existingIsAbsolute) return incomingSegments;
+  if (incomingIsAbsolute && existingMax < RELATIVE_SECONDS_MAX) {
+    const incomingMax = Math.max(...incomingTs);
+    const offsetMs = existingMax * 1000 - incomingMax;
+    return incomingSegments.map((s) =>
+      typeof s.timestamp === "number" && Number.isFinite(s.timestamp)
+        ? { ...s, timestamp: Math.max(0, (s.timestamp + offsetMs) / 1000) }
+        : s
+    );
+  }
+  if (!incomingIsAbsolute && incomingMin < RELATIVE_SECONDS_MAX) {
+    const incomingMax = Math.max(...incomingTs);
+    const offsetSeconds = existingMax - incomingMax;
+    return incomingSegments.map((s) =>
+      typeof s.timestamp === "number" && Number.isFinite(s.timestamp)
+        ? { ...s, timestamp: Math.max(0, s.timestamp + offsetSeconds) }
+        : s
+    );
+  }
+  return incomingSegments;
+};
+
+const withinMs = (toleranceMs: number, a?: number, b?: number) => {
+  if (typeof a !== "number" || typeof b !== "number") return false;
+  return Math.abs(a - b) <= toleranceMs;
+};
+
 export const mergeTranscriptSegments = (
   existingSegments: TranscriptSegment[],
   incomingSegments: TranscriptSegment[]
@@ -138,8 +202,11 @@ export const mergeTranscriptSegments = (
     );
   }
 
+  const incoming = alignTimestampDomains(existingSegments, incomingSegments);
+
   const existingById = new Map<string, number>();
   const existingByKey = new Map<string, number[]>();
+  const existingByOriginalText = new Map<string, number[]>();
 
   existingSegments.forEach((segment, index) => {
     if (segment.id) existingById.set(segment.id, index);
@@ -147,13 +214,47 @@ export const mergeTranscriptSegments = (
     const bucket = existingByKey.get(key);
     if (bucket) bucket.push(index);
     else existingByKey.set(key, [index]);
+    if (segment.editedByUser && segment.originalText) {
+      const originalKey = [segment.source, normalizeText(segment.originalText)].join("|");
+      const originalBucket = existingByOriginalText.get(originalKey);
+      if (originalBucket) originalBucket.push(index);
+      else existingByOriginalText.set(originalKey, [index]);
+    }
   });
 
   const usedIndexes = new Set<number>();
   const enrichedByIndex = new Map<number, TranscriptSegment>();
   const unmatchedIncoming: TranscriptSegment[] = [];
 
-  incomingSegments.forEach((segment, index) => {
+  // Monotonic two-pointer within a ±window per source: segments arrive in
+  // order on both sides, so advance through same-source candidates once.
+  const sourceCursors = new Map<string, number>();
+  const findWindowMatch = (segment: TranscriptSegment) => {
+    const source = segment.source;
+    let cursor = sourceCursors.get(source) ?? 0;
+    let matchIndex: number | undefined;
+    for (let i = cursor; i < existingSegments.length; i++) {
+      const candidate = existingSegments[i];
+      if (candidate.source !== source || usedIndexes.has(i)) continue;
+      if (typeof segment.timestamp === "number" && typeof candidate.timestamp === "number") {
+        const delta = segment.timestamp - candidate.timestamp;
+        if (delta > MERGE_TIMESTAMP_WINDOW_MS) continue; // not reached yet
+        if (Math.abs(delta) <= MERGE_TIMESTAMP_WINDOW_MS) {
+          matchIndex = i;
+          break;
+        }
+      } else if (candidate.text === segment.text) {
+        matchIndex = i;
+        break;
+      }
+    }
+    if (matchIndex !== undefined) {
+      sourceCursors.set(source, matchIndex + 1);
+    }
+    return matchIndex;
+  };
+
+  incoming.forEach((segment, index) => {
     const findUnused = (candidates?: number[]) =>
       candidates?.find((candidateIndex) => !usedIndexes.has(candidateIndex));
 
@@ -174,14 +275,44 @@ export const mergeTranscriptSegments = (
       if (fallbackIndex >= 0) matchIndex = fallbackIndex;
     }
 
+    // Edited segments keep their original wording in originalText — match raw
+    // diarization output back onto them instead of duplicating.
+    if (matchIndex === undefined) {
+      const originalKey = [segment.source, normalizeText(segment.text)].join("|");
+      matchIndex = findUnused(existingByOriginalText.get(originalKey));
+    }
+
+    if (matchIndex === undefined) {
+      matchIndex = findWindowMatch(segment);
+    }
+
     if (matchIndex !== undefined) {
       usedIndexes.add(matchIndex);
       enrichedByIndex.set(matchIndex, mergeSpeakerFields(existingSegments[matchIndex], segment));
-    } else {
-      unmatchedIncoming.push(
-        normalizeTranscriptSegment({ ...segment, id: segment.id || `merged-${index}` })
-      );
+      return;
     }
+
+    // Ghost guard: a raw segment landing next to a user-edited stored segment
+    // of the same source is its ASR original — merge speaker fields only.
+    const ghostTwinIndex = existingSegments.findIndex(
+      (candidate, existingIndex) =>
+        !usedIndexes.has(existingIndex) &&
+        candidate.source === segment.source &&
+        candidate.editedByUser === true &&
+        withinMs(GHOST_GUARD_WINDOW_MS, candidate.timestamp, segment.timestamp)
+    );
+    if (ghostTwinIndex >= 0) {
+      usedIndexes.add(ghostTwinIndex);
+      enrichedByIndex.set(
+        ghostTwinIndex,
+        mergeSpeakerFields(existingSegments[ghostTwinIndex], segment)
+      );
+      return;
+    }
+
+    unmatchedIncoming.push(
+      normalizeTranscriptSegment({ ...segment, id: segment.id || `merged-${index}` })
+    );
   });
 
   const preserved = existingSegments.map(
@@ -220,6 +351,8 @@ export const serializeTranscriptSegments = (
       text: segment.text,
       source: segment.source,
       timestamp: getRelativeTranscriptSeconds(segment.timestamp, timelineStartedAt),
+      editedByUser: segment.editedByUser || undefined,
+      originalText: segment.originalText || undefined,
       speaker: segment.speaker,
       speakerName: segment.speakerName,
       speakerIsPlaceholder: segment.speakerIsPlaceholder,

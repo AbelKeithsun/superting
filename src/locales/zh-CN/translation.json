@@ -1996,6 +1996,14 @@
       "mixMono": "单声道混合",
       "mixSystemPriority": "系统优先",
       "newRecordingsOnly": "音质设置仅对新录音生效，历史录音不会重新编码。"
+    },
+    "transcript": {
+      "liveEdit": {
+        "learned": "已学习：{{from}} → {{to}}",
+        "learnedMultiple": "已学习 {{count}} 条纠正",
+        "undo": "撤销",
+        "dismiss": "关闭"
+      }
     }
   },
   "dictionary": {

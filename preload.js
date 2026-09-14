@@ -74,10 +74,17 @@ contextBridge.exposeInMainWorld("electronAPI", {
   setAutoLearnEnabled: (enabled) => ipcRenderer.send("auto-learn-changed", enabled),
   learnReplacementCorrection: (payload) =>
     ipcRenderer.invoke("learn-replacement-correction", payload),
+  learnMeetingCorrection: (payload) => ipcRenderer.invoke("learn-meeting-correction", payload),
+  undoMeetingCorrection: (payload) => ipcRenderer.invoke("undo-meeting-correction", payload),
   onCorrectionsLearned: (callback) => {
     const listener = (_event, words) => callback?.(words);
     ipcRenderer.on("corrections-learned", listener);
     return () => ipcRenderer.removeListener("corrections-learned", listener);
+  },
+  onCorrectionsLearnedQuiet: (callback) => {
+    const listener = (_event, data) => callback?.(data);
+    ipcRenderer.on("corrections-learned-quiet", listener);
+    return () => ipcRenderer.removeListener("corrections-learned-quiet", listener);
   },
   undoLearnedCorrections: (words) => ipcRenderer.invoke("undo-learned-corrections", words),
 

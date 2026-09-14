@@ -582,6 +582,8 @@ interface MeetingTranscriptChatProps {
   onDismissSuggestion?: (speakerId: string) => void;
   onAttachSpeakerEmail?: (profileId: number, email: string | null) => void;
   onSeekToSegment?: (target: TranscriptSeekTarget) => void;
+  /** Commit an inline edit of a finalized live segment (recording view). */
+  onLiveSegmentEdit?: (segmentId: string, text: string) => void;
   emptyMessage?: string;
 }
 
@@ -610,6 +612,7 @@ export function MeetingTranscriptChat({
   onDismissSuggestion,
   onAttachSpeakerEmail,
   onSeekToSegment,
+  onLiveSegmentEdit,
   emptyMessage,
 }: MeetingTranscriptChatProps) {
   const { t } = useTranslation();
@@ -617,6 +620,9 @@ export function MeetingTranscriptChat({
   const shouldStickToBottomRef = useRef(true);
   const activeSegmentIdRef = useRef<string | null>(null);
   const [hintDismissed, setHintDismissed] = useState(false);
+  const [liveEditingId, setLiveEditingId] = useState<string | null>(null);
+  const [liveDraft, setLiveDraft] = useState("");
+  const liveEditorRef = useRef<HTMLTextAreaElement | null>(null);
 
   useEffect(() => {
     activeSegmentIdRef.current = activeSegmentId ?? null;
@@ -759,6 +765,22 @@ export function MeetingTranscriptChat({
   if (isRecording) {
     const liveItems = buildLiveTranscriptItems(segments, micPartial, systemPartial);
 
+    const commitLiveEdit = () => {
+      const segmentId = liveEditingId;
+      if (!segmentId) return;
+      const trimmed = liveDraft;
+      setLiveEditingId(null);
+      setLiveDraft("");
+      const original = segments.find((segment) => segment.id === segmentId);
+      if (!original || trimmed === original.text || !trimmed.trim()) return;
+      onLiveSegmentEdit?.(segmentId, trimmed);
+    };
+
+    const cancelLiveEdit = () => {
+      setLiveEditingId(null);
+      setLiveDraft("");
+    };
+
     return (
       <div className="h-full relative">
         <div
@@ -776,6 +798,7 @@ export function MeetingTranscriptChat({
                       timelineDurationSeconds
                     )
                   : null;
+              const isEditingThis = liveEditingId === item.id && !item.pending;
 
               return (
                 <section
@@ -789,20 +812,67 @@ export function MeetingTranscriptChat({
                       {timestampLabel}
                     </div>
                   )}
-                  <p
-                    className={cn(
-                      "whitespace-pre-wrap text-sm leading-6 tracking-normal text-slate-900",
-                      item.pending && "text-slate-500"
-                    )}
-                  >
-                    {item.text}
-                    {item.pending && (
-                      <span
-                        className="ml-1 inline-block h-3.5 w-[2px] align-middle bg-slate-500/45"
-                        style={{ animation: "agent-cursor-blink 800ms steps(1) infinite" }}
-                      />
-                    )}
-                  </p>
+                  {isEditingThis ? (
+                    <textarea
+                      ref={liveEditorRef}
+                      value={liveDraft}
+                      onChange={(event) => setLiveDraft(event.target.value)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Escape") {
+                          event.preventDefault();
+                          cancelLiveEdit();
+                        } else if (
+                          event.key === "Enter" &&
+                          (event.metaKey || event.ctrlKey)
+                        ) {
+                          event.preventDefault();
+                          commitLiveEdit();
+                        }
+                      }}
+                      onBlur={commitLiveEdit}
+                      rows={Math.max(2, liveDraft.split("\n").length)}
+                      autoFocus
+                      className={cn(
+                        "w-full resize-y rounded-md border px-3 py-2 text-sm leading-6",
+                        "border-indigo-300 bg-white text-slate-950 shadow-sm",
+                        "outline-none focus-visible:ring-1 focus-visible:ring-indigo-400"
+                      )}
+                    />
+                  ) : (
+                    <p
+                      className={cn(
+                        "whitespace-pre-wrap text-sm leading-6 tracking-normal text-slate-900",
+                        item.pending && "text-slate-500",
+                        !item.pending &&
+                          onLiveSegmentEdit &&
+                          "cursor-text rounded-md -mx-1 px-1 hover:bg-indigo-50/60"
+                      )}
+                      data-live-transcript-editable={
+                        !item.pending && onLiveSegmentEdit ? "true" : undefined
+                      }
+                      onClick={() => {
+                        if (item.pending || !onLiveSegmentEdit) return;
+                        setLiveEditingId(item.id);
+                        setLiveDraft(item.text);
+                        // Focus after the textarea mounts.
+                        window.requestAnimationFrame(() => {
+                          liveEditorRef.current?.focus();
+                          liveEditorRef.current?.setSelectionRange(
+                            item.text.length,
+                            item.text.length
+                          );
+                        });
+                      }}
+                    >
+                      {item.text}
+                      {item.pending && (
+                        <span
+                          className="ml-1 inline-block h-3.5 w-[2px] align-middle bg-slate-500/45"
+                          style={{ animation: "agent-cursor-blink 800ms steps(1) infinite" }}
+                        />
+                      )}
+                    </p>
+                  )}
                 </section>
               );
             })}

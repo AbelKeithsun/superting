@@ -2034,6 +2034,14 @@
       "mixMono": "Mono mix",
       "mixSystemPriority": "System priority",
       "newRecordingsOnly": "Quality changes affect new recordings only; existing recordings are not re-encoded."
+    },
+    "transcript": {
+      "liveEdit": {
+        "learned": "Learned: {{from}} → {{to}}",
+        "learnedMultiple": "Learned {{count}} corrections",
+        "undo": "Undo",
+        "dismiss": "Dismiss"
+      }
     }
   },
   "dictionary": {

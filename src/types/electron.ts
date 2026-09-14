@@ -584,9 +584,27 @@ declare global {
         findText: string;
         replacementText: string;
         replacementCount: number;
-        source: "transcript-edit-find-replace";
+        source: "transcript-edit-find-replace" | "meeting-live-edit";
       }) => Promise<{ success: boolean; learned: string[] }>;
+      learnMeetingCorrection?: (payload: {
+        originalText: string;
+        editedText: string;
+        source: "meeting-live-edit";
+      }) => Promise<{
+        success: boolean;
+        learned: string[];
+        pairs: Array<{ from: string; to: string }>;
+      }>;
+      undoMeetingCorrection?: (payload: {
+        pairs: Array<{ from: string; to: string }>;
+      }) => Promise<{ success: boolean }>;
       onCorrectionsLearned?: (callback: (words: string[]) => void) => () => void;
+      onCorrectionsLearnedQuiet?: (
+        callback: (data: {
+          pairs: Array<{ from: string; to: string }>;
+          source: string;
+        }) => void
+      ) => () => void;
       undoLearnedCorrections?: (words: string[]) => Promise<{ success: boolean }>;
 
       // Local MCP server
