@@ -2019,7 +2019,21 @@
       "unmatchedSpeaker": "Unmatched speaker"
     },
     "collapseNoteList": "Réduire la liste des notes",
-    "expandNoteList": "Développer la liste des notes"
+    "expandNoteList": "Développer la liste des notes",
+    "audioQuality": {
+      "title": "Qualité audio des réunions",
+      "qualityLabel": "Qualité d'enregistrement",
+      "qualityDescription": "S'applique uniquement aux nouveaux enregistrements de réunion.",
+      "standard": "Standard (48 kHz · 64 kbps)",
+      "high": "Haute fidélité (48 kHz · 128 kbps)",
+      "lossless": "WAV sans perte (48 kHz · 16 bits)",
+      "mixLabel": "Stratégie de mixage",
+      "mixDescription": "Comment le micro et l'audio système sont combinés dans l'enregistrement.",
+      "mixStereo": "Stéréo (micro gauche · système droite)",
+      "mixMono": "Mixage mono",
+      "mixSystemPriority": "Priorité système",
+      "newRecordingsOnly": "Les changements de qualité ne s'appliquent qu'aux nouveaux enregistrements ; les existants ne sont pas réencodés."
+    }
   },
   "dictionary": {
     "title": "Dictionnaire personnalisé",

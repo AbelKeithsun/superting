@@ -2020,7 +2020,21 @@
       "unmatchedSpeaker": "Unmatched speaker"
     },
     "collapseNoteList": "Collapse note list",
-    "expandNoteList": "Expand note list"
+    "expandNoteList": "Expand note list",
+    "audioQuality": {
+      "title": "Meeting Audio Quality",
+      "qualityLabel": "Recording quality",
+      "qualityDescription": "Applies to new meeting recordings only.",
+      "standard": "Standard (48 kHz · 64 kbps)",
+      "high": "High fidelity (48 kHz · 128 kbps)",
+      "lossless": "Lossless WAV (48 kHz · 16-bit)",
+      "mixLabel": "Mix strategy",
+      "mixDescription": "How microphone and system audio are combined in the recording.",
+      "mixStereo": "Stereo (mic left · system right)",
+      "mixMono": "Mono mix",
+      "mixSystemPriority": "System priority",
+      "newRecordingsOnly": "Quality changes affect new recordings only; existing recordings are not re-encoded."
+    }
   },
   "dictionary": {
     "title": "Custom Dictionary",

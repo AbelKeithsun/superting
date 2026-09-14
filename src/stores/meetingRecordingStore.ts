@@ -144,6 +144,8 @@ const getMeetingTranscriptionOptions = () => {
       audioRetentionDays: state.audioRetentionDays,
       customDictionary: state.customDictionary,
       customDictionaryAliases: state.customDictionaryAliases,
+      meetingAudioQuality: state.meetingAudioQuality || "high",
+      meetingAudioMix: state.meetingAudioMix || "stereo",
     };
   }
 
@@ -168,6 +170,8 @@ const getMeetingTranscriptionOptions = () => {
       audioRetentionDays: state.audioRetentionDays,
       customDictionary: state.customDictionary,
       customDictionaryAliases: state.customDictionaryAliases,
+      meetingAudioQuality: state.meetingAudioQuality || "high",
+      meetingAudioMix: state.meetingAudioMix || "stereo",
     };
   }
   const model =
@@ -184,6 +188,8 @@ const getMeetingTranscriptionOptions = () => {
     audioRetentionDays: state.audioRetentionDays,
     customDictionary: state.customDictionary,
     customDictionaryAliases: state.customDictionaryAliases,
+    meetingAudioQuality: state.meetingAudioQuality || "high",
+    meetingAudioMix: state.meetingAudioMix || "stereo",
   };
 };
 
@@ -276,11 +282,13 @@ const getMeetingWorkletBlobUrl = (() => {
     const code = `
 const BUFFER_SIZE = ${MEETING_AUDIO_BUFFER_SIZE};
 class MeetingPCMProcessor extends AudioWorkletProcessor {
-  constructor() {
+  constructor(options) {
     super();
     this._buffer = new Int16Array(BUFFER_SIZE);
     this._offset = 0;
     this._stopped = false;
+    this._channelMode =
+      options && options.channelMode === "average" ? "average" : "first";
     this.port.onmessage = (event) => {
       if (event.data === "stop") {
         if (this._offset > 0) {
@@ -295,10 +303,23 @@ class MeetingPCMProcessor extends AudioWorkletProcessor {
   }
   process(inputs) {
     if (this._stopped) return false;
-    const input = inputs[0]?.[0];
-    if (!input) return true;
-    for (let i = 0; i < input.length; i++) {
-      const s = Math.max(-1, Math.min(1, input[i]));
+    const channels = inputs[0];
+    const primary = channels?.[0];
+    if (!primary) return true;
+    // channelMode "average" mixes every input channel equally so stereo
+    // system audio never loses its right channel in the retained capture;
+    // "first" keeps the historical ASR-path behavior.
+    const averageAll = this._channelMode === "average" && channels.length > 1;
+    for (let i = 0; i < primary.length; i++) {
+      let s;
+      if (averageAll) {
+        s = 0;
+        for (let c = 0; c < channels.length; c++) s += channels[c][i];
+        s /= channels.length;
+      } else {
+        s = primary[i];
+      }
+      s = Math.max(-1, Math.min(1, s));
       this._buffer[this._offset++] = s < 0 ? s * 0x8000 : s * 0x7fff;
       if (this._offset >= BUFFER_SIZE) {
         this.port.postMessage(this._buffer.buffer, [this._buffer.buffer]);
@@ -393,6 +414,45 @@ const createAudioPipeline = async ({
   return { source, processor };
 };
 
+// Dedicated 48 kHz retention capture. Runs on its own AudioContext so the
+// archived audio keeps the full speech band while the 24 kHz ASR pipelines
+// stay untouched; chunks bypass the ASR gating path entirely.
+const MEETING_RETENTION_SAMPLE_RATE = 48000;
+
+const createRetentionPipeline = async ({
+  stream,
+  source,
+}: {
+  stream: MediaStream;
+  source: "mic" | "system";
+}) => {
+  const context = new AudioContext({ sampleRate: MEETING_RETENTION_SAMPLE_RATE });
+  await detachFromOutputDevice(context);
+  if (context.state === "suspended") {
+    await context.resume();
+  }
+  await context.audioWorklet.addModule(getMeetingWorkletBlobUrl());
+
+  const sourceNode = context.createMediaStreamSource(stream);
+  const processor = new AudioWorkletNode(context, "meeting-pcm-processor", {
+    processorOptions: { channelMode: "average" },
+  });
+  const silentGain = context.createGain();
+  silentGain.gain.value = 0;
+
+  processor.port.onmessage = (event) => {
+    const chunk = event.data;
+    if (!(chunk instanceof ArrayBuffer) || !isRecordingFlag) return;
+    window.electronAPI?.meetingRetentionAudioSend?.(chunk, source);
+  };
+
+  sourceNode.connect(processor);
+  processor.connect(silentGain);
+  silentGain.connect(context.destination);
+
+  return { context, sourceNode, processor };
+};
+
 // Detach the AudioContext from hardware output — when BT headphones switch to
 // HFP, the default-output context can stall on the sample-rate mismatch.
 const detachFromOutputDevice = async (ctx: AudioContext) => {
@@ -432,6 +492,8 @@ let systemContext: AudioContext | null = null;
 let systemSource: MediaStreamAudioSourceNode | null = null;
 let systemProcessor: AudioWorkletNode | null = null;
 let systemStream: MediaStream | null = null;
+let micRetention: Awaited<ReturnType<typeof createRetentionPipeline>> | null = null;
+let systemRetention: Awaited<ReturnType<typeof createRetentionPipeline>> | null = null;
 let isRecordingFlag = false;
 let isStartingFlag = false;
 let isPrepared = false;
@@ -560,6 +622,15 @@ async function cleanup(): Promise<void> {
   } catch {}
   micContext = null;
 
+  if (micRetention) {
+    await flushAndDisconnectProcessor(micRetention.processor);
+    micRetention.sourceNode.disconnect();
+    try {
+      await micRetention.context.close();
+    } catch {}
+    micRetention = null;
+  }
+
   await flushAndDisconnectProcessor(systemProcessor);
   systemProcessor = null;
 
@@ -573,6 +644,15 @@ async function cleanup(): Promise<void> {
     await systemContext?.close();
   } catch {}
   systemContext = null;
+
+  if (systemRetention) {
+    await flushAndDisconnectProcessor(systemRetention.processor);
+    systemRetention.sourceNode.disconnect();
+    try {
+      await systemRetention.context.close();
+    } catch {}
+    systemRetention = null;
+  }
 
   ipcCleanups.forEach((fn) => fn());
   ipcCleanups = [];
@@ -1014,6 +1094,50 @@ export async function startRecording(args: StartRecordingArgs): Promise<void> {
         logger.warn(
           "System audio loopback failed, continuing with mic only",
           { error: systemCaptureError.message },
+          "meeting"
+        );
+      }
+    }
+
+    // 48 kHz retention capture (mirrors the main-process retention decision:
+    // retention enabled and retention days not zero). Failures fall back to
+    // the main-process 24 kHz retention path.
+    const retentionSettings = getSettings();
+    const retentionEnabled =
+      retentionSettings.dataRetentionEnabled !== false &&
+      (retentionSettings.audioRetentionDays ?? 30) !== 0;
+    if (retentionEnabled) {
+      if (micResult) {
+        try {
+          micRetention = await createRetentionPipeline({ stream: micResult, source: "mic" });
+        } catch (err) {
+          logger.warn(
+            "48 kHz mic retention pipeline unavailable, using 24 kHz fallback",
+            { error: (err as Error).message },
+            "meeting"
+          );
+          micRetention = null;
+        }
+      }
+      if (systemCaptureResult.stream) {
+        try {
+          systemRetention = await createRetentionPipeline({
+            stream: systemCaptureResult.stream,
+            source: "system",
+          });
+        } catch (err) {
+          logger.warn(
+            "48 kHz system retention pipeline unavailable, using 24 kHz fallback",
+            { error: (err as Error).message },
+            "meeting"
+          );
+          systemRetention = null;
+        }
+      }
+      if (micRetention || systemRetention) {
+        logger.info(
+          "48 kHz retention capture started",
+          { mic: !!micRetention, system: !!systemRetention },
           "meeting"
         );
       }

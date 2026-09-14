@@ -1978,7 +1978,21 @@
       "unmatchedSpeaker": "Unmatched speaker"
     },
     "collapseNoteList": "Comprimi elenco note",
-    "expandNoteList": "Espandi elenco note"
+    "expandNoteList": "Espandi elenco note",
+    "audioQuality": {
+      "title": "Qualità audio delle riunioni",
+      "qualityLabel": "Qualità di registrazione",
+      "qualityDescription": "Si applica solo alle nuove registrazioni delle riunioni.",
+      "standard": "Standard (48 kHz · 64 kbps)",
+      "high": "Alta fedeltà (48 kHz · 128 kbps)",
+      "lossless": "WAV senza perdita (48 kHz · 16 bit)",
+      "mixLabel": "Strategia di mixaggio",
+      "mixDescription": "Come microfono e audio di sistema vengono combinati nella registrazione.",
+      "mixStereo": "Stereo (micro sin. · sistema des.)",
+      "mixMono": "Mixaggio mono",
+      "mixSystemPriority": "Priorità sistema",
+      "newRecordingsOnly": "Le modifiche di qualità valgono solo per le nuove registrazioni; quelle esistenti non vengono ricodificate."
+    }
   },
   "dictionary": {
     "addWord": "Aggiungi parola",

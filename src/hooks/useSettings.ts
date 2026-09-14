@@ -71,6 +71,8 @@ export interface PrivacySettings {
   telemetryEnabled: boolean;
   audioRetentionDays: number;
   dataRetentionEnabled: boolean;
+  meetingAudioQuality: "standard" | "high" | "lossless";
+  meetingAudioMix: "stereo" | "mix" | "system-priority";
 }
 
 export interface ThemeSettings {

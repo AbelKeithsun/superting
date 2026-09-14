@@ -10,6 +10,7 @@ const {
   buildDictationAudioFilename,
   buildMeetingWavFallbackFilename,
   isDictationAudioFile,
+  isLosslessAudioFilename,
   isRetainedAudioFile,
   resolveRetainedAudioPath,
 } = require("./audioStorageFiles");
@@ -113,7 +114,9 @@ class AudioStorageManager {
         return { success: false, error: "No meeting audio captured" };
       }
 
-      const filename = buildMeetingWavFallbackFilename(noteId, timestamp);
+      const filename = buildMeetingWavFallbackFilename(noteId, timestamp, {
+        lossless: options.lossless === true,
+      });
       const filePath = path.join(this.audioDir, filename);
       this._writePcmAsWav(pcmPath, filePath, stats, { sampleRate, channels });
       const durationSeconds = stats.size / (sampleRate * channels * bytesPerSample);
@@ -151,10 +154,10 @@ class AudioStorageManager {
       const filename = buildMergedMeetingAudioFilename(noteId, timestamp);
       const filePath = path.join(this.audioDir, filename);
       await this.mergeToOpusWebm(inputPaths, filePath, {
-        sampleRate: options.sampleRate || 24000,
-        channels: options.channels || 1,
-        bitrate: options.bitrate || "24k",
-        application: "voip",
+        sampleRate: options.sampleRate || 48000,
+        channels: options.channels || 2,
+        bitrate: options.bitrate || "128k",
+        application: "audio",
       });
 
       debugLogger.debug(
@@ -177,7 +180,7 @@ class AudioStorageManager {
     try {
       const inputPath = this.getRetainedAudioPath(filename);
       if (!inputPath) {
-        return { success: false, error: "Audio file unavailable" };
+        return { success: false, error: `Audio file unavailable: ${filename}` };
       }
 
       const ext = path.extname(filename).toLowerCase();
@@ -185,13 +188,18 @@ class AudioStorageManager {
         return { success: true, path: inputPath, filename, alreadyCompressed: true };
       }
 
+      // Lossless recordings must never be transcoded by automatic passes.
+      if (isLosslessAudioFilename(filename) && options.force !== true) {
+        return { success: true, path: inputPath, filename, skippedLossless: true };
+      }
+
       const outputFilename = `${path.basename(filename, ext)}.webm`;
       const outputPath = path.join(this.audioDir, outputFilename);
       const validation = await this.compressToOpusWebm(inputPath, outputPath, {
-        sampleRate: options.sampleRate || 24000,
-        channels: options.channels || 1,
-        bitrate: options.bitrate || "24k",
-        application: "voip",
+        sampleRate: options.sampleRate || 48000,
+        channels: options.channels || 2,
+        bitrate: options.bitrate || "128k",
+        application: "audio",
       });
       try {
         fs.unlinkSync(inputPath);
