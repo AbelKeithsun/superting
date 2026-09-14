@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [2.0.5] - Unreleased
+## [2.0.5] - 2026-09-14
 
 ### Meeting audio quality
 
@@ -27,6 +27,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Cross-meeting contact identities.** New `people` (name required; email/phone/organization/notes optional and fill-in-later) and `voiceprints` (1:N local-only templates) tables; legacy contacts / speaker_profiles / speaker_names merge into them idempotently on startup. Full CRUD + merge in Settings → People.
 - **Name-first participants.** Note participants can be added with just a name (`personId` linkage, no email requirement); grouping by organization with email-domain fallback; no Gravatar request for email-less participants.
 - **Voiceprint reuse without email.** Speaker assignment mirrors samples into the person's voiceprints; live recognition preloads templates by attendee `personId` in addition to legacy email matching, so a named participant is recognized in later meetings. Live/batch match thresholds unified in shared constants.
+- **Voiceprint upsert against the partial unique index.** Saving a sample now qualifies its `ON CONFLICT` target with the index predicate (`WHERE source_profile_id IS NOT NULL`), which SQLite requires for a partial unique index; the bare target failed to prepare, so re-saving a sample for an existing speaker profile could never update the row.
 
 ## [2.0.3] - 2026-09-12
 
