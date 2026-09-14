@@ -1992,6 +1992,14 @@
       "mixMono": "Mixagem mono",
       "mixSystemPriority": "Prioridade do sistema",
       "newRecordingsOnly": "As alterações de qualidade afetam apenas novas gravações; as existentes não são recodificadas."
+    },
+    "transcript": {
+      "liveEdit": {
+        "learned": "Aprendido: {{from}} → {{to}}",
+        "learnedMultiple": "{{count}} correções aprendidas",
+        "undo": "Desfazer",
+        "dismiss": "Fechar"
+      }
     }
   },
   "dictionary": {

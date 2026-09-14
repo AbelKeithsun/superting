@@ -71,6 +71,7 @@ const {
   normalizeMeetingTranscript,
   normalizeTranscriptionResult,
 } = require("./dictationFlowResultCore.cjs");
+const { applyDictionaryCorrections } = require("../utils/dictionaryCorrectionCore.cjs");
 
 const STREAMING_CLIENT_BY_PROVIDER = {
   "openai-realtime": OpenAIRealtimeStreaming,
@@ -930,6 +931,9 @@ class IPCHandlers {
     return { success: true, learned: corrections };
   }
 
+  // Dual-write for meeting live-edit learning: hotword (dictionary) +
+  // deterministic replacement rule (alias). The live meeting arrays are
+  // closure state inside setupHandlers(); see saveMeetingCorrectionPairs there.
   _syncStartupEnv(setVars, clearVars = []) {
     let changed = false;
     for (const [key, value] of Object.entries(setVars)) {
@@ -1479,7 +1483,8 @@ class IPCHandlers {
           return { success: true, learned: [] };
         }
 
-        if (!payload || payload.source !== "transcript-edit-find-replace") {
+        const allowedSources = new Set(["transcript-edit-find-replace", "meeting-live-edit"]);
+        if (!payload || !allowedSources.has(payload.source)) {
           return { success: false, learned: [] };
         }
 
@@ -1501,6 +1506,144 @@ class IPCHandlers {
       } catch (error) {
         debugLogger.debug("[AutoLearn] Replacement correction failed", { error: error.message });
         return { success: false, learned: [] };
+      }
+    });
+
+    // Meeting live-edit learning: extract (wrong→right) pairs (CJK-aware),
+    // dual-write them as dictionary hotwords AND replacement aliases, then
+    // notify the UI through the quiet channel — never showDictationPanel(),
+    // which would pop the dictation overlay mid-meeting.
+    const saveMeetingCorrectionPairs = (currentDict, pairs) => {
+      if (!Array.isArray(pairs) || pairs.length === 0) {
+        return { success: true, learned: [] };
+      }
+
+      const dictAdditions = [];
+      for (const pair of pairs) {
+        const to = String(pair.to || "").trim();
+        if (to && !currentDict.includes(to) && !dictAdditions.includes(to)) {
+          dictAdditions.push(to);
+        }
+      }
+      if (dictAdditions.length > 0) {
+        const updatedDict = [...currentDict, ...dictAdditions];
+        const saveResult = this.databaseManager.setDictionary(updatedDict);
+        if (saveResult?.success === false) {
+          debugLogger.debug("[AutoLearn] Failed to save dictionary", { error: saveResult.error });
+          return { success: false, learned: [] };
+        }
+        this.broadcastToWindows("dictionary-updated", updatedDict);
+        for (const word of dictAdditions) {
+          if (!meetingCustomDictionary.includes(word)) meetingCustomDictionary.push(word);
+        }
+      }
+
+      const currentAliases = this.databaseManager.getDictionaryAliases() || [];
+      const aliasKeys = new Set(currentAliases.map((alias) => `${alias.from}\u0000${alias.to}`));
+      const aliasAdditions = [];
+      for (const pair of pairs) {
+        const from = String(pair.from || "").trim();
+        const to = String(pair.to || "").trim();
+        if (!from || !to) continue;
+        const key = `${from}\u0000${to}`;
+        if (aliasKeys.has(key)) continue;
+        aliasKeys.add(key);
+        aliasAdditions.push({ from, to });
+      }
+      if (aliasAdditions.length > 0) {
+        const updatedAliases = [...currentAliases, ...aliasAdditions];
+        const aliasResult = this.databaseManager.setDictionaryAliases(updatedAliases);
+        if (aliasResult?.success === false) {
+          debugLogger.debug("[AutoLearn] Failed to save aliases", { error: aliasResult.error });
+          return { success: false, learned: [] };
+        }
+        this.broadcastToWindows("dictionary-aliases-updated", updatedAliases);
+        for (const alias of aliasAdditions) {
+          meetingCustomDictionaryAliases.push({ ...alias });
+        }
+      }
+
+      return { success: true, learned: dictAdditions };
+    };
+
+    ipcMain.handle("learn-meeting-correction", async (_event, payload) => {
+      try {
+        if (!this._autoLearnEnabled) {
+          debugLogger.debug("[AutoLearn] Meeting learning disabled, skipping");
+          return { success: true, learned: [], pairs: [] };
+        }
+        if (!payload || payload.source !== "meeting-live-edit") {
+          return { success: false, learned: [], pairs: [] };
+        }
+
+        const { extractCorrectionPairs } = require("../utils/correctionLearner");
+        const currentDict = this._getDictionarySafe();
+        const pairs = extractCorrectionPairs({
+          originalText: payload.originalText,
+          editedText: payload.editedText,
+          existingDictionary: currentDict,
+        });
+        if (!pairs.length) {
+          debugLogger.debug("[AutoLearn] Meeting edit produced no pairs", {
+            originalText: String(payload.originalText || "").slice(0, 80),
+          });
+          return { success: true, learned: [], pairs: [] };
+        }
+
+        const saved = saveMeetingCorrectionPairs(currentDict, pairs);
+        if (!saved.success) return saved;
+
+        // Quiet receipt: in-note toast + undo handled by the renderer.
+        this.broadcastToWindows("corrections-learned-quiet", { pairs, source: payload.source });
+        debugLogger.debug("[AutoLearn] Meeting correction pairs saved", { pairs });
+        return { ...saved, pairs };
+      } catch (error) {
+        debugLogger.debug("[AutoLearn] Meeting correction failed", { error: error.message });
+        return { success: false, learned: [], pairs: [], error: error.message };
+      }
+    });
+
+    ipcMain.handle("undo-meeting-correction", async (_event, payload) => {
+      try {
+        const pairs = Array.isArray(payload?.pairs) ? payload.pairs : [];
+        if (!pairs.length) return { success: true };
+
+        const currentDict = this._getDictionarySafe();
+        const removedWords = new Set(
+          pairs.map((pair) => String(pair.to || "").trim()).filter(Boolean)
+        );
+        const nextDict = currentDict.filter((word) => !removedWords.has(String(word).trim()));
+        if (nextDict.length !== currentDict.length) {
+          this.databaseManager.setDictionary(nextDict);
+          this.broadcastToWindows("dictionary-updated", nextDict);
+        }
+
+        const currentAliases = this.databaseManager.getDictionaryAliases() || [];
+        const pairKeys = new Set(pairs.map((pair) => `${pair.from}\u0000${pair.to}`));
+        const nextAliases = currentAliases.filter(
+          (alias) => !pairKeys.has(`${alias.from}\u0000${alias.to}`)
+        );
+        if (nextAliases.length !== currentAliases.length) {
+          this.databaseManager.setDictionaryAliases(nextAliases);
+          this.broadcastToWindows("dictionary-aliases-updated", nextAliases);
+        }
+
+        // Keep an in-flight meeting's live correction arrays in sync so an
+        // undone pair immediately stops being applied to new segments.
+        for (const pair of pairs) {
+          const dictIdx = meetingCustomDictionary.indexOf(pair.to);
+          if (dictIdx !== -1) meetingCustomDictionary.splice(dictIdx, 1);
+          const aliasIdx = meetingCustomDictionaryAliases.findIndex(
+            (alias) => alias.from === pair.from && alias.to === pair.to
+          );
+          if (aliasIdx !== -1) meetingCustomDictionaryAliases.splice(aliasIdx, 1);
+        }
+
+        debugLogger.debug("[AutoLearn] Meeting correction undone", { pairs });
+        return { success: true };
+      } catch (error) {
+        debugLogger.debug("[AutoLearn] Undo meeting correction failed", { error: error.message });
+        return { success: false, error: error.message };
       }
     });
 
@@ -5427,6 +5570,17 @@ class IPCHandlers {
     const buildMeetingSegment = (segment) =>
       normalizeMeetingSegment(segment, getMeetingSegmentMetadata());
 
+    // Meeting-segment dictionary correction entry point. Applies the meeting's
+    // live dictionary + replacement aliases (which learning updates mid-flight)
+    // so freshly learned pairs correct the very next finalized segment.
+    const applyMeetingDictionaryCorrections = (text) => {
+      if (typeof text !== "string" || !text) return { text: text || "", replacements: [] };
+      return applyDictionaryCorrections(text, {
+        dictionary: meetingCustomDictionary,
+        aliases: meetingCustomDictionaryAliases,
+      });
+    };
+
     const sendMeetingFinalSegment = ({
       text,
       source,
@@ -5435,8 +5589,9 @@ class IPCHandlers {
       send = null,
       includeInLocalTranscript = false,
     }) => {
+      const corrected = applyMeetingDictionaryCorrections(text);
       const segment = buildMeetingSegment({
-        text,
+        text: corrected.changed ? corrected.text : text,
         source,
         type: "final",
         timestamp,
@@ -6004,6 +6159,12 @@ class IPCHandlers {
         // The renderer feeds 24 kHz PCM on the ASR path; Deepgram/AssemblyAI
         // default to a 16 kHz declaration and mis-decode without this.
         sampleRate: 24000,
+        // Feed the custom dictionary as hot terms so learned corrections bias
+        // recognition itself (Deepgram keyterm/keywords, AssemblyAI
+        // keyterms_prompt, OpenAI Realtime transcription prompt).
+        keyterms: Array.isArray(options.customDictionary)
+          ? options.customDictionary.filter(Boolean).slice(0, 100)
+          : [],
       };
       meetingRealtimeProvider = options.provider || "openai-realtime";
       meetingRealtimeModel = options.model || null;
@@ -6585,6 +6746,11 @@ class IPCHandlers {
               this.whisperManager.transcribeLocalWhisper(wav, {
                 model: meetingLocalModel,
                 language: meetingLocalLanguage,
+                // Local whisper has no keyterm channel; pass the dictionary as
+                // the initial prompt (same mechanism the dictation path uses).
+                initialPrompt: meetingCustomDictionary.length
+                  ? meetingCustomDictionary.filter(Boolean).join(", ")
+                  : null,
                 ...vadOptions,
                 signal,
               })

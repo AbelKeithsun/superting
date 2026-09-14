@@ -1992,6 +1992,14 @@
       "mixMono": "單聲道混合",
       "mixSystemPriority": "系統優先",
       "newRecordingsOnly": "音質設定僅對新錄音生效，歷史錄音不會重新編碼。"
+    },
+    "transcript": {
+      "liveEdit": {
+        "learned": "已學習：{{from}} → {{to}}",
+        "learnedMultiple": "已學習 {{count}} 條糾正",
+        "undo": "復原",
+        "dismiss": "關閉"
+      }
     }
   },
   "dictionary": {

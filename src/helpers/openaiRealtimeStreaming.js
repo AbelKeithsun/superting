@@ -33,7 +33,7 @@ class OpenAIRealtimeStreaming {
   }
 
   async connect(options = {}) {
-    const { apiKey, model, preconfigured } = options;
+    const { apiKey, model, preconfigured, keyterms } = options;
     if (!apiKey) throw new Error("OpenAI API key is required");
 
     if (this.isConnected || this.isConnecting) {
@@ -44,6 +44,12 @@ class OpenAIRealtimeStreaming {
     this.isConnecting = true;
     this.model = model || "gpt-4o-mini-transcribe";
     this.preconfigured = !!preconfigured;
+    // Custom-dictionary hot terms bias recognition via the transcription
+    // session prompt (BYOK sessions only; server-configured sessions would be
+    // stripped by a session.update).
+    this.keytermsPrompt = Array.isArray(keyterms)
+      ? keyterms.filter(Boolean).join(", ") || null
+      : null;
     this.completedSegments = [];
     this.currentPartial = "";
     this.audioBytesSent = 0;
@@ -144,7 +150,10 @@ class OpenAIRealtimeStreaming {
                   audio: {
                     input: {
                       format: { type: "audio/pcm", rate: SAMPLE_RATE },
-                      transcription: { model: this.model },
+                      transcription: {
+                        model: this.model,
+                        ...(this.keytermsPrompt ? { prompt: this.keytermsPrompt } : {}),
+                      },
                       turn_detection: {
                         type: "server_vad",
                         threshold: 0.6,

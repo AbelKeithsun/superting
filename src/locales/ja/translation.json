@@ -1992,6 +1992,14 @@
       "mixMono": "モノラルミックス",
       "mixSystemPriority": "システム優先",
       "newRecordingsOnly": "品質設定は新しい録音にのみ適用され、既存の録音は再エンコードされません。"
+    },
+    "transcript": {
+      "liveEdit": {
+        "learned": "学習しました：{{from}} → {{to}}",
+        "learnedMultiple": "{{count}} 件の修正を学習しました",
+        "undo": "元に戻す",
+        "dismiss": "閉じる"
+      }
     }
   },
   "dictionary": {

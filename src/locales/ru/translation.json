@@ -1994,6 +1994,14 @@
       "mixMono": "Моно-микс",
       "mixSystemPriority": "Приоритет системы",
       "newRecordingsOnly": "Изменения качества действуют только на новые записи; существующие не перекодируются."
+    },
+    "transcript": {
+      "liveEdit": {
+        "learned": "Изучено: {{from}} → {{to}}",
+        "learnedMultiple": "Изучено исправлений: {{count}}",
+        "undo": "Отменить",
+        "dismiss": "Закрыть"
+      }
     }
   },
   "dictionary": {

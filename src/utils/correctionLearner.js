@@ -203,4 +203,152 @@ function extractReplacementCorrection({
   return [corrected];
 }
 
-module.exports = { extractCorrections, extractReplacementCorrection };
+const CJK_REGEX = /[\u3400-\u9fff\uf900-\ufaff\u3040-\u30ff\uac00-\ud7af]/;
+
+function containsCjk(text) {
+  return CJK_REGEX.test(text);
+}
+
+function isPunctuationOnly(text) {
+  return !/[\p{L}\p{N}]/u.test(text);
+}
+
+/** Character-level alignment (LCS) that reports contiguous diff runs. */
+function findCharDiffRuns(a, b) {
+  const m = a.length;
+  const n = b.length;
+  const dp = Array.from({ length: m + 1 }, () => new Uint16Array(n + 1));
+  for (let i = 1; i <= m; i++) {
+    for (let j = 1; j <= n; j++) {
+      dp[i][j] =
+        a[i - 1] === b[j - 1] ? dp[i - 1][j - 1] + 1 : Math.max(dp[i - 1][j], dp[i][j - 1]);
+    }
+  }
+
+  const ops = [];
+  let i = m,
+    j = n;
+  while (i > 0 || j > 0) {
+    if (i > 0 && j > 0 && a[i - 1] === b[j - 1]) {
+      ops.push(["keep", a[i - 1]]);
+      i--;
+      j--;
+    } else if (j > 0 && (i === 0 || dp[i][j - 1] >= dp[i - 1][j])) {
+      ops.push(["insert", b[j - 1]]);
+      j--;
+    } else {
+      ops.push(["delete", a[i - 1]]);
+      i--;
+    }
+  }
+  ops.reverse();
+
+  // Collapse consecutive delete+insert runs into {from, to} pairs.
+  const runs = [];
+  let current = null;
+  for (const [kind, ch] of ops) {
+    if (kind === "keep") {
+      if (current) {
+        runs.push(current);
+        current = null;
+      }
+      continue;
+    }
+    if (!current) current = { from: "", to: "" };
+    if (kind === "delete") current.from += ch;
+    else current.to += ch;
+  }
+  if (current) runs.push(current);
+  return { runs, lcsLength: dp[m][n] };
+}
+
+/**
+ * CJK-aware (错→对) pair extraction. A pair is only produced when the edit is
+ * a localized substitution: overall similarity ≥ 0.6, the differing region is
+ * one contiguous run of 2–8 characters on each side (name/term scale), and
+ * the corrected side is a plausible dictionary term. Whole-sentence rewrites
+ * are rejected.
+ */
+function extractCjkCorrectionPairs(originalText, editedText, existingDictionary) {
+  const original = normalizeCandidateText(originalText);
+  const edited = normalizeCandidateText(editedText);
+  if (!containsCjk(original) || !containsCjk(edited)) return [];
+  if (original === edited) return [];
+
+  const maxLen = Math.max(original.length, edited.length);
+  const { runs, lcsLength } = findCharDiffRuns(original, edited);
+  const similarity = lcsLength / maxLen;
+  if (similarity < 0.6) return [];
+  // Rewrite guard: more than half the characters changed.
+  if (runs.reduce((sum, run) => sum + Math.max(run.from.length, run.to.length), 0) > maxLen * 0.5) {
+    return [];
+  }
+
+  const dictSet = new Set(
+    (Array.isArray(existingDictionary) ? existingDictionary : []).map((w) =>
+      normalizeCandidateText(w).toLowerCase()
+    )
+  );
+
+  const pairs = [];
+  for (const run of runs) {
+    const from = run.from.trim();
+    const to = run.to.trim();
+    if (!from || !to) continue; // pure insertion/deletion is not a substitution
+    if (from.length < 2 || from.length > 8) continue;
+    if (to.length < 2 || to.length > 8) continue;
+    if (isPunctuationOnly(from) || isPunctuationOnly(to)) continue;
+    if (from === to) continue;
+    if (to.toLowerCase().length < 2) continue;
+    if (dictSet.has(to.toLowerCase())) continue;
+    if (!pairs.some((pair) => pair.from === from && pair.to === to)) {
+      pairs.push({ from, to });
+    }
+  }
+  return pairs;
+}
+
+/**
+ * Extract (wrong→right) substitution pairs from an edited transcript segment.
+ * Latin text goes through the word-level LCS; CJK text uses the character
+ * diff above; mixed content tries both and merges.
+ *
+ * @returns Array<{from: string, to: string}>
+ */
+function extractCorrectionPairs({
+  originalText,
+  editedText,
+  existingDictionary = [],
+} = {}) {
+  if (!originalText || !editedText) return [];
+  if (normalizeCandidateText(originalText) === normalizeCandidateText(editedText)) return [];
+
+  const pairs = [];
+  if (containsCjk(originalText) || containsCjk(editedText)) {
+    pairs.push(...extractCjkCorrectionPairs(originalText, editedText, existingDictionary));
+  }
+  if (!containsCjk(originalText) && !containsCjk(editedText)) {
+    // Latin path: reuse the word-level LCS substitution finder.
+    const origWords = tokenize(originalText);
+    const editedWords = tokenize(editedText);
+    if (origWords.length > 0 && editedWords.length > 0) {
+      const subs = findSubstitutions(origWords, editedWords);
+      if (subs.length <= origWords.length * 0.5) {
+        for (const [origWord, correctedWord] of subs) {
+          if (shouldLearnCorrection(origWord, correctedWord, existingDictionary)) {
+            if (!pairs.some((pair) => pair.from === origWord && pair.to === correctedWord)) {
+              pairs.push({ from: origWord, to: correctedWord });
+            }
+          }
+        }
+      }
+    }
+  }
+  return pairs;
+}
+
+module.exports = {
+  extractCorrections,
+  extractCorrectionPairs,
+  extractReplacementCorrection,
+};

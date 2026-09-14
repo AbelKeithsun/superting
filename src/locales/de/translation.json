@@ -1993,6 +1993,14 @@
       "mixMono": "Mono-Mischung",
       "mixSystemPriority": "Systempriorität",
       "newRecordingsOnly": "Qualitätsänderungen wirken sich nur auf neue Aufnahmen aus; bestehende Aufnahmen werden nicht neu kodiert."
+    },
+    "transcript": {
+      "liveEdit": {
+        "learned": "Gelernt: {{from}} → {{to}}",
+        "learnedMultiple": "{{count}} Korrekturen gelernt",
+        "undo": "Rückgängig",
+        "dismiss": "Schließen"
+      }
     }
   },
   "dictionary": {

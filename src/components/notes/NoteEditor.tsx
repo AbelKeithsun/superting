@@ -29,6 +29,7 @@ import { MarkdownSourceEditor } from "../ui/MarkdownSourceEditor";
 import type { Editor } from "@tiptap/react";
 import { MeetingTranscriptChat, type TranscriptSeekTarget } from "./MeetingTranscriptChat";
 import type { TranscriptSegment } from "../../stores/meetingRecordingStore";
+import { updateSegmentText } from "../../stores/meetingRecordingStore";
 import {
   Dialog,
   DialogContent,
@@ -1166,6 +1167,14 @@ export default function NoteEditor({
   }, [note.title]);
 
   const prevRecordingForDiarizationRef = useRef(false);
+  const isTranscriptEditingRef = useRef(false);
+  useEffect(() => {
+    isTranscriptEditingRef.current = isTranscriptEditing;
+  }, [isTranscriptEditing]);
+  const pendingDiarizationRef = useRef<{
+    segments: any[];
+    speakerEmbeddings?: Record<string, number[]>;
+  } | null>(null);
   useEffect(() => {
     if (prevRecordingForDiarizationRef.current && !isRecording && diarizationSessionId) {
       const cancelScheduledUpdate = scheduleUiUpdate(() => setIsDiarizing(true));
@@ -1183,6 +1192,17 @@ export default function NoteEditor({
       setIsDiarizing(false);
 
       if (!data?.segments?.length) return;
+
+      // Draft guard: while the user is mid-edit, merging into the note would
+      // overwrite their unsaved draft with the diarization version. Defer the
+      // merge until the edit session ends (save or cancel).
+      if (isTranscriptEditingRef.current) {
+        pendingDiarizationRef.current = {
+          segments: data.segments,
+          speakerEmbeddings: data.speakerEmbeddings,
+        };
+        return;
+      }
 
       const persisted = await window.electronAPI?.getNote?.(note.id);
       const existing = persisted?.transcript
@@ -1214,6 +1234,46 @@ export default function NoteEditor({
     });
     return () => cleanup?.();
   }, [note.id, diarizationSessionId]);
+
+  // Apply a diarization result that arrived while the user was editing once
+  // the edit session ends. The merge re-reads the persisted transcript, so a
+  // completed save's edits are protected by edited-segment matching.
+  useEffect(() => {
+    if (isTranscriptEditing) return;
+    const pending = pendingDiarizationRef.current;
+    if (!pending) return;
+    const timer = window.setTimeout(() => {
+      if (isTranscriptEditingRef.current || !pendingDiarizationRef.current) return;
+      pendingDiarizationRef.current = null;
+      void window.electronAPI?.getNote?.(note.id).then((persisted) => {
+        const existing = persisted?.transcript
+          ? parseTranscriptSegments(persisted.transcript)
+          : displaySegmentsRef.current;
+        const enriched = mergeTranscriptSegments(
+          existing,
+          pending.segments.map((s: any, i: number) => ({
+            ...s,
+            id: s.id || `diarized-${i}`,
+          }))
+        );
+        setDiarizedSegments(enriched);
+        window.electronAPI.updateNote(note.id, {
+          transcript: serializeTranscriptSegments(enriched),
+        });
+        if (pending.speakerEmbeddings) {
+          window.electronAPI?.saveNoteSpeakerEmbeddings?.(note.id, pending.speakerEmbeddings);
+        }
+        const autoMappings: Record<string, string> = {};
+        for (const s of enriched) {
+          if (s.speakerName && s.speaker) autoMappings[s.speaker] = s.speakerName;
+        }
+        if (Object.keys(autoMappings).length > 0) {
+          setSpeakerMappings((prev) => ({ ...autoMappings, ...prev }));
+        }
+      });
+    }, 400);
+    return () => window.clearTimeout(timer);
+  }, [isTranscriptEditing, note.id]);
 
   const persistDisplaySegments = useCallback(
     async (nextSegments: TranscriptSegment[], updateOverlay = true) => {
@@ -1850,6 +1910,49 @@ export default function NoteEditor({
     setReplaceText("");
   }, []);
 
+  // Live inline edit of a finalized segment during recording: write through
+  // the store (survives the 30s persistence tick + stop flush) and hand the
+  // (original → edited) pair to the learning pipeline.
+  const handleLiveSegmentEdit = useCallback(
+    (segmentId: string, text: string) => {
+      const original = displaySegments.find((segment) => segment.id === segmentId);
+      if (!original) return;
+      const originalText = original.originalText ?? original.text;
+      updateSegmentText(segmentId, text);
+      if (!originalText || originalText === text) return;
+      window.electronAPI?.learnMeetingCorrection?.({
+        originalText,
+        editedText: text,
+        source: "meeting-live-edit",
+      });
+    },
+    [displaySegments]
+  );
+
+  // Quiet learning receipt: an in-note toast with undo instead of the
+  // dictation overlay popping up mid-meeting.
+  const [quietLearnedPairs, setQuietLearnedPairs] = useState<
+    Array<{ from: string; to: string }> | null
+  >(null);
+  useEffect(() => {
+    const cleanup = window.electronAPI?.onCorrectionsLearnedQuiet?.((data) => {
+      if (!data?.pairs?.length) return;
+      setQuietLearnedPairs(data.pairs);
+    });
+    return () => cleanup?.();
+  }, []);
+  useEffect(() => {
+    if (!quietLearnedPairs) return;
+    const timer = window.setTimeout(() => setQuietLearnedPairs(null), 8000);
+    return () => window.clearTimeout(timer);
+  }, [quietLearnedPairs]);
+  const handleUndoQuietLearning = useCallback(() => {
+    const pairs = quietLearnedPairs;
+    setQuietLearnedPairs(null);
+    if (!pairs?.length) return;
+    window.electronAPI?.undoMeetingCorrection?.({ pairs });
+  }, [quietLearnedPairs]);
+
   const reportTranscriptReplacementCorrection = useCallback(
     (replacementCount: number) => {
       if (replacementCount <= 0) return;
@@ -2117,6 +2220,38 @@ export default function NoteEditor({
       onDragOver={handleNoteDragOver}
       onDrop={handleNoteDrop}
     >
+      {quietLearnedPairs && quietLearnedPairs.length > 0 && (
+        <div
+          data-corrections-learned-toast="true"
+          className="absolute bottom-6 left-1/2 z-40 -translate-x-1/2 flex items-center gap-3 rounded-lg border border-border bg-background/95 px-3.5 py-2 shadow-lg backdrop-blur"
+        >
+          <span className="text-xs text-foreground/85">
+            {quietLearnedPairs.length === 1
+              ? t("notes.transcript.liveEdit.learned", {
+                  from: quietLearnedPairs[0].from,
+                  to: quietLearnedPairs[0].to,
+                })
+              : t("notes.transcript.liveEdit.learnedMultiple", {
+                  count: quietLearnedPairs.length,
+                })}
+          </span>
+          <button
+            type="button"
+            onClick={handleUndoQuietLearning}
+            className="rounded-md bg-foreground/5 px-2 py-1 text-[11px] font-medium text-foreground/70 transition-colors hover:bg-foreground/10 hover:text-foreground"
+          >
+            {t("notes.transcript.liveEdit.undo")}
+          </button>
+          <button
+            type="button"
+            onClick={() => setQuietLearnedPairs(null)}
+            className="text-foreground/40 transition-colors hover:text-foreground/70"
+            aria-label={t("notes.transcript.liveEdit.dismiss")}
+          >
+            <X size={12} />
+          </button>
+        </div>
+      )}
       <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
         <div className="ow-page-header mx-5 mb-0 min-w-0 pt-4 pb-3">
           <div
@@ -2739,6 +2874,7 @@ export default function NoteEditor({
                 segments={visibleTranscriptSegments}
                 isEditing={isTranscriptEditing}
                 onSegmentsChange={setEditableTranscriptSegments}
+                onLiveSegmentEdit={isRecording ? handleLiveSegmentEdit : undefined}
                 searchTerm={findText}
                 ignoreCase={ignoreCase}
                 activeSearchIndex={activeFindIndex}

@@ -33,6 +33,10 @@ export interface TranscriptSegment {
   text: string;
   source: "mic" | "system";
   timestamp?: number;
+  // Set on first user edit; originalText keeps the ASR wording so diarization
+  // merging can still correlate the edited segment with raw engine output.
+  editedByUser?: boolean;
+  originalText?: string;
   speaker?: string;
   speakerName?: string;
   speakerIsPlaceholder?: boolean;
@@ -340,6 +344,37 @@ registerProcessor("meeting-pcm-processor", MeetingPCMProcessor);
 
 export const primeMeetingWorklet = () => {
   getMeetingWorkletBlobUrl();
+};
+
+// Retract matching is deliberately text-agnostic: user edits change the text,
+// so a retract that arrives after an edit must still remove the right segment.
+// Match on source + timestamp (± tolerance); fall back to text only when no
+// timestamps are available. Among timestamp candidates, prefer an exact-text
+// match (the unedited twin) over the edited version.
+const RETRACT_TIMESTAMP_TOLERANCE_MS = 2000;
+
+const removeRetractedSegment = (
+  segments: TranscriptSegment[],
+  data: { text: string; source: "mic" | "system"; timestamp?: number }
+): TranscriptSegment[] => {
+  const hasTimestamp = typeof data.timestamp === "number";
+  const candidates: Array<{ segment: TranscriptSegment; index: number }> = [];
+  segments.forEach((segment, index) => {
+    if (segment.source !== data.source) return;
+    const timestampMatches =
+      hasTimestamp &&
+      typeof segment.timestamp === "number" &&
+      Math.abs(segment.timestamp - (data.timestamp as number)) <= RETRACT_TIMESTAMP_TOLERANCE_MS;
+    if (hasTimestamp ? timestampMatches : segment.text === data.text) {
+      candidates.push({ segment, index });
+    }
+  });
+  if (candidates.length === 0) return segments;
+
+  const target =
+    candidates.find(({ segment }) => segment.text === data.text) ??
+    candidates[candidates.length - 1];
+  return segments.filter((_, index) => index !== target.index);
 };
 
 const getMeetingMicConstraints = async (): Promise<MediaStreamConstraints> => {
@@ -898,16 +933,9 @@ export async function startRecording(args: StartRecordingArgs): Promise<void> {
         timestamp?: number;
       }) => {
         if (data.type === "retract") {
-          const next = useMeetingRecordingStore
-            .getState()
-            .segments.filter(
-              (seg) =>
-                !(
-                  seg.source === data.source &&
-                  seg.timestamp === data.timestamp &&
-                  seg.text === data.text
-                )
-            );
+          const current = useMeetingRecordingStore.getState().segments;
+          const next = removeRetractedSegment(current, data);
+          if (next === current) return;
           segmentsRefValue = next;
           useMeetingRecordingStore.setState({
             segments: next,
@@ -1247,8 +1275,32 @@ export async function stopRecording(): Promise<StopRecordingResult> {
   return { diarizationSessionId };
 }
 
-export function lockSpeaker(speakerId: string, displayName: string): void {
-  if (!speakerId || !displayName) return;
+// Live transcript editing entry point. Must write the store (never just
+// component state): the 30s persistence timer and the stop-time flush both
+// serialize store segments, so a component-local edit would be overwritten.
+export function updateSegmentText(segmentId: string, text: string): TranscriptSegment[] {
+  const prev = useMeetingRecordingStore.getState().segments;
+  let changed = false;
+  const next = prev.map((segment) => {
+    if (segment.id !== segmentId) return segment;
+    changed = true;
+    return {
+      ...segment,
+      text,
+      editedByUser: true,
+      originalText: segment.originalText ?? segment.text,
+    };
+  });
+  if (!changed) return prev;
+  segmentsRefValue = next;
+  useMeetingRecordingStore.setState({
+    segments: next,
+    transcript: buildTranscriptText(next),
+  });
+  return next;
+}
+
+export function lockSpeaker(speakerId: string, displayName: string): void {  if (!speakerId || !displayName) return;
   speakerLocks.set(speakerId, displayName);
   const next = useMeetingRecordingStore.getState().segments.map((s) =>
     s.speaker === speakerId
