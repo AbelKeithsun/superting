@@ -1,5 +1,27 @@
 export type LocalTranscriptionProvider = "whisper" | "nvidia" | "funasr";
 
+export type PersonRecord = {
+  id: number;
+  display_name: string;
+  email: string | null;
+  phone: string | null;
+  organization: string | null;
+  notes: string | null;
+  voiceprint_count?: number;
+  created_at?: string;
+  updated_at?: string;
+};
+
+export type VoiceprintRecord = {
+  id: number;
+  person_id: number;
+  sample_count?: number;
+  source_note_id?: number | null;
+  source_profile_id?: number | null;
+  created_at?: string;
+  updated_at?: string;
+};
+
 export type InferenceMode = "providers" | "local" | "self-hosted" | "enterprise";
 
 export type SelfHostedType = "openai-compatible" | "lan";
@@ -1763,6 +1785,58 @@ declare global {
         noteId: number,
         embeddings: Record<string, number[]>
       ) => Promise<{ success: boolean }>;
+
+      // People (cross-meeting contact identities) + voiceprints
+      peopleList?: (query?: string) => Promise<{
+        success: boolean;
+        people: PersonRecord[];
+        error?: string;
+      }>;
+      peopleGet?: (
+        id: number
+      ) => Promise<{
+        success: boolean;
+        person?: PersonRecord;
+        voiceprints?: VoiceprintRecord[];
+        error?: string;
+      }>;
+      peopleCreate?: (fields: {
+        displayName: string;
+        email?: string | null;
+        phone?: string | null;
+        organization?: string | null;
+        notes?: string | null;
+      }) => Promise<{ success: boolean; person?: PersonRecord; error?: string }>;
+      peopleUpdate?: (
+        id: number,
+        fields: Partial<{
+          displayName: string;
+          email: string | null;
+          phone: string | null;
+          organization: string | null;
+          notes: string | null;
+        }>
+      ) => Promise<{ success: boolean; person?: PersonRecord; error?: string }>;
+      peopleDelete?: (id: number) => Promise<{ success: boolean; error?: string }>;
+      peopleMerge?: (
+        keepId: number,
+        removeId: number
+      ) => Promise<{ success: boolean; person?: PersonRecord; error?: string }>;
+      voiceprintEnroll?: (
+        personId: number,
+        options?: { noteId?: number | null; speakerId?: string | null }
+      ) => Promise<{
+        success: boolean;
+        voiceprint?: VoiceprintRecord;
+        error?: string;
+      }>;
+      voiceprintList?: (
+        personId?: number | null
+      ) => Promise<{ success: boolean; voiceprints: VoiceprintRecord[] }>;
+      voiceprintDelete?: (id: number) => Promise<{ success: boolean; error?: string }>;
+      voiceprintDeleteAll?: (
+        personId?: number | null
+      ) => Promise<{ success: boolean; deleted?: number; error?: string }>;
 
       // Dictation realtime streaming
       dictationRealtimeWarmup?: (options: {

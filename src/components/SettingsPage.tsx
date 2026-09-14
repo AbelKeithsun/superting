@@ -97,6 +97,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
 import { formatBytes } from "../utils/formatBytes";
 import { useSettingsStore } from "../stores/settingsStore";
 import { canManageSystemAudioInApp } from "../utils/systemAudioAccess";
+import PeopleManagerPanel from "./notes/PeopleManagerPanel";
 
 
 export type SettingsSectionType =
@@ -2525,6 +2526,22 @@ EOF`,
                   >
                     <Toggle checked={dataRetentionEnabled} onChange={setDataRetentionEnabled} />
                   </SettingsRow>
+                </SettingsPanelRow>
+              </SettingsPanel>
+            </div>
+
+            {/* People (cross-meeting contacts) */}
+            <div className="border-t border-border/40 pt-6">
+              <SectionHeader
+                title={t("contacts.title", "People")}
+                description={t(
+                  "contacts.titleDescription",
+                  "Cross-meeting contact profiles. Add people by name in any note; email, phone, and organization can be filled in later."
+                )}
+              />
+              <SettingsPanel>
+                <SettingsPanelRow>
+                  <PeopleManagerPanel />
                 </SettingsPanelRow>
               </SettingsPanel>
             </div>

@@ -2440,5 +2440,31 @@
     "processDescription": "偵測到會議時識別您正在使用的應用程式",
     "audioDetection": "音訊偵測",
     "audioDescription": "偵測到持續麥克風活動時提示"
+  },
+  "contacts": {
+    "title": "聯絡人",
+    "titleDescription": "跨會議的聯絡人檔案。在任意筆記中用姓名即可新增與會人，信箱、電話、單位可之後補充。",
+    "searchPlaceholder": "搜尋聯絡人...",
+    "loading": "載入中...",
+    "empty": "尚無聯絡人。在會議筆記中輸入姓名即可新增與會人。",
+    "fieldName": "姓名",
+    "fieldEmail": "信箱",
+    "fieldPhone": "電話",
+    "fieldOrganization": "單位",
+    "fieldNotes": "備註",
+    "save": "儲存",
+    "cancel": "取消",
+    "edit": "編輯",
+    "mergeHint": "將此聯絡人合併到另一人",
+    "mergeIntoPrompt": "合併到哪位聯絡人？",
+    "deleteVoiceprints": "刪除聲紋",
+    "deletePerson": "刪除聯絡人",
+    "voiceprints_one": "{{count}} 條聲紋",
+    "voiceprints_other": "{{count}} 條聲紋",
+    "voiceprintPrivacy": "聲紋是僅儲存在本機的生物特徵範本，絕不匯出或同步。",
+    "ungrouped": "未分組",
+    "addPlaceholder": "輸入姓名或信箱新增...",
+    "pressEnterToadd": "按 Enter 新增「{{name}}」",
+    "emptyHint": "輸入姓名或信箱以新增與會人"
   }
 }
