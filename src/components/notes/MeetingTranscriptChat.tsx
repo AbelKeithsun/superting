@@ -143,7 +143,7 @@ interface SpeakerProfileLite {
 
 interface SpeakerPickerProps {
   speakerProfiles?: SpeakerProfileLite[];
-  participants?: Array<{ email: string; displayName: string | null }>;
+  participants?: Array<{ email?: string | null; displayName: string | null; personId?: number }>;
   onSelectName: (
     name: string,
     email?: string | null,
@@ -251,7 +251,7 @@ function SpeakerPicker({ speakerProfiles, participants, onSelectName, t }: Speak
     (p) =>
       !search ||
       (p.displayName || "").toLowerCase().includes(lower) ||
-      p.email.toLowerCase().includes(lower)
+      (!!p.email && p.email.toLowerCase().includes(lower))
   );
   const filteredSessionSpeakers = (speakerProfiles || []).filter(
     (p) => p.source === "session" && (!search || p.display_name.toLowerCase().includes(lower))
@@ -268,7 +268,7 @@ function SpeakerPicker({ speakerProfiles, participants, onSelectName, t }: Speak
     filteredParticipants.some(
       (p) =>
         (p.displayName || "").toLowerCase() === trimmedLower ||
-        p.email.toLowerCase() === trimmedLower
+        (!!p.email && p.email.toLowerCase() === trimmedLower)
     ) ||
     filteredSessionSpeakers.some((p) => p.display_name.toLowerCase() === trimmedLower) ||
     filteredProfiles.some(
@@ -339,12 +339,16 @@ function SpeakerPicker({ speakerProfiles, participants, onSelectName, t }: Speak
             </div>
             {filteredParticipants.slice(0, 5).map((p) => (
               <button
-                key={p.email}
-                onClick={() => onSelectName(p.displayName || p.email.split("@")[0], p.email)}
+                key={p.personId != null ? `person-${p.personId}` : `email-${p.email ?? ""}`}
+                onClick={() =>
+                  onSelectName(p.displayName || (p.email ? p.email.split("@")[0] : ""), p.email ?? null)
+                }
                 className="flex items-center gap-2 w-full px-2 py-1.5 rounded-md text-xs text-foreground/70 hover:bg-foreground/5 transition-colors cursor-pointer"
               >
-                <span className="truncate flex-1 text-left">{p.displayName || p.email}</span>
-                {p.displayName && (
+                <span className="truncate flex-1 text-left">
+                  {p.displayName || p.email}
+                </span>
+                {p.displayName && p.email && (
                   <span className="text-foreground/30 truncate text-[11px]">{p.email}</span>
                 )}
               </button>
@@ -423,7 +427,7 @@ function SpeakerLabel({
   segment: TranscriptSegment;
   mappedName?: string;
   speakerProfiles?: SpeakerProfileLite[];
-  participants?: Array<{ email: string; displayName: string | null }>;
+  participants?: Array<{ email?: string | null; displayName: string | null; personId?: number }>;
   colorIdx: number;
   isOriginallyYou: boolean;
   onMap?: (
@@ -559,7 +563,7 @@ interface MeetingTranscriptChatProps {
   systemPartial?: string;
   speakerMappings?: Record<string, string>;
   speakerProfiles?: SpeakerProfileLite[];
-  participants?: Array<{ email: string; displayName: string | null }>;
+  participants?: Array<{ email?: string | null; displayName: string | null; personId?: number }>;
   activeSegmentId?: string | null;
   activeSegmentScrollKey?: number;
   isRecording?: boolean;

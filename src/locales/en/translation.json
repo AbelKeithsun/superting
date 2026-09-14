@@ -2437,5 +2437,31 @@
     "processDescription": "Identify which app you're using when a meeting is detected",
     "audioDetection": "Audio Detection",
     "audioDescription": "Prompt when sustained microphone activity is detected"
+  },
+  "contacts": {
+    "title": "People",
+    "titleDescription": "Cross-meeting contact profiles. Add people by name in any note; email, phone, and organization can be filled in later.",
+    "searchPlaceholder": "Search people...",
+    "loading": "Loading...",
+    "empty": "No people yet. Add participants by name in a meeting note.",
+    "fieldName": "Name",
+    "fieldEmail": "Email",
+    "fieldPhone": "Phone",
+    "fieldOrganization": "Organization",
+    "fieldNotes": "Notes",
+    "save": "Save",
+    "cancel": "Cancel",
+    "edit": "Edit",
+    "mergeHint": "Merge this person into another",
+    "mergeIntoPrompt": "Merge into which person?",
+    "deleteVoiceprints": "Delete voiceprints",
+    "deletePerson": "Delete person",
+    "voiceprints_one": "{{count}} voiceprint",
+    "voiceprints_other": "{{count}} voiceprints",
+    "voiceprintPrivacy": "Voiceprints are biometric templates stored only on this device. They are never exported or synced.",
+    "ungrouped": "Ungrouped",
+    "addPlaceholder": "Add by name or email...",
+    "pressEnterToadd": "Press Enter to add “{{name}}”",
+    "emptyHint": "Type a name or email to add participants"
   }
 }

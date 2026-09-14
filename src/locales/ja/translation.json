@@ -2440,5 +2440,31 @@
     "processDescription": "ミーティングが検出されたときに使用中のアプリを特定する",
     "audioDetection": "オーディオ検出",
     "audioDescription": "持続的なマイク使用が検出されたときに通知する"
+  },
+  "contacts": {
+    "title": "連絡先",
+    "titleDescription": "会議をまたぐ連絡先プロフィール。ノートで名前だけ参加者を追加でき、メール・電話・組織は後で補足できます。",
+    "searchPlaceholder": "連絡先を検索...",
+    "loading": "読み込み中...",
+    "empty": "連絡先はまだありません。会議ノートで名前を入力して参加者を追加してください。",
+    "fieldName": "名前",
+    "fieldEmail": "メール",
+    "fieldPhone": "電話",
+    "fieldOrganization": "組織",
+    "fieldNotes": "メモ",
+    "save": "保存",
+    "cancel": "キャンセル",
+    "edit": "編集",
+    "mergeHint": "この人を別の人に統合",
+    "mergeIntoPrompt": "どの人に統合しますか？",
+    "deleteVoiceprints": "声紋を削除",
+    "deletePerson": "連絡先を削除",
+    "voiceprints_one": "声紋 {{count}} 件",
+    "voiceprints_other": "声紋 {{count}} 件",
+    "voiceprintPrivacy": "声紋はこの端末にのみ保存される生体情報です。エクスポートや同期は行われません。",
+    "ungrouped": "未分類",
+    "addPlaceholder": "名前またはメールで追加...",
+    "pressEnterToadd": "Enter キーで「{{name}}」を追加",
+    "emptyHint": "名前またはメールを入力して参加者を追加"
   }
 }

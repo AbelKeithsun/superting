@@ -519,6 +519,45 @@ class DatabaseManager {
         )
       `);
 
+      // People is the cross-meeting identity table: a person is created with
+      // just a name; email/phone/organization/notes are optional and can be
+      // filled in later. Legacy contacts / speaker_profiles / speaker_names
+      // are merged into it on startup (their tables stay untouched).
+      this.db.exec(`
+        CREATE TABLE IF NOT EXISTS people (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          display_name TEXT NOT NULL,
+          email TEXT,
+          phone TEXT,
+          organization TEXT,
+          notes TEXT,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+
+      // 1:N voiceprint templates per person. Local-only biometric data; never
+      // included in exports or cloud sync.
+      this.db.exec(`
+        CREATE TABLE IF NOT EXISTS voiceprints (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          person_id INTEGER NOT NULL,
+          embedding BLOB NOT NULL,
+          sample_count INTEGER DEFAULT 1,
+          source_note_id INTEGER,
+          source_profile_id INTEGER,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (person_id) REFERENCES people(id) ON DELETE CASCADE
+        )
+      `);
+      this.db.exec(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_people_email ON people(email) WHERE email IS NOT NULL"
+      );
+      this.db.exec(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_voiceprints_source_profile ON voiceprints(source_profile_id) WHERE source_profile_id IS NOT NULL"
+      );
+
       this.db.exec(`
         CREATE TABLE IF NOT EXISTS speaker_profiles (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -678,6 +717,16 @@ class DatabaseManager {
       this.db.exec(
         "CREATE UNIQUE INDEX IF NOT EXISTS idx_transcriptions_client_id ON transcriptions(client_transcription_id)"
       );
+
+      // Merge legacy identity sources (contacts / speaker_profiles /
+      // speaker_names) into the people + voiceprints tables. Idempotent.
+      try {
+        this.migrateLegacyPeople();
+      } catch (migrationError) {
+        debugLogger.warn("Legacy people migration skipped", {
+          error: migrationError.message,
+        });
+      }
 
       return true;
     } catch (error) {
@@ -2610,6 +2659,324 @@ class DatabaseManager {
     } catch (error) {
       debugLogger.error("Error deleting speaker name", { error: error.message }, "database");
       throw error;
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // People + voiceprints (cross-meeting contact identities)
+  // ---------------------------------------------------------------------------
+
+  _findPersonByEmail(email) {
+    const normalized = this._normalizeEmail(email);
+    if (!normalized) return null;
+    return this.db.prepare("SELECT * FROM people WHERE email = ?").get(normalized);
+  }
+
+  _findPersonByName(displayName) {
+    const name = (displayName || "").trim();
+    if (!name) return null;
+    return this.db
+      .prepare("SELECT * FROM people WHERE lower(display_name) = lower(?)")
+      .get(name);
+  }
+
+  // Find-or-create a person. Email wins as the identity anchor when present;
+  // otherwise the display name is used. Fields on an existing person are only
+  // filled in, never overwritten.
+  findOrCreatePerson({ displayName, email, phone, organization, notes }) {
+    const name = (displayName || "").trim();
+    const normalizedEmail = this._normalizeEmail(email);
+    if (!name && !normalizedEmail) return null;
+
+    let person = normalizedEmail ? this._findPersonByEmail(normalizedEmail) : null;
+    if (!person && name) person = this._findPersonByName(name);
+    if (person) {
+      const patch = {};
+      if (normalizedEmail && !person.email) patch.email = normalizedEmail;
+      if (phone && !person.phone) patch.phone = String(phone).trim();
+      if (organization && !person.organization) patch.organization = String(organization).trim();
+      if (notes && !person.notes) patch.notes = String(notes).trim();
+      if (Object.keys(patch).length > 0) {
+        this._patchPerson(person.id, patch);
+      }
+      return this.getPerson(person.id);
+    }
+
+    const finalName = name || normalizedEmail;
+    const result = this.db
+      .prepare(
+        "INSERT INTO people (display_name, email, phone, organization, notes) VALUES (?, ?, ?, ?, ?)"
+      )
+      .run(
+        finalName,
+        normalizedEmail,
+        phone ? String(phone).trim() : null,
+        organization ? String(organization).trim() : null,
+        notes ? String(notes).trim() : null
+      );
+    return this.getPerson(result.lastInsertRowid);
+  }
+
+  _patchPerson(id, patch) {
+    const fields = [];
+    const values = [];
+    for (const key of ["display_name", "email", "phone", "organization", "notes"]) {
+      if (patch[key] !== undefined) {
+        fields.push(`${key} = ?`);
+        values.push(patch[key]);
+      }
+    }
+    if (fields.length === 0) return null;
+    this.db
+      .prepare(`UPDATE people SET ${fields.join(", ")}, updated_at = CURRENT_TIMESTAMP WHERE id = ?`)
+      .run(...values, id);
+    return this.getPerson(id);
+  }
+
+  listPeople(query = "", { limit = 200 } = {}) {
+    try {
+      if (!this.db) throw new Error("Database not initialized");
+      const pattern = `%${(query || "").trim()}%`;
+      return this.db
+        .prepare(
+          `SELECT p.*, COUNT(v.id) AS voiceprint_count
+           FROM people p
+           LEFT JOIN voiceprints v ON v.person_id = p.id
+           WHERE p.display_name LIKE ? OR p.email LIKE ? OR p.phone LIKE ? OR p.organization LIKE ?
+           GROUP BY p.id
+           ORDER BY p.updated_at DESC, p.id DESC
+           LIMIT ?`
+        )
+        .all(pattern, pattern, pattern, pattern, limit);
+    } catch (error) {
+      debugLogger.error("Error listing people", { error: error.message }, "database");
+      throw error;
+    }
+  }
+
+  getPerson(id) {
+    try {
+      if (!this.db) throw new Error("Database not initialized");
+      return this.db
+        .prepare(
+          `SELECT p.*, COUNT(v.id) AS voiceprint_count
+           FROM people p LEFT JOIN voiceprints v ON v.person_id = p.id
+           WHERE p.id = ? GROUP BY p.id`
+        )
+        .get(id);
+    } catch (error) {
+      debugLogger.error("Error getting person", { error: error.message }, "database");
+      throw error;
+    }
+  }
+
+  createPerson({ displayName, email, phone, organization, notes }) {
+    const name = (displayName || "").trim();
+    if (!name) throw new Error("Display name is required");
+    const normalizedEmail = this._normalizeEmail(email);
+    if (normalizedEmail) {
+      const existing = this._findPersonByEmail(normalizedEmail);
+      if (existing) return existing;
+    }
+    return this.findOrCreatePerson({ displayName: name, email: normalizedEmail, phone, organization, notes });
+  }
+
+  updatePerson(id, { displayName, email, phone, organization, notes }) {
+    try {
+      if (!this.db) throw new Error("Database not initialized");
+      const person = this.db.prepare("SELECT * FROM people WHERE id = ?").get(id);
+      if (!person) throw new Error(`Person ${id} not found`);
+      const patch = {};
+      if (displayName !== undefined && String(displayName).trim()) {
+        patch.display_name = String(displayName).trim();
+      }
+      if (email !== undefined) patch.email = this._normalizeEmail(email);
+      if (phone !== undefined) patch.phone = phone ? String(phone).trim() : null;
+      if (organization !== undefined) {
+        patch.organization = organization ? String(organization).trim() : null;
+      }
+      if (notes !== undefined) patch.notes = notes ? String(notes).trim() : null;
+      return this._patchPerson(id, patch) || person;
+    } catch (error) {
+      debugLogger.error("Error updating person", { error: error.message }, "database");
+      throw error;
+    }
+  }
+
+  deletePerson(id) {
+    try {
+      if (!this.db) throw new Error("Database not initialized");
+      this.db.prepare("DELETE FROM people WHERE id = ?").run(id);
+      return { success: true };
+    } catch (error) {
+      debugLogger.error("Error deleting person", { error: error.message }, "database");
+      throw error;
+    }
+  }
+
+  // Merge removeId into keepId: fill blank fields, move voiceprints, and
+  // re-point note participants that referenced the removed person.
+  mergePeople(keepId, removeId) {
+    try {
+      if (!this.db) throw new Error("Database not initialized");
+      if (keepId === removeId) throw new Error("Cannot merge a person into itself");
+      const keep = this.db.prepare("SELECT * FROM people WHERE id = ?").get(keepId);
+      const remove = this.db.prepare("SELECT * FROM people WHERE id = ?").get(removeId);
+      if (!keep || !remove) throw new Error("Both people must exist");
+
+      const tx = this.db.transaction(() => {
+        const patch = {};
+        for (const field of ["email", "phone", "organization", "notes"]) {
+          if (!keep[field] && remove[field]) patch[field] = remove[field];
+        }
+        if (Object.keys(patch).length > 0) this._patchPerson(keepId, patch);
+
+        this.db
+          .prepare("UPDATE voiceprints SET person_id = ?, updated_at = CURRENT_TIMESTAMP WHERE person_id = ?")
+          .run(keepId, removeId);
+        this.db.prepare("DELETE FROM people WHERE id = ?").run(removeId);
+      });
+      tx();
+
+      // Re-point note participants (JSON column) at the surviving person.
+      const notes = this.db.prepare("SELECT id, participants FROM notes WHERE participants LIKE ?").all(
+        `%${removeId}%`
+      );
+      for (const note of notes) {
+        try {
+          const parsed = JSON.parse(note.participants);
+          if (!Array.isArray(parsed)) continue;
+          let changed = false;
+          for (const p of parsed) {
+            if (p && p.personId === removeId) {
+              p.personId = keepId;
+              changed = true;
+            }
+          }
+          if (changed) {
+            this.db
+              .prepare("UPDATE notes SET participants = ? WHERE id = ?")
+              .run(JSON.stringify(parsed), note.id);
+          }
+        } catch (_) {}
+      }
+
+      return { success: true, person: this.getPerson(keepId) };
+    } catch (error) {
+      debugLogger.error("Error merging people", { error: error.message }, "database");
+      throw error;
+    }
+  }
+
+  addVoiceprint(personId, embeddingBuffer, { sampleCount = 1, sourceNoteId = null, sourceProfileId = null } = {}) {
+    try {
+      if (!this.db) throw new Error("Database not initialized");
+      if (!embeddingBuffer?.length) throw new Error("Embedding buffer is required");
+      const result = this.db
+        .prepare(
+          `INSERT INTO voiceprints (person_id, embedding, sample_count, source_note_id, source_profile_id)
+           VALUES (?, ?, ?, ?, ?)
+           ON CONFLICT(source_profile_id) DO UPDATE SET
+             embedding = excluded.embedding,
+             sample_count = excluded.sample_count,
+             person_id = excluded.person_id,
+             updated_at = CURRENT_TIMESTAMP`
+        )
+        .run(personId, embeddingBuffer, sampleCount, sourceNoteId, sourceProfileId);
+      return this.db.prepare("SELECT * FROM voiceprints WHERE id = ?").get(result.lastInsertRowid);
+    } catch (error) {
+      debugLogger.error("Error adding voiceprint", { error: error.message }, "database");
+      throw error;
+    }
+  }
+
+  listVoiceprints(personId = null, { includeEmbedding = false } = {}) {
+    try {
+      if (!this.db) throw new Error("Database not initialized");
+      const columns = includeEmbedding
+        ? "v.*"
+        : "v.id, v.person_id, v.sample_count, v.source_note_id, v.source_profile_id, v.created_at, v.updated_at";
+      const where = personId ? "WHERE v.person_id = ?" : "";
+      const params = personId ? [personId] : [];
+      return this.db
+        .prepare(`SELECT ${columns} FROM voiceprints v ${where} ORDER BY v.created_at DESC`)
+        .all(...params);
+    } catch (error) {
+      debugLogger.error("Error listing voiceprints", { error: error.message }, "database");
+      throw error;
+    }
+  }
+
+  deleteVoiceprint(id) {
+    try {
+      if (!this.db) throw new Error("Database not initialized");
+      this.db.prepare("DELETE FROM voiceprints WHERE id = ?").run(id);
+      return { success: true };
+    } catch (error) {
+      debugLogger.error("Error deleting voiceprint", { error: error.message }, "database");
+      throw error;
+    }
+  }
+
+  deleteAllVoiceprints() {
+    try {
+      if (!this.db) throw new Error("Database not initialized");
+      const result = this.db.prepare("DELETE FROM voiceprints").run();
+      return { success: true, deleted: result.changes };
+    } catch (error) {
+      debugLogger.error("Error deleting all voiceprints", { error: error.message }, "database");
+      throw error;
+    }
+  }
+
+  // Idempotent startup merge of legacy identity sources into people /
+  // voiceprints. Legacy tables are never modified or dropped.
+  migrateLegacyPeople() {
+    try {
+      if (!this.db) throw new Error("Database not initialized");
+      let created = 0;
+      let linked = 0;
+
+      const contacts = this.db.prepare("SELECT * FROM contacts").all();
+      for (const contact of contacts) {
+        if (!contact.email) continue;
+        const before = this._findPersonByEmail(contact.email);
+        const person = this.findOrCreatePerson({
+          displayName: contact.display_name || contact.email.split("@")[0],
+          email: contact.email,
+        });
+        if (!before && person) created += 1;
+      }
+
+      const profiles = this.db.prepare("SELECT * FROM speaker_profiles").all();
+      for (const profile of profiles) {
+        const person = this.findOrCreatePerson({
+          displayName: profile.display_name,
+          email: profile.email,
+        });
+        if (!person) continue;
+        // Keep the voiceprint in sync with the legacy profile's embedding
+        // (unique on source_profile_id, so re-runs update instead of piling
+        // up templates).
+        this.addVoiceprint(person.id, profile.embedding, {
+          sampleCount: profile.sample_count || 1,
+          sourceProfileId: profile.id,
+        });
+        linked += 1;
+      }
+
+      const names = this.db.prepare("SELECT * FROM speaker_names").all();
+      for (const entry of names) {
+        this.findOrCreatePerson({
+          displayName: entry.display_name,
+          email: entry.email,
+        });
+      }
+
+      return { success: true, contacts: contacts.length, profiles: profiles.length, voiceprints: linked };
+    } catch (error) {
+      debugLogger.error("Error migrating legacy people", { error: error.message }, "database");
+      return { success: false, error: error.message };
     }
   }
 

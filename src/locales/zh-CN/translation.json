@@ -2443,5 +2443,31 @@
     "processDescription": "检测到会议时识别您正在使用的应用",
     "audioDetection": "音频检测",
     "audioDescription": "检测到持续麦克风活动时提示"
+  },
+  "contacts": {
+    "title": "联系人",
+    "titleDescription": "跨会议的联系人档案。在任意笔记中用姓名即可添加参会人，邮箱、电话、单位可随后补充。",
+    "searchPlaceholder": "搜索联系人...",
+    "loading": "加载中...",
+    "empty": "暂无联系人。在会议笔记中输入姓名即可添加参会人。",
+    "fieldName": "姓名",
+    "fieldEmail": "邮箱",
+    "fieldPhone": "电话",
+    "fieldOrganization": "单位",
+    "fieldNotes": "备注",
+    "save": "保存",
+    "cancel": "取消",
+    "edit": "编辑",
+    "mergeHint": "将此联系人合并到另一人",
+    "mergeIntoPrompt": "合并到哪位联系人？",
+    "deleteVoiceprints": "删除声纹",
+    "deletePerson": "删除联系人",
+    "voiceprints_one": "{{count}} 条声纹",
+    "voiceprints_other": "{{count}} 条声纹",
+    "voiceprintPrivacy": "声纹是仅存储在本机的生物特征模板，绝不导出或同步。",
+    "ungrouped": "未分组",
+    "addPlaceholder": "输入姓名或邮箱添加...",
+    "pressEnterToadd": "按回车添加“{{name}}”",
+    "emptyHint": "输入姓名或邮箱以添加参会人"
   }
 }

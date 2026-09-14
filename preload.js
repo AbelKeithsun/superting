@@ -350,6 +350,19 @@ contextBridge.exposeInMainWorld("electronAPI", {
   saveNoteSpeakerEmbeddings: (noteId, embeddings) =>
     ipcRenderer.invoke("save-note-speaker-embeddings", noteId, embeddings),
 
+  // People (cross-meeting contact identities) + voiceprints
+  peopleList: (query = "") => ipcRenderer.invoke("people-list", query),
+  peopleGet: (id) => ipcRenderer.invoke("people-get", id),
+  peopleCreate: (fields) => ipcRenderer.invoke("people-create", fields),
+  peopleUpdate: (id, fields) => ipcRenderer.invoke("people-update", id, fields),
+  peopleDelete: (id) => ipcRenderer.invoke("people-delete", id),
+  peopleMerge: (keepId, removeId) => ipcRenderer.invoke("people-merge", keepId, removeId),
+  voiceprintEnroll: (personId, options) =>
+    ipcRenderer.invoke("voiceprint-enroll", personId, options),
+  voiceprintList: (personId = null) => ipcRenderer.invoke("voiceprint-list", personId),
+  voiceprintDelete: (id) => ipcRenderer.invoke("voiceprint-delete", id),
+  voiceprintDeleteAll: (personId = null) => ipcRenderer.invoke("voiceprint-delete-all", personId),
+
   // Window control functions
   windowMinimize: () => ipcRenderer.invoke("window-minimize"),
   windowMaximize: () => ipcRenderer.invoke("window-maximize"),

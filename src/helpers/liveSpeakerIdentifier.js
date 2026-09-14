@@ -4,6 +4,10 @@ const speakerEmbeddings = require("./speakerEmbeddings");
 const { MAX_EMBEDDING_SECONDS } = speakerEmbeddings;
 const { downsample24kTo16k } = require("../utils/audioUtils");
 const { MAX_SPEAKER_COUNT } = require("../constants/speakerDetection.json");
+const {
+  liveMatchThreshold: MATCH_THRESHOLD,
+  liveMatchMargin: MATCH_MARGIN,
+} = require("../constants/speakerThresholds.json");
 
 function clampMaxSpeakers(value) {
   const n = Number(value);
@@ -26,8 +30,6 @@ const SPEECH_CHUNKS_MAX_SAMPLES = MAX_EMBEDDING_SAMPLES * 4;
 const SPEECH_THRESHOLD = 0.15;
 const SILENCE_THRESHOLD = 0.08;
 const SILENCE_WINDOWS_TO_END = 24;
-const MATCH_THRESHOLD = 0.65;
-const MATCH_MARGIN = 0.03;
 const LIVE_WINDOW_PADDING_SECONDS = 0.75;
 const DEFAULT_VAD_STATE_SHAPE = [2, 1, 64];
 

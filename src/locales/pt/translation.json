@@ -2440,5 +2440,31 @@
     "processDescription": "Identificar qual aplicativo você está usando quando uma reunião é detectada",
     "audioDetection": "Detecção de Áudio",
     "audioDescription": "Notificar quando atividade prolongada do microfone for detectada"
+  },
+  "contacts": {
+    "title": "Pessoas",
+    "titleDescription": "Perfis de contato entre reuniões. Adicione pessoas pelo nome em qualquer nota; e-mail, telefone e organização podem ser preenchidos depois.",
+    "searchPlaceholder": "Pesquisar pessoas...",
+    "loading": "Carregando...",
+    "empty": "Nenhuma pessoa ainda. Adicione participantes pelo nome em uma nota de reunião.",
+    "fieldName": "Nome",
+    "fieldEmail": "E-mail",
+    "fieldPhone": "Telefone",
+    "fieldOrganization": "Organização",
+    "fieldNotes": "Notas",
+    "save": "Salvar",
+    "cancel": "Cancelar",
+    "edit": "Editar",
+    "mergeHint": "Mesclar esta pessoa com outra",
+    "mergeIntoPrompt": "Mesclar com qual pessoa?",
+    "deleteVoiceprints": "Excluir impressões de voz",
+    "deletePerson": "Excluir pessoa",
+    "voiceprints_one": "{{count}} impressão de voz",
+    "voiceprints_other": "{{count}} impressões de voz",
+    "voiceprintPrivacy": "As impressões de voz são modelos biométricos armazenados apenas neste dispositivo. Nunca são exportados ou sincronizados.",
+    "ungrouped": "Sem grupo",
+    "addPlaceholder": "Adicionar por nome ou e-mail...",
+    "pressEnterToadd": "Pressione Enter para adicionar “{{name}}”",
+    "emptyHint": "Digite um nome ou e-mail para adicionar participantes"
   }
 }

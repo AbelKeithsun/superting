@@ -53,6 +53,10 @@ const {
   MAX_SPEAKER_COUNT,
 } = require("../constants/speakerDetection.json");
 const {
+  batchConfirmedThreshold: BATCH_SPEAKER_CONFIRMED_THRESHOLD,
+  batchSuggestedThreshold: BATCH_SPEAKER_SUGGESTED_THRESHOLD,
+} = require("../constants/speakerThresholds.json");
+const {
   DEFAULT_WHISPER_VAD_CONFIG,
   sanitizeWhisperVadConfig,
   resolveContextSileroEnabled,
@@ -6301,14 +6305,43 @@ class IPCHandlers {
     const getLiveSpeakerProfiles = () => {
       const attendees = this._getNoteNonSelfParticipants(meetingNoteId);
       const attendeeEmails = new Set();
+      const attendeePersonIds = new Set();
       for (const p of attendees) {
         const email = (p.email || "").toLowerCase().trim();
         if (email) attendeeEmails.add(email);
+        if (p.personId != null) attendeePersonIds.add(Number(p.personId));
       }
-      if (attendeeEmails.size === 0) return [];
-      return this.databaseManager
+
+      // Legacy speaker profiles still matched by email...
+      const profiles = this.databaseManager
         .getSpeakerProfiles(true)
         .filter((p) => p.email && attendeeEmails.has(p.email.toLowerCase()));
+
+      // ...plus every voiceprint template of attendees linked by personId, so
+      // name-only participants are recognized across meetings.
+      if (attendeePersonIds.size > 0 && this.databaseManager.listVoiceprints) {
+        const peopleById = new Map();
+        for (const personId of attendeePersonIds) {
+          const person = this.databaseManager.getPerson(personId);
+          if (person) peopleById.set(personId, person);
+        }
+        for (const voiceprint of this.databaseManager.listVoiceprints(null, {
+          includeEmbedding: true,
+        })) {
+          const person = peopleById.get(voiceprint.person_id);
+          if (!person || !voiceprint.embedding) continue;
+          profiles.push({
+            id: voiceprint.source_profile_id ?? `vp-${voiceprint.id}`,
+            display_name: person.display_name,
+            email: person.email || null,
+            embedding: voiceprint.embedding,
+            sample_count: voiceprint.sample_count || 1,
+            person_id: person.id,
+          });
+        }
+      }
+
+      return profiles;
     };
     const shouldSuppressMicTranscriptSegment = (startedAt, endedAt = Date.now()) =>
       meetingEchoLeakDetector.shouldSuppressMicSegment(startedAt, endedAt);
@@ -8574,6 +8607,25 @@ class IPCHandlers {
           );
           resolvedProfileId = profile.id;
           this._retroactiveMapping(profile);
+
+          // Mirror the sample into the people/voiceprints layer so the
+          // binding survives across meetings even without an email.
+          try {
+            const person = this.databaseManager.findOrCreatePerson({
+              displayName,
+              email: email || null,
+            });
+            if (person) {
+              this.databaseManager.addVoiceprint(person.id, speakerEmbeddingBuffer, {
+                sourceProfileId: profile.id,
+                sourceNoteId: noteId,
+              });
+            }
+          } catch (personError) {
+            debugLogger.warn("Person voiceprint sync skipped", {
+              error: personError.message,
+            });
+          }
         }
 
         this.databaseManager.setSpeakerMapping(noteId, speakerId, resolvedProfileId, displayName);
@@ -8608,6 +8660,142 @@ class IPCHandlers {
     ipcMain.handle("delete-speaker-name", async (_event, id) => {
       this.databaseManager.deleteSpeakerName(id);
       return { success: true };
+    });
+
+    // People (cross-meeting contact identities) + voiceprints
+    ipcMain.handle("people-list", async (_event, query = "") => {
+      try {
+        return { success: true, people: this.databaseManager.listPeople(query) };
+      } catch (error) {
+        debugLogger.error("people-list failed", { error: error.message }, "speaker");
+        return { success: false, error: error.message, people: [] };
+      }
+    });
+
+    ipcMain.handle("people-get", async (_event, id) => {
+      try {
+        const person = this.databaseManager.getPerson(id);
+        if (!person) return { success: false, error: "Person not found" };
+        return {
+          success: true,
+          person,
+          voiceprints: this.databaseManager.listVoiceprints(id),
+        };
+      } catch (error) {
+        return { success: false, error: error.message };
+      }
+    });
+
+    ipcMain.handle("people-create", async (_event, fields = {}) => {
+      try {
+        const person = this.databaseManager.createPerson(fields);
+        return { success: true, person };
+      } catch (error) {
+        debugLogger.error("people-create failed", { error: error.message }, "speaker");
+        return { success: false, error: error.message };
+      }
+    });
+
+    ipcMain.handle("people-update", async (_event, id, fields = {}) => {
+      try {
+        const person = this.databaseManager.updatePerson(id, fields);
+        // Changing the email re-runs the existing email→profile retroactive
+        // backfill so historical notes pick up the new linkage.
+        if (person?.email) {
+          const profile = this.databaseManager.getSpeakerProfiles(true).find(
+            (p) => (p.email || "").toLowerCase() === person.email.toLowerCase()
+          );
+          if (profile) this._retroactiveMapping(profile);
+        }
+        return { success: true, person };
+      } catch (error) {
+        debugLogger.error("people-update failed", { error: error.message }, "speaker");
+        return { success: false, error: error.message };
+      }
+    });
+
+    ipcMain.handle("people-delete", async (_event, id) => {
+      try {
+        this.databaseManager.deletePerson(id);
+        return { success: true };
+      } catch (error) {
+        debugLogger.error("people-delete failed", { error: error.message }, "speaker");
+        return { success: false, error: error.message };
+      }
+    });
+
+    ipcMain.handle("people-merge", async (_event, keepId, removeId) => {
+      try {
+        return this.databaseManager.mergePeople(keepId, removeId);
+      } catch (error) {
+        debugLogger.error("people-merge failed", { error: error.message }, "speaker");
+        return { success: false, error: error.message };
+      }
+    });
+
+    // Enroll a voiceprint for a person. The embedding comes from this note's
+    // saved speaker embeddings (one-click register) or the live identifier.
+    ipcMain.handle(
+      "voiceprint-enroll",
+      async (_event, personId, { noteId = null, speakerId = null } = {}) => {
+        try {
+          const person = this.databaseManager.getPerson(personId);
+          if (!person) return { success: false, error: "Person not found" };
+
+          let embeddingBuffer = null;
+          if (noteId && speakerId) {
+            const embeddings = this.databaseManager.getNoteSpeakerEmbeddings(noteId);
+            const match = embeddings.find((e) => e.speaker_id === speakerId);
+            if (match?.embedding) embeddingBuffer = match.embedding;
+          }
+          if (!embeddingBuffer && speakerId) {
+            const live = liveSpeakerIdentifier.getSpeakerEmbedding(speakerId);
+            if (live) embeddingBuffer = Buffer.from(live.buffer);
+          }
+          if (!embeddingBuffer) {
+            return { success: false, error: "No embedding available for this speaker" };
+          }
+
+          const voiceprint = this.databaseManager.addVoiceprint(personId, embeddingBuffer, {
+            sourceNoteId: noteId,
+          });
+          debugLogger.info("Voiceprint enrolled", { personId, noteId, speakerId }, "speaker");
+          return { success: true, voiceprint, person: this.databaseManager.getPerson(personId) };
+        } catch (error) {
+          debugLogger.error("voiceprint-enroll failed", { error: error.message }, "speaker");
+          return { success: false, error: error.message };
+        }
+      }
+    );
+
+    ipcMain.handle("voiceprint-list", async (_event, personId = null) => {
+      try {
+        return { success: true, voiceprints: this.databaseManager.listVoiceprints(personId) };
+      } catch (error) {
+        return { success: false, error: error.message, voiceprints: [] };
+      }
+    });
+
+    ipcMain.handle("voiceprint-delete", async (_event, id) => {
+      try {
+        this.databaseManager.deleteVoiceprint(id);
+        return { success: true };
+      } catch (error) {
+        return { success: false, error: error.message };
+      }
+    });
+
+    ipcMain.handle("voiceprint-delete-all", async (_event, personId = null) => {
+      try {
+        if (personId != null) {
+          const prints = this.databaseManager.listVoiceprints(personId);
+          for (const print of prints) this.databaseManager.deleteVoiceprint(print.id);
+          return { success: true, deleted: prints.length };
+        }
+        return this.databaseManager.deleteAllVoiceprints();
+      } catch (error) {
+        return { success: false, error: error.message };
+      }
     });
 
     ipcMain.handle("attach-speaker-email", async (_event, profileId, email) => {
@@ -8670,7 +8858,7 @@ class IPCHandlers {
             );
             const similarity = speakerEmbeddings.cosineSimilarity(profileEmb, speakerEmb);
 
-            if (similarity > 0.6) {
+            if (similarity > BATCH_SPEAKER_CONFIRMED_THRESHOLD) {
               this.databaseManager.setSpeakerMapping(
                 noteId,
                 emb.speaker_id,
@@ -8847,7 +9035,7 @@ class IPCHandlers {
         }
       }
 
-      if (!bestEntry || bestSimilarity <= 0.6) {
+      if (!bestEntry || bestSimilarity <= BATCH_SPEAKER_CONFIRMED_THRESHOLD) {
         continue;
       }
 
@@ -9068,7 +9256,7 @@ class IPCHandlers {
                   }
                 }
 
-                if (bestProfile && bestSim > 0.6) {
+                if (bestProfile && bestSim > BATCH_SPEAKER_CONFIRMED_THRESHOLD) {
                   for (const seg of enrichedSegments) {
                     if (seg.speaker === mappedId) {
                       applyConfirmedSpeaker(seg, {
@@ -9079,7 +9267,7 @@ class IPCHandlers {
                       });
                     }
                   }
-                } else if (bestProfile && bestSim > 0.5) {
+                } else if (bestProfile && bestSim > BATCH_SPEAKER_SUGGESTED_THRESHOLD) {
                   for (const seg of enrichedSegments) {
                     if (seg.speaker === mappedId) {
                       if (isSpeakerLocked(seg)) {

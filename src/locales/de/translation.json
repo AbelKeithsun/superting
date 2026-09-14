@@ -2441,5 +2441,31 @@
     "processDescription": "Erkennen, welche App du verwendest, wenn ein Meeting erkannt wird",
     "audioDetection": "Audio-Erkennung",
     "audioDescription": "Benachrichtigung bei anhaltender Mikrofonaktivität"
+  },
+  "contacts": {
+    "title": "Personen",
+    "titleDescription": "Besprechungsübergreifende Kontaktprofile. Personen können in jeder Notiz nur mit Namen hinzugefügt werden; E-Mail, Telefon und Organisation lassen sich später ergänzen.",
+    "searchPlaceholder": "Personen suchen...",
+    "loading": "Wird geladen...",
+    "empty": "Noch keine Personen. Füge Teilnehmer über den Namen in einer Besprechungsnotiz hinzu.",
+    "fieldName": "Name",
+    "fieldEmail": "E-Mail",
+    "fieldPhone": "Telefon",
+    "fieldOrganization": "Organisation",
+    "fieldNotes": "Notizen",
+    "save": "Speichern",
+    "cancel": "Abbrechen",
+    "edit": "Bearbeiten",
+    "mergeHint": "Diese Person mit einer anderen zusammenführen",
+    "mergeIntoPrompt": "Mit welcher Person zusammenführen?",
+    "deleteVoiceprints": "Stimmabdrücke löschen",
+    "deletePerson": "Person löschen",
+    "voiceprints_one": "{{count}} Stimmabdruck",
+    "voiceprints_other": "{{count}} Stimmabdrücke",
+    "voiceprintPrivacy": "Stimmabdrücke sind biometrische Vorlagen, die nur auf diesem Gerät gespeichert werden. Sie werden niemals exportiert oder synchronisiert.",
+    "ungrouped": "Ungruppiert",
+    "addPlaceholder": "Nach Name oder E-Mail hinzufügen...",
+    "pressEnterToadd": "Enter drücken, um „{{name}}“ hinzuzufügen",
+    "emptyHint": "Namen oder E-Mail eingeben, um Teilnehmer hinzuzufügen"
   }
 }

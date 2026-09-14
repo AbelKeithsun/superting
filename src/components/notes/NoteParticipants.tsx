@@ -2,9 +2,13 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { Users, X } from "lucide-react";
 import { Popover, PopoverTrigger, PopoverContent } from "../ui/popover";
+import type { PersonRecord } from "../../types/electron";
 
 export interface NoteParticipant {
-  email: string;
+  // personId links the participant to a cross-meeting person record; email is
+  // optional — a name alone is a valid participant.
+  personId?: number;
+  email?: string | null;
   displayName: string | null;
   display_name?: string | null;
   responseStatus?: string | null;
@@ -12,22 +16,27 @@ export interface NoteParticipant {
   self?: boolean;
 }
 
-function getInitials(displayName: string | null, email: string): string {
+const participantKey = (p: NoteParticipant): string =>
+  p.personId != null ? `person:${p.personId}` : `email:${(p.email || "").toLowerCase()}`;
+
+const isEmailText = (text: string): boolean => text.includes("@");
+
+function getInitials(displayName: string | null, email?: string | null): string {
   if (displayName) return displayName.charAt(0).toUpperCase();
-  return email.charAt(0).toUpperCase();
+  return (email || "?").charAt(0).toUpperCase();
 }
 
-function getInitialColor(email: string): string {
+function getInitialColor(seed: string): string {
   let hash = 0;
-  for (let i = 0; i < email.length; i++) {
-    hash = email.charCodeAt(i) + ((hash << 5) - hash);
+  for (let i = 0; i < seed.length; i++) {
+    hash = seed.charCodeAt(i) + ((hash << 5) - hash);
   }
   const h = Math.abs(hash) % 360;
   return `hsl(${h}, 45%, 65%)`;
 }
 
 interface ParticipantAvatarProps {
-  email: string;
+  email?: string | null;
   displayName: string | null;
   gravatarHash?: string;
   failed: boolean;
@@ -41,7 +50,8 @@ function ParticipantAvatar({
   failed,
   onImageError,
 }: ParticipantAvatarProps) {
-  if (gravatarHash && !failed) {
+  // Gravatar is only requested when the participant actually has an email.
+  if (email && gravatarHash && !failed) {
     return (
       <img
         src={`https://www.gravatar.com/avatar/${gravatarHash}?d=404&s=64`}
@@ -55,7 +65,7 @@ function ParticipantAvatar({
   return (
     <span
       className="shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-medium text-white"
-      style={{ backgroundColor: getInitialColor(email) }}
+      style={{ backgroundColor: getInitialColor(displayName || email || "?") }}
     >
       {getInitials(displayName, email)}
     </span>
@@ -74,6 +84,7 @@ export default function NoteParticipants({ noteId, participants }: NoteParticipa
   const [suggestions, setSuggestions] = useState<
     Array<{ email: string; display_name: string | null }>
   >([]);
+  const [people, setPeople] = useState<PersonRecord[]>([]);
   const [gravatarHashes, setGravatarHashes] = useState<Record<string, string>>({});
   const [failedGravatars, setFailedGravatars] = useState<Set<string>>(new Set());
   const [open, setOpen] = useState(false);
@@ -83,12 +94,20 @@ export default function NoteParticipants({ noteId, participants }: NoteParticipa
   }, [participants]);
 
   useEffect(() => {
-    const emails = localParticipants.map((p) => p.email);
-    const missing = emails.filter((e) => !gravatarHashes[e]);
-    if (missing.length === 0) return;
+    if (!open) return;
+    window.electronAPI?.peopleList?.("").then((result) => {
+      if (result.success) setPeople(result.people);
+    });
+  }, [open]);
+
+  useEffect(() => {
+    const emails = localParticipants
+      .map((p) => p.email)
+      .filter((e): e is string => !!e && !gravatarHashes[e]);
+    if (emails.length === 0) return;
 
     Promise.all(
-      missing.map(async (email) => {
+      emails.map(async (email) => {
         const hash = await window.electronAPI.getMD5Hash(email);
         return { email, hash };
       })
@@ -106,8 +125,10 @@ export default function NoteParticipants({ noteId, participants }: NoteParticipa
     const query = search.trim();
     window.electronAPI.searchContacts(query).then((result) => {
       if (result.success) {
-        const existing = new Set(localParticipants.map((p) => p.email));
-        setSuggestions(result.contacts.filter((c) => !existing.has(c.email)));
+        const existing = new Set(
+          localParticipants.map((p) => (p.email || "").toLowerCase()).filter(Boolean)
+        );
+        setSuggestions(result.contacts.filter((c) => !existing.has(c.email.toLowerCase())));
       }
     });
   }, [search, open, localParticipants]);
@@ -121,25 +142,91 @@ export default function NoteParticipants({ noteId, participants }: NoteParticipa
     [noteId]
   );
 
-  const addParticipant = useCallback(
+  const addEmailParticipant = useCallback(
     (email: string, displayName?: string | null) => {
       const normalized = email.toLowerCase().trim();
-      if (!normalized || localParticipants.some((p) => p.email === normalized)) return;
-      const updated = [
+      if (!normalized) return;
+      if (localParticipants.some((p) => (p.email || "").toLowerCase() === normalized)) return;
+
+      // An email participant links to the matching person record when one
+      // exists (or is created), so voiceprints carry across meetings.
+      const existingPerson = people.find(
+        (person) => (person.email || "").toLowerCase() === normalized
+      );
+      const linkPerson = existingPerson
+        ? Promise.resolve(existingPerson)
+        : window.electronAPI
+            ?.peopleCreate?.({ displayName: displayName || normalized.split("@")[0], email: normalized })
+            .then((result) => result.person)
+            .catch(() => undefined);
+
+      const updated: NoteParticipant[] = [
         ...localParticipants,
-        { email: normalized, displayName: displayName || null, responseStatus: null, self: false },
+        {
+          personId: existingPerson?.id,
+          email: normalized,
+          displayName: displayName || null,
+          responseStatus: null,
+          self: false,
+        },
       ];
       setLocalParticipants(updated);
       saveParticipants(updated);
       window.electronAPI.upsertContact({ email: normalized, displayName: displayName || null });
       setSearch("");
+
+      void linkPerson?.then((person) => {
+        if (!person) return;
+        const withPersonId: NoteParticipant[] = updated.map((p) =>
+          p.email === normalized && p.personId == null ? { ...p, personId: person.id } : p
+        );
+        setLocalParticipants(withPersonId);
+        saveParticipants(withPersonId);
+        setPeople((prev) => (prev.some((x) => x.id === person.id) ? prev : [person, ...prev]));
+      });
     },
-    [localParticipants, saveParticipants]
+    [localParticipants, saveParticipants, people]
+  );
+
+  // Name-first add: Enter with a plain name creates (or reuses) a person and
+  // adds them with just a personId — no email required.
+  const addNameParticipant = useCallback(
+    async (rawName: string) => {
+      const name = rawName.trim();
+      if (!name) return;
+      if (
+        localParticipants.some(
+          (p) => (p.displayName || "").toLowerCase() === name.toLowerCase()
+        )
+      ) {
+        setSearch("");
+        return;
+      }
+
+      let person = people.find((x) => x.display_name.toLowerCase() === name.toLowerCase());
+      if (!person) {
+        const result = await window.electronAPI?.peopleCreate?.({ displayName: name });
+        if (result?.success && result.person) {
+          person = result.person;
+          setPeople((prev) => [person as PersonRecord, ...prev]);
+        }
+      }
+      if (!person) return;
+
+      const updated: NoteParticipant[] = [
+        ...localParticipants,
+        { personId: person.id, email: null, displayName: person.display_name, responseStatus: null, self: false },
+      ];
+      setLocalParticipants(updated);
+      saveParticipants(updated);
+      setSearch("");
+    },
+    [localParticipants, saveParticipants, people]
   );
 
   const removeParticipant = useCallback(
-    (email: string) => {
-      const updated = localParticipants.filter((p) => p.email !== email);
+    (key: string) => {
+      const updated = localParticipants.filter((p) => participantKey(p) !== key);
       setLocalParticipants(updated);
       saveParticipants(updated);
     },
@@ -148,23 +235,37 @@ export default function NoteParticipants({ noteId, participants }: NoteParticipa
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
-      if (e.key === "Enter" && search.includes("@")) {
-        e.preventDefault();
-        addParticipant(search);
+      if (e.key !== "Enter" || !search.trim()) return;
+      e.preventDefault();
+      if (isEmailText(search)) {
+        addEmailParticipant(search);
+      } else {
+        void addNameParticipant(search);
       }
     },
-    [search, addParticipant]
+    [search, addEmailParticipant, addNameParticipant]
   );
 
+  const peopleById = useMemo(
+    () => new Map(people.map((person) => [person.id, person])),
+    [people]
+  );
+
+  // Group by organization when known; email domain as a legacy fallback;
+  // otherwise an ungrouped bucket.
   const grouped = useMemo(() => {
     const groups = new Map<string, NoteParticipant[]>();
     for (const p of localParticipants) {
-      const domain = p.email.split("@")[1] || "other";
-      if (!groups.has(domain)) groups.set(domain, []);
-      groups.get(domain)!.push(p);
+      const person = p.personId != null ? peopleById.get(p.personId) : undefined;
+      const label =
+        (person?.organization || "").trim() ||
+        (p.email ? p.email.split("@")[1] || "" : "") ||
+        t("contacts.ungrouped", "Ungrouped");
+      if (!groups.has(label)) groups.set(label, []);
+      groups.get(label)!.push(p);
     }
     return Array.from(groups.entries());
-  }, [localParticipants]);
+  }, [localParticipants, peopleById, t]);
 
   const chipLabel =
     localParticipants.length > 0
@@ -191,7 +292,7 @@ export default function NoteParticipants({ noteId, participants }: NoteParticipa
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder={t("notes.participants.addPlaceholder", "Add attendees...")}
+            placeholder={t("contacts.addPlaceholder", "Add by name or email...")}
             className="w-full px-2 py-1.5 rounded-md bg-transparent text-xs text-foreground placeholder:text-foreground/20 outline-none border-none appearance-none"
             autoFocus
           />
@@ -203,7 +304,7 @@ export default function NoteParticipants({ noteId, participants }: NoteParticipa
               {suggestions.slice(0, 5).map((contact) => (
                 <button
                   key={contact.email}
-                  onClick={() => addParticipant(contact.email, contact.display_name)}
+                  onClick={() => addEmailParticipant(contact.email, contact.display_name)}
                   className="flex items-center gap-2 w-full px-2 py-1.5 rounded-md text-xs text-foreground/70 hover:bg-foreground/5 transition-colors cursor-pointer"
                 >
                   <ParticipantAvatar
@@ -218,32 +319,35 @@ export default function NoteParticipants({ noteId, participants }: NoteParticipa
             </div>
           )}
 
-          {search && !search.includes("@") && suggestions.length === 0 && (
+          {search.trim() && suggestions.length === 0 && !isEmailText(search) && (
             <div className="px-3 py-2 text-[11px] text-foreground/30">
-              {t("notes.participants.typeEmail", "Type an email to add...")}
+              {t("contacts.pressEnterToadd", "Press Enter to add “{{name}}”", { name: search.trim() })}
             </div>
           )}
 
-          {grouped.map(([domain, members]) => (
-            <div key={domain} className="p-1">
+          {grouped.map(([label, members]) => (
+            <div key={label} className="p-1">
               <div className="px-2 py-1 text-[11px] font-medium text-muted-foreground">
-                {domain}
+                {label}
               </div>
               {members.map((p) => (
                 <div
-                  key={p.email}
+                  key={participantKey(p)}
                   className="group flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-foreground/5 transition-colors"
                 >
                   <ParticipantAvatar
                     email={p.email}
                     displayName={p.displayName}
-                    gravatarHash={gravatarHashes[p.email]}
-                    failed={failedGravatars.has(p.email)}
-                    onImageError={() => setFailedGravatars((prev) => new Set(prev).add(p.email))}
+                    gravatarHash={p.email ? gravatarHashes[p.email] : undefined}
+                    failed={p.email ? failedGravatars.has(p.email) : true}
+                    onImageError={() =>
+                      p.email &&
+                      setFailedGravatars((prev) => new Set(prev).add(p.email as string))
+                    }
                   />
 
                   <span className="flex-1 min-w-0 truncate text-xs text-foreground/70">
-                    {p.displayName || p.email.split("@")[0]}
+                    {p.displayName || (p.email ? p.email.split("@")[0] : "")}
                     {p.self && (
                       <span className="ml-1 text-foreground/30">
                         {t("notes.participants.me", "(me)")}
@@ -252,7 +356,7 @@ export default function NoteParticipants({ noteId, participants }: NoteParticipa
                   </span>
 
                   <button
-                    onClick={() => removeParticipant(p.email)}
+                    onClick={() => removeParticipant(participantKey(p))}
                     className="shrink-0 opacity-0 group-hover:opacity-100 p-0.5 rounded text-foreground/30 hover:text-foreground/60 transition-opacity cursor-pointer"
                   >
                     <X size={12} />
@@ -264,7 +368,7 @@ export default function NoteParticipants({ noteId, participants }: NoteParticipa
 
           {localParticipants.length === 0 && !search && (
             <div className="px-3 py-4 text-center text-[11px] text-foreground/30">
-              {t("notes.participants.typeEmail", "Type an email to add...")}
+              {t("contacts.emptyHint", "Type a name or email to add participants")}
             </div>
           )}
         </div>
