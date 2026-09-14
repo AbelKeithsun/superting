@@ -1,0 +1,4 @@
+=== FIXED code (this branch): two extractions through new reply path ===
+HARNESS_PASS dim=512 finite=true selfCos=1.000000 ms=283
+[WARN] onnx worker exited { code: 0, pending: 0, shuttingDown: false }
+fatal lines: 0

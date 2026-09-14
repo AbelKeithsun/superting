@@ -1,0 +1,9 @@
+=== REPRO 1: old worker/client (main@fbdf46e3), request WITH transferList ===
+HARNESS_FAIL error=Port at index 0 is not a valid port ms=286
+[WARN] onnx worker exited { code: 0, pending: 0, shuttingDown: false }
+
+=== REPRO 2: old code, request WITHOUT transferList (text.embed-style) → worker-side reply crash ===
+[WARN] onnx worker exited { code: 1, pending: 1, shuttingDown: false }
+[INFO] onnx worker respawn scheduled { delayMs: 1000, crashCount: 1 }
+HARNESS_FAIL error=ONNX worker crashed ms=320
+{"ts":"2026-09-14T16:19:23.583Z","level":"fatal","pid":23902,"message":"unhandledRejection","error":"Port at index 0 is not a valid port","stack":"TypeError: Port at index 0 is not a valid port\n    at MessagePortMain.postMessage (node:electron/js2c/utility_init:2:3188)\n    at MessagePortMain.<anonymous> (/private/tmp/onnx-worker-repro/workers/onnxWorker.js:456:12)"}

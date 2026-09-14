@@ -1,0 +1,5 @@
+{"ts":"2026-09-14T15:29:56.637Z","level":"info","pid":98737,"message":"worker boot","intraOpNumThreads":4}
+{"ts":"2026-09-14T15:29:56.639Z","level":"info","pid":98737,"message":"worker initialized","intraOpNumThreads":4}
+{"ts":"2026-09-14T15:29:56.717Z","level":"info","pid":98737,"message":"ort loaded"}
+{"ts":"2026-09-14T15:29:56.910Z","level":"info","pid":98737,"message":"speaker session loaded","modelPath":"/Users/mac/Documents/workspace/super_listen/superting-worktrees/codex-speaker-identity-fixes/resources/bin/diarization-models/3dspeaker_speech_campplus_sv_en_voxceleb_16k.onnx"}
+{"ts":"2026-09-14T15:29:57.025Z","level":"fatal","pid":98737,"message":"unhandledRejection","error":"Port at index 0 is not a valid port","stack":"TypeError: Port at index 0 is not a valid port\n    at MessagePortMain.postMessage (node:electron/js2c/utility_init:2:3188)\n    at MessagePortMain.<anonymous> (/private/tmp/onnx-worker-repro/workers/onnxWorker.js:456:12)"}

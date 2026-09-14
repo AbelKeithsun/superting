@@ -6225,6 +6225,7 @@ class IPCHandlers {
     let meetingDiarizationSegments = [];
     let meetingRetainedAudioWriter = null;
     let meetingLiveSpeakerActive = false;
+    let meetingLiveSpeakerFeedCount = 0;
     let meetingLiveSpeakerState = null;
     let meetingLiveSpeakerStartedAt = null;
     let meetingReclusterTimer = null;
@@ -6398,6 +6399,19 @@ class IPCHandlers {
     };
 
     const dispatchMeetingAudioBuffer = (buffer, source, { retain = true } = {}) => {
+      // retain=true is the pre-gate signal; echo-muted chunks are dispatched
+      // with retain=false so identification never sees synthetic silence.
+      if (source === "mic" && retain && meetingLiveSpeakerActive) {
+        meetingLiveSpeakerFeedCount += 1;
+        if (meetingLiveSpeakerFeedCount === 1 || meetingLiveSpeakerFeedCount % 200 === 0) {
+          debugLogger.debug("Live speaker identification fed", {
+            chunks: meetingLiveSpeakerFeedCount,
+            bytes: buffer.length,
+          });
+        }
+        void liveSpeakerIdentifier.feedAudio(buffer);
+      }
+
       if (meetingLocalMode) {
         if (retain) writeRetainedMeetingAudio(source, buffer);
         meetingLocalBuffers[source].push(buffer);
@@ -6601,15 +6615,21 @@ class IPCHandlers {
       await stopLiveSpeakerIdentification();
 
       if (systemAudioMode !== "native" || !liveSpeakerIdentifier.isAvailable()) {
+        debugLogger.debug("Live speaker identification not started", {
+          systemAudioMode,
+          identifierAvailable: liveSpeakerIdentifier.isAvailable(),
+        });
         return false;
       }
 
       const diarizationEnabled = resolveDiarizationEnabled();
       if (!diarizationEnabled) {
+        debugLogger.debug("Live speaker identification disabled by speaker diarization setting");
         return false;
       }
 
       meetingLiveSpeakerState = null;
+      meetingLiveSpeakerFeedCount = 0;
       meetingLiveSpeakerStartedAt = Date.now();
       meetingSpeakerRemapper = createSpeakerRemapper(resolveSessionMaxSpeakers());
       const started = await liveSpeakerIdentifier.start(
@@ -6640,6 +6660,12 @@ class IPCHandlers {
             startTime,
             endTime,
           };
+          debugLogger.debug("Live speaker identified", {
+            speakerId: publicSpeakerId,
+            displayName,
+            startTime,
+            endTime,
+          });
 
           win.webContents.send("meeting-speaker-identified", enrichedIdentification);
 
@@ -7181,6 +7207,19 @@ class IPCHandlers {
             await stopMeetingAec();
             meetingAecStatus = resolveMeetingAecSystemAudioFailure();
           }
+          void startLiveSpeakerIdentification(win, systemAudioMode)
+            .then((started) => {
+              debugLogger.info("Live speaker identification startup", {
+                started,
+                systemAudioMode,
+                path: "warm-reuse",
+              });
+            })
+            .catch((error) => {
+              debugLogger.warn("Live speaker identification failed to start", {
+                error: error.message,
+              });
+            });
           return {
             success: true,
             systemAudioMode,
@@ -7226,6 +7265,20 @@ class IPCHandlers {
             ...meetingAecStatus,
           });
 
+          void startLiveSpeakerIdentification(meetingLocalWin, systemAudioMode)
+            .then((started) => {
+              debugLogger.info("Live speaker identification startup", {
+                started,
+                systemAudioMode,
+                path: "local",
+              });
+            })
+            .catch((error) => {
+              debugLogger.warn("Live speaker identification failed to start", {
+                error: error.message,
+              });
+            });
+
           return {
             success: true,
             systemAudioMode,
@@ -7252,6 +7305,22 @@ class IPCHandlers {
           await stopMeetingAec();
           meetingAecStatus = resolveMeetingAecSystemAudioFailure();
         }
+        void startLiveSpeakerIdentification(
+          BrowserWindow.fromWebContents(event.sender),
+          systemAudioMode
+        )
+          .then((started) => {
+            debugLogger.info("Live speaker identification startup", {
+              started,
+              systemAudioMode,
+              path: "realtime",
+            });
+          })
+          .catch((error) => {
+            debugLogger.warn("Live speaker identification failed to start", {
+              error: error.message,
+            });
+          });
         return {
           success: true,
           systemAudioMode,
@@ -9107,13 +9176,26 @@ class IPCHandlers {
     };
 
     const diarizationEnabled = (sessionConfig?.enabled ?? this.speakerDiarizationEnabled) !== false;
+    const managerAvailable = this.diarizationManager?.isAvailable() ?? false;
 
-    if (!diarizationEnabled || !this.diarizationManager?.isAvailable() || !rawPcmPath) {
+    if (!diarizationEnabled || !managerAvailable || !rawPcmPath) {
+      const skipReason = !diarizationEnabled
+        ? "disabled"
+        : !managerAvailable
+          ? "engine-unavailable"
+          : "no-audio";
+      debugLogger.warn("Background diarization skipped", {
+        sessionId,
+        noteId: noteId ?? null,
+        skipReason,
+      });
       send({
         segments: transcriptSegments.map((segment, index) => ({
           ...segment,
           id: segment.id || `segment-${index}`,
         })),
+        diarizationSkipped: true,
+        skipReason,
       });
       return;
     }
@@ -9132,6 +9214,25 @@ class IPCHandlers {
       });
       this._broadcastDiarizationTaskStatus();
     }
+
+    // Last-resort watchdog: the diarization child process has its own
+    // per-window timeout, but if anything else hangs (ffmpeg conversion,
+    // embedding loop) the task would stay "running" forever with no result.
+    const DIARIZATION_WATCHDOG_MS = 60 * 60 * 1000;
+    let watchdogFired = false;
+    const watchdog = setTimeout(() => {
+      if (watchdogFired) return;
+      watchdogFired = true;
+      debugLogger.error("Background diarization watchdog fired", {
+        sessionId,
+        noteId: trackedNoteId,
+      });
+      send({ segments: [], diarizationFailed: true, error: "diarization timed out" });
+      if (trackedTask) {
+        this.diarizationTaskTracker.finishTask(trackedTask.taskId);
+        this._broadcastDiarizationTaskStatus();
+      }
+    }, DIARIZATION_WATCHDOG_MS);
 
     (async () => {
       let tmpWav = null;
@@ -9295,9 +9396,10 @@ class IPCHandlers {
         void this._compressNoteAudioAfterDiarization(trackedNoteId, retainedAudioFilename);
       } catch (err) {
         debugLogger.warn("Background diarization failed", { error: err.message });
-        send({ segments: [] });
+        send({ segments: [], diarizationFailed: true, error: err.message });
       } finally {
-        if (trackedTask) {
+        clearTimeout(watchdog);
+        if (trackedTask && !watchdogFired) {
           this.diarizationTaskTracker.finishTask(trackedTask.taskId);
           this._broadcastDiarizationTaskStatus();
         }

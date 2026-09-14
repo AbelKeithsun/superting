@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- **Meeting speaker identification is wired up again.** `startLiveSpeakerIdentification` and its per-chunk `feedAudio` call had been dead code since the transcript-playback refactor — live speaker recognition never ran in any meeting mode. It now starts on all three meeting start paths (warm reuse, local engine, realtime cloud) when native system audio is available, consumes the pre-gate mic signal (echo muting cannot blind it), and is reconciled with the post-meeting diarization result as designed. Start/skip decisions are logged.
+- **ONNX worker no longer dies on every embedding.** Worker replies transferred the embedding `ArrayBuffer` through Electron's utilityProcess port, which rejects non-MessagePort transfer items (`Port at index 0 is not a valid port`) — every successful speaker/text embedding extraction crashed the worker, and after five respawns the client gave up for the rest of the session, taking FunASR VAD down with it (falling back to fixed 5-second windows). Embeddings now travel as message-body bytes, reply posting is fully guarded, an unhandled rejection no longer exits the worker, and the client replaces its permanent give-up with a 60-second crash cooldown before retrying.
+- **Speaker-less transcript segments can be labeled manually.** Segments that never received a diarized speaker showed a static 我/对方 label with no way to assign a name; they now open the same speaker picker as mapped segments and commit a single-segment `manual_*` assignment whenever segment mapping is available.
+- **Background diarization is diagnosable.** The previously silent skip branch in `_startOrSkipDiarization` logs and reports its reason (`disabled` / `engine-unavailable` / `no-audio`), failures are flagged to the renderer (`diarizationFailed`), and a 60-minute watchdog guarantees the diarization task indicator can never spin forever.
+
 ## [2.0.5] - 2026-09-14
 
 ### Meeting audio quality
