@@ -1,0 +1,10 @@
+== G0 · 工程规约与基线 ==
+  [32mPASS[0m 分支为 codex/meeting-experience-v2.0.5（非 main）
+  [32mPASS[0m Node 主版本 24
+  [33mWARN[0m main..HEAD 无提交（可能尚未开工）
+  [32mPASS[0m package-lock.json 未被改动
+  [33mWARN[0m 工作区有未提交改动（门禁放行时建议先提交）
+  [2mINFO[0m HEAD: b01b7295 · 仓库: /Users/mac/Documents/workspace/super_listen/superting-worktrees/codex-meeting-experience-v2.0.5
+
+结果：[32mPASS 3[0m · [31mFAIL 0[0m · [33mWARN 2[0m
+门禁结论：PASS（静态项）—— 仍需按 ACCEPTANCE.md 完成动态验收与证据归档。
