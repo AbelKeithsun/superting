@@ -1,0 +1,144 @@
+安装与真实库迁移验证记录（v2.0.5）
+生成时间：2026-09-14
+说明：本文件记录**在开发机真实安装与真实用户数据库上**执行的验证，命令与原始输出均为实录。
+
+================================================================================
+[1] 安装前状态
+================================================================================
+$ /usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" /Applications/SuperTing.app/Contents/Info.plist
+2.0.4                                  ← 安装前为 v2.0.4（构建于 2026-09-12 23:40）
+
+$ grep -c <特性标识> /Applications/SuperTing.app/Contents/Resources/app.asar
+meeting-retention-audio-send -> 0
+meetingAudioQuality -> 0
+meetingAudioMix -> 0
+voiceprints -> 0
+                                       ← 证实旧安装包不含 2.0.5 任何新特性代码
+
+旧版备份（回滚用，安装前）：
+$ ditto -c -k --sequesterRsrc --keepParent /Applications/SuperTing.app /tmp/SuperTing-2.0.4-backup.zip
+-rw-r--r--  258370568  /tmp/SuperTing-2.0.4-backup.zip
+
+================================================================================
+[2] 构建产物校验（dist/mac-arm64/SuperTing.app）
+================================================================================
+$ /usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" .../SuperTing.app/Contents/Info.plist
+2.0.5
+$ /usr/libexec/PlistBuddy -c "Print :CFBundleVersion" .../SuperTing.app/Contents/Info.plist
+2.0.5
+
+新特性标识复核（对照安装前的 0 命中）：
+  meeting-retention-audio-send -> 3
+  meetingAudioQuality -> 11
+  meetingAudioMix -> 11
+  voiceprints -> 58
+  people-list -> 3
+  corrections-learned-quiet -> 3
+
+打包内含关键资源（Contents/Resources/bin/）：
+  all-MiniLM-L6-v2/{model.onnx 90405214B, tokenizer.json}
+  diarization-models/{3dspeaker_speech_campplus_sv_en_voxceleb_16k.onnx, silero_vad.onnx,
+                      sherpa-onnx-pyannote-segmentation-3-0/model.onnx}
+  whisper-vad/ggml-silero-v5.1.2.bin (885098B)
+  qdrant-darwin-arm64 · sherpa-onnx-ws-darwin-arm64 · sherpa-onnx-diarize-darwin-arm64
+  meeting-aec-helper-darwin-arm64 · whisper-server-darwin-arm64
+  libsherpa-onnx-*.dylib · libonnxruntime*.dylib
+  app.asar.unpacked/node_modules/ffmpeg-static/ffmpeg (45568216B)
+应用体积：746M
+
+包内二进制动态链接冒烟测试（在 .app 内直接执行）：
+  sherpa-onnx-ws-darwin-arm64 --help   → "Automatic speech recognition with sherpa-onnx using websocket."
+  whisper-server-darwin-arm64 --help   → usage 正常输出
+  qdrant-darwin-arm64 --version        → qdrant 1.18.1
+
+onnxruntime 符号链接（afterPack 步骤生成，指向包内 unpacked 副本）：
+  bin/libonnxruntime.1.23.2.dylib -> ../app.asar.unpacked/node_modules/onnxruntime-node/bin/napi-v6/darwin/arm64/libonnxruntime.1.24.3.dylib
+  bin/libonnxruntime.dylib        -> （同上）
+  目标存在（35937208B）→ 包内可解析，已验证可执行
+
+dmg 校验（package-mac.js 内置步骤）：
+  hdiutil: verify: checksum of "dist/SuperTing-2.0.5-arm64.dmg" is VALID
+
+================================================================================
+[3] 安装替换
+================================================================================
+安装前 /Applications/SuperTing.app（2.0.4）**正在运行**（pid 88306），先优雅退出：
+  $ osascript -e 'tell application "SuperTing" to quit'
+  已在 5s 内退出
+  $ pgrep -f "/Applications/SuperTing.app" | wc -l
+  0
+
+替换（ditto 保留符号链接/资源分叉；清除隔离属性）：
+  $ rm -rf /Applications/SuperTing.app
+  $ ditto dist/mac-arm64/SuperTing.app /Applications/SuperTing.app
+  $ xattr -rd com.apple.quarantine /Applications/SuperTing.app
+
+安装后复核：
+  /Applications/SuperTing.app 版本 = 2.0.5（CFBundleShortVersionString 与 CFBundleVersion 均为 2.0.5）
+  特性标识命中：meeting-retention-audio-send 3 / meetingAudioQuality 11 / meetingAudioMix 11 /
+                voiceprints 58 / people-list 3（与构建产物一致）
+  包内二进制：qdrant-darwin-arm64 --version → qdrant 1.18.1；sherpa-onnx-ws 可执行
+  代码签名：Signature=adhoc（配置为 identity=null → 按设计跳过正式签名/公证）
+
+启动验证：
+  $ open /Applications/SuperTing.app
+  $ pgrep -fl "/Applications/SuperTing.app/Contents/MacOS/SuperTing"
+  25149 /Applications/SuperTing.app/Contents/MacOS/SuperTing      ← 进程实测加载的是 /Applications 下的 2.0.5
+
+================================================================================
+[4] 真实用户数据库迁移验证（本机真实数据，非种子库）
+================================================================================
+库：/Users/mac/Library/Application Support/superting/transcriptions.db（593920 B）
+迁移前备份：/tmp/transcriptions-before-2.0.5.db
+
+【迁移前】仅存在旧表：
+$ sqlite3 "$DB" "SELECT name FROM sqlite_master WHERE type='table' AND name IN
+                 ('people','voiceprints','contacts','speaker_profiles','speaker_names') ORDER BY name;"
+contacts
+speaker_names
+speaker_profiles
+$ 行数：contacts=10 · speaker_profiles=0 · speaker_names=8      （PRAGMA user_version=0）
+
+【首次启动 2.0.5 后】
+$ 表清单：contacts · people · speaker_names · speaker_profiles · voiceprints
+$ 行数：contacts=10 · speaker_profiles=0 · speaker_names=8 · people=9 · voiceprints=0
+
+结论：
+  - people 表建成并归并出 **9 人**：10 条 contacts + 8 条 speaker_names 去重合并（旧联系人体系存在同一人
+    在多表出现的情况，归并后为 9 个唯一身份）。
+  - **旧表未被修改或删除**（行数与迁移前完全一致），符合"legacy tables are never modified or dropped"。
+  - voiceprints=0 属预期：本机 speaker_profiles 原本为空（无声纹样本可迁移）。
+
+重复性检查（真实数据）：
+$ sqlite3 "$DB" "SELECT COALESCE(email,'(null)'), COUNT(*) FROM people GROUP BY email HAVING COUNT(*)>1;"
+  （无输出 → 无重复邮箱）
+$ sqlite3 "$DB" "SELECT display_name, COUNT(*) FROM people GROUP BY display_name HAVING COUNT(*)>1;"
+  （无输出 → 无重复姓名）
+
+people 样本（前 5 行，验证字段映射未错位）：
+  id | display_name | email              | org
+  1  | gelanfang    | gelanfang@outlook  | -
+  2  | luziyang     | luziyang@foxmail   | -
+  3  | 徐小奎        | 徐小奎@foxmail.com  | -
+  4  | 刘亚威        | 刘亚威@foxmail.com  | -
+  5  | 徐国忠        | 徐国忠@foxmail.com  | -
+
+【幂等性验证：退出并重启应用，迁移会再次执行】
+$ osascript -e 'tell application "SuperTing" to quit'   → 已退出 (3s)
+$ open /Applications/SuperTing.app                      → 已重新启动
+$ 二次迁移后行数：people=9 · voiceprints=0 · contacts=10 · speaker_names=8
+$ 重复邮箱组数：0
+$ 进程存活：25523
+
+结论：迁移**幂等** —— 第二次启动未新增 people、未产生重复人、旧表行数不变。
+      这验证了 ACCEPTANCE A3-6 的关键子项（"迁移后无重复人、旧笔记参会人不丢"）在**真实数据**上成立。
+
+================================================================================
+[5] 本次验证覆盖的验收项
+================================================================================
+- A3-6（迁移后无重复人 / 旧数据不丢）：✅ 真实库验证（本文件 §4）
+- 2.0.5 交付物可安装、可启动、版本正确：✅（§2、§3）
+- 构建产物完整性（原生二进制/模型/ffmpeg 均已打包且可执行）：✅（§2）
+- G4 构建门禁：✅（build.log）
+未覆盖（仍为遗留）：跨会议声纹识别、一键注册声纹、改名纠错闭环、1v1 自动绑定回归 —— 见
+`evidence/G4/rehearsal-E1..E5.md`。

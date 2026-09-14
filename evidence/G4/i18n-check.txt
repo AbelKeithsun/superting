@@ -1,0 +1,88 @@
+G4 · i18n 与集成门禁证据（v2.0.5）
+生成时间：2026-09-14（发版当日）
+命令：bash docs/tasks/2026-09-14-meeting-experience-v2.0.5/verify.sh [Gn]
+
+================================================================================
+[1] 合并前全门禁复跑（分支 codex/meeting-experience-v2.0.5 @ f84f91f4 = PR #10 head）
+    命令：bash verify.sh     （不带参数 = G0–G4 全跑）
+================================================================================
+
+== G0 · 工程规约与基线 ==
+  PASS 分支为 codex/meeting-experience-v2.0.5（非 main）
+  PASS Node 主版本 24
+  PASS DCO：7 个提交均带 Signed-off-by
+  PASS package-lock.json 未被改动
+  PASS 工作区干净
+  INFO HEAD: f84f91f4 · 仓库: .../superting-worktrees/codex-meeting-experience-v2.0.5
+== G1 · 录音音质 ==
+  PASS 存在音质档设置项 meetingAudioQuality
+  PASS 存在 48 kHz 采集/编码（48000）
+  PASS 音频存储不再使用 voip 编码模式
+  PASS ffmpeg 默认不再使用 voip 编码模式
+  PASS 留存压缩不再默认 24 kbps
+  PASS ffmpeg 默认不再 24 kbps
+  PASS 留存不再写入被门控（静音化）的 buffer
+  PASS 会议云端建流在 connectOpts 内声明 sampleRate（修复 16k/24k 错配）
+  PASS 留存混音支持 stereo 策略
+  PASS 渲染层留存采集使用 48 kHz
+  PASS 存在混音策略开关 meetingAudioMix
+== G2 · 实时编辑与错词沉淀 ==
+  PASS store 提供 updateSegmentText（编辑写入 store）
+  PASS 段落带 editedByUser 标记
+  PASS retract 已放宽为 source+timestamp（不再要求文本相等）
+  PASS 合并时文本以 existing 为准（不再整体取 incoming）
+  PASS 合并保护识别 editedByUser
+  PASS 存在 (错→对) 对提取器 extractCorrectionPairs
+  PASS 会议段落应用词典纠正
+  PASS 学习回执走安静事件（不弹听写悬浮窗）
+  PASS 实时视图具备可编辑段落钩子
+  PASS 会议 ASR 已带热词（keyterms）
+  PASS 学习来源包含 meeting-live-edit
+== G3 · 联系人档案与声纹 ==
+  PASS 存在 people 表
+  PASS 存在 voiceprints 表（1:N 多模板）
+  PASS people 支持 organization
+  PASS people 支持 phone
+  PASS 参会人以 personId 关联
+  PASS 添加参会人不再强制邮箱（名字即可）
+  PASS preload 暴露 people-list 通道
+  PASS 主进程实现 people-list
+  PASS 代码中已使用 personId 贯穿
+== G4 · 集成与交付 ==
+  PASS i18n 前缀齐备（liveEdit / audioQuality / contacts）
+  PASS 10 个语言文件 key 集合与 en 完全一致
+  PASS 分支相对 main 有 7 个提交
+  PASS CHANGELOG 含 2.0.5 条目
+  INFO 跳过构建（设 RUN_BUILD=1 可执行）
+
+结果：PASS 40 · FAIL 0 · WARN 0
+门禁结论：PASS（静态项）
+
+================================================================================
+[2] 合并后 main 复跑（main @ 5aa75f05 = tag v2.0.5）
+    命令：bash verify.sh G4
+================================================================================
+
+== G4 · 集成与交付 ==
+  PASS i18n 前缀齐备（liveEdit / audioQuality / contacts）
+  PASS 10 个语言文件 key 集合与 en 完全一致
+  FAIL 分支相对 main 无提交
+  PASS CHANGELOG 含 2.0.5 条目
+  INFO 跳过构建（设 RUN_BUILD=1 可执行）
+
+结果：PASS 3 · FAIL 1 · WARN 0
+
+说明：唯一 FAIL 为 "分支相对 main 无提交" —— 该项断言（`git log --oneline main..HEAD`）
+用于校验"功能分支相对 main 有提交"，在 main 自身上执行时按定义必然为 0，属**位置性
+伪失败**，不代表代码问题：对应 7 个提交已在 [1] 中于分支上通过该校验，且已 rebase
+merge 进 main。i18n 相关的两项关键检查（前缀齐备 + 10 语言 key 集合与 en 完全一致）
+在合并后的 main 上依然全绿。
+
+================================================================================
+[3] 结论
+================================================================================
+- i18n：10 个语言文件（en/es/fr/de/pt/it/ru/zh-CN/zh-TW 等）key 集合与 en 完全一致，
+  notes.transcript.liveEdit.* / notes.audioQuality.* / contacts.* 三组前缀齐备。
+- DCO：7 个提交全部带 Signed-off-by。
+- package-lock.json：未被非 Node 24 安装污染（版本号仅随发版提交变更 2 行）。
+- 渲染层构建：vite build 通过（见 build.log）。

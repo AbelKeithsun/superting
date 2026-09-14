@@ -1,0 +1,93 @@
+PR #10 合并与 v2.0.5 发版记录
+生成时间：2026-09-14
+仓库：https://github.com/AbelKeithsun/superting （remote: abel，开发主线 abel/main）
+
+================================================================================
+[1] 验收决定
+================================================================================
+放行结论：有条件通过（ACCEPTANCE §8「放行判定」第 2 行路径）
+决定人：派发人（2026-09-14 明确指示执行"正路发版"）
+未全验项（列出并接受）：
+  - A1-4/A1-7：频谱 12 kHz 以上能量、三引擎转写对比（需系统音频源 + 更长窗口）
+  - A2-8..A2-11：正向学习 GUI 闭环（两次演练编辑均被 CJK 提取器按规格拒绝，仅单测证据）
+  - A3-3/A3-4/A3-5：声纹跨会议自动认人、一键注册后命中、改名纠错闭环（需两次会议）
+影响与跟进：见 ACCEPTANCE.md §7「未验证 / 遗留」及 RUN-STATE.md §1「遗留项」。
+
+================================================================================
+[2] 合并前修复（收口）
+================================================================================
+上一轮会话遗留未提交改动 src/helpers/database.js（声纹 upsert 冲突目标）：
+    - ON CONFLICT(source_profile_id) DO UPDATE SET ...
+    + ON CONFLICT(source_profile_id) WHERE source_profile_id IS NOT NULL DO UPDATE SET ...
+
+复现与验证（sqlite3 CLI，使用与代码一致的建表/索引语句）：
+    CREATE UNIQUE INDEX idx_voiceprints_source_profile
+      ON voiceprints(source_profile_id) WHERE source_profile_id IS NOT NULL;
+
+  旧写法：Error: in prepare, ON CONFLICT clause does not match any PRIMARY KEY
+          or UNIQUE constraint
+  新写法：（无错误）→ 命中既有行并更新，SELECT 结果为 `1|1|4|77`
+
+结论：SQLite 对**部分唯一索引**要求 ON CONFLICT 目标重复索引的 WHERE 谓词；旧写法语句
+无法 prepare，导致声纹样本永远无法更新既有档案行（属 2.0.5 新功能范围内的真实缺陷）。
+已作为 f84f91f4 提交并入 PR #10（rebase 后为 d7022648）。
+
+================================================================================
+[3] 合并
+================================================================================
+命令：gh pr merge 10 --repo AbelKeithsun/superting --rebase
+  state        : MERGED
+  mergedAt     : 2026-09-14T13:37:11Z
+  mergedBy     : AbelKeithsun
+  mergeCommit  : d7022648e64da9b4f4d34adc798b27e6a6c899c6
+  head         : codex/meeting-experience-v2.0.5（head sha f84f91f4）
+  base         : main
+
+合并方式：rebase merge（仓库规约：只允许 rebase merge；禁止 squash / merge commit）
+rebase 后 7 个提交（SHA 全部重写）：
+  d7022648 fix(people): match the partial unique index in the voiceprints upsert
+  f1370193 test(evidence): G1/G3/G4 rehearsal evidence — 48 kHz afinfo, migration checks, live-edit GUI run
+  7fc34b92 docs(changelog): add 2.0.5 entry for meeting experience improvements
+  21fc68e0 feat(people): cross-meeting contact identities with name-first participants and local voiceprints
+  caa2c73a feat(transcript): live segment editing, merge protection, and CJK-aware correction learning
+  7ffc2640 feat(audio): meeting retention path split, 48 kHz capture, quality tiers, mix strategies
+  8f24190b chore(meeting-v2.0.5): T0 baseline — worktree setup, G0 gate evidence, 31-item FAIL backlog
+
+远端分支删除（规约：合并后立即删）：
+  $ git push abel --delete codex/meeting-experience-v2.0.5
+  To https://github.com/AbelKeithsun/superting.git
+   - [deleted]           codex/meeting-experience-v2.0.5
+  $ git ls-remote abel refs/heads/codex/meeting-experience-v2.0.5 | wc -l
+  0
+
+================================================================================
+[4] 发版提交与 tag
+================================================================================
+发版提交（按仓库规约，直接在主检出 main 上做）：
+  $ git merge --ff-only abel/main          # 本地 main 落后 7 → 快进到 d7022648
+  $ # 改 package.json / package-lock.json（根与 packages[""]）/ CHANGELOG
+  $ git commit -s -m "chore: release v2.0.5"
+  5aa75f05 chore: release v2.0.5
+
+改动内容（与 v2.0.4 发版提交同构）：
+  CHANGELOG.md      | 3 ++-   （## [2.0.5] - Unreleased → 2026-09-14，并补声纹索引修复条目）
+  package-lock.json | 4 ++--  （根 version 与 packages[""].version：2.0.4 → 2.0.5）
+  package.json      | 2 +-    （version：2.0.4 → 2.0.5）
+
+推送：
+  $ git push abel main
+   d7022648..5aa75f05  main -> main
+  $ git tag v2.0.5 && git push abel v2.0.5
+   * [new tag]           v2.0.5 -> v2.0.5
+
+远端最终状态：
+  abel/main = 5aa75f05bb0ef71873a7a3d9cd024c5d94c51bda
+  tag v2.0.5 = 5aa75f05bb0ef71873a7a3d9cd024c5d94c51bda（lightweight tag，与 v2.0.0–v2.0.4 一致）
+
+================================================================================
+[5] 构建分支
+================================================================================
+按仓库规约使用临时构建分支（发版完成后删除）：
+  worktree : superting-worktrees/codex-meeting-experience-v2.0.5（带全量 node_modules）
+  branch   : temp/build-2.0.5 @ 5aa75f05（= tag v2.0.5）
+  命令     : npm run build:mac
