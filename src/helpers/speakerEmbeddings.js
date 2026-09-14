@@ -3,6 +3,7 @@ const path = require("path");
 const debugLogger = require("./debugLogger");
 const { getModelsDirForService } = require("./modelDirUtils");
 const onnxWorkerClient = require("./onnxWorkerClient");
+const { embeddingToFloat32 } = require("./embeddingTransfer");
 
 const SAMPLE_RATE = 16000;
 const EMBEDDING_DIM = 512;
@@ -54,19 +55,19 @@ class SpeakerEmbeddings {
   async _extractEmbeddingFromSamples(samples) {
     await this._ensureLoaded();
 
-    const samplesBuffer = samples.buffer.slice(
-      samples.byteOffset,
-      samples.byteOffset + samples.byteLength
+    // Send the samples as body bytes — the same channel FunASR VAD uses.
+    // Transferring ArrayBuffers through this port is unreliable in one or
+    // both directions, and a rejected transfer must not fail the request.
+    const samplesBuffer = new Uint8Array(
+      samples.buffer.slice(samples.byteOffset, samples.byteOffset + samples.byteLength)
     );
 
-    const { embeddingBuffer } = await onnxWorkerClient.request(
-      "speaker.extract",
-      { samplesBuffer },
-      [samplesBuffer]
-    );
+    const { embeddingBuffer } = await onnxWorkerClient.request("speaker.extract", {
+      samplesBuffer,
+    });
 
     if (!embeddingBuffer) return null;
-    return new Float32Array(embeddingBuffer);
+    return embeddingToFloat32(embeddingBuffer);
   }
 
   async extractEmbeddingFromSamples(samples) {

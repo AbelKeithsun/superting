@@ -203,7 +203,16 @@ async function speakerLoad({ modelPath }) {
 async function speakerExtract({ samplesBuffer }) {
   if (!speakerSession) throw new Error("speaker session not loaded");
 
-  const allSamples = new Float32Array(samplesBuffer);
+  // Requests may arrive with the samples either as a transferred ArrayBuffer
+  // or flattened to Uint8Array bytes by Electron's port serialization.
+  const allSamples =
+    samplesBuffer instanceof ArrayBuffer
+      ? new Float32Array(samplesBuffer)
+      : new Float32Array(
+          samplesBuffer.buffer,
+          samplesBuffer.byteOffset,
+          samplesBuffer.byteLength / 4
+        );
   const samples =
     allSamples.length > SPEAKER_MAX_SAMPLES
       ? allSamples.subarray(allSamples.length - SPEAKER_MAX_SAMPLES)
@@ -418,16 +427,21 @@ const handlers = {
 async function dispatch({ id, method, payload }) {
   const handler = handlers[method];
   if (!handler) {
-    return { reply: { id, error: { message: `unknown method: ${method}` } }, transferList: [] };
+    return { reply: { id, error: { message: `unknown method: ${method}` } } };
   }
   try {
     const result = await handler(payload || {});
-    const transferList = [];
-    if (result?.embeddingBuffer) transferList.push(result.embeddingBuffer);
-    return { reply: { id, result }, transferList };
+    if (result?.embeddingBuffer instanceof ArrayBuffer) {
+      // Electron's utilityProcess reply port rejects ArrayBuffers in the
+      // transfer list ("Port at index N is not a valid port"), so embeddings
+      // travel in the message body as bytes instead of being transferred.
+      const embeddingBuffer = new Uint8Array(result.embeddingBuffer);
+      return { reply: { id, result: { ...result, embeddingBuffer } } };
+    }
+    return { reply: { id, result } };
   } catch (err) {
     log("error", "handler threw", { method, error: err?.message, stack: err?.stack });
-    return { reply: { id, error: { message: err?.message || String(err) } }, transferList: [] };
+    return { reply: { id, error: { message: err?.message || String(err) } } };
   }
 }
 
@@ -436,10 +450,15 @@ process.on("uncaughtException", (err) => {
   process.stderr.write(`onnx worker uncaughtException: ${err?.stack || err?.message}\n`);
   process.exit(1);
 });
+// A rejected promise must not take the worker down: the parent respawns on
+// non-zero exits, but every crash also drops in-flight VAD/embedding requests
+// and pushes the client closer to giving up on the worker for the session.
 process.on("unhandledRejection", (err) => {
-  log("fatal", "unhandledRejection", { error: err?.message, stack: err?.stack });
+  log("error", "unhandledRejection (worker kept alive)", {
+    error: err?.message,
+    stack: err?.stack,
+  });
   process.stderr.write(`onnx worker unhandledRejection: ${err?.stack || err?.message}\n`);
-  process.exit(1);
 });
 
 if (!process.parentPort) {
@@ -452,8 +471,25 @@ process.parentPort.once("message", ({ data, ports }) => {
     port = ports[0];
     port.on("message", async (event) => {
       const message = event.data;
-      const { reply, transferList } = await dispatch(message);
-      port.postMessage(reply, transferList);
+      let reply;
+      try {
+        ({ reply } = await dispatch(message));
+      } catch (err) {
+        log("error", "dispatch rejected", {
+          method: message?.method,
+          error: err?.message,
+          stack: err?.stack,
+        });
+        reply = { id: message?.id, error: { message: err?.message || String(err) } };
+      }
+      try {
+        port.postMessage(reply);
+      } catch (err) {
+        log("error", "reply postMessage failed", {
+          method: message?.method,
+          error: err?.message,
+        });
+      }
     });
     port.on("close", () => {
       log("info", "port closed");
