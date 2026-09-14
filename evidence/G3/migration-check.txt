@@ -1,0 +1,31 @@
+=== 迁移回归证据 (G3/T3.6) ===
+日期: 2026-09-14  ·  DB: ~/Library/Application Support/SuperTing-development/transcriptions.db (dev 通道隔离库)
+
+1) 模拟 v2.0.4 旧数据(种子):
+   sqlite3 ... "INSERT INTO contacts ... VALUES ('zhangsan@example.com','张三'), ('lisi@example.com','李四');
+                INSERT INTO speaker_names VALUES ('王五', NULL);
+                INSERT INTO speaker_profiles VALUES ('张三','zhangsan@example.com',<512f32 embedding>,3), ('赵六',NULL,<512f32>,1);"
+   seeded|2|2|1
+
+2) 首次迁移后查询 (SELECT p.id, p.display_name, COALESCE(p.email,'-'), (SELECT COUNT(*) FROM voiceprints v WHERE v.person_id=p.id) FROM people p ORDER BY p.id;):
+1|张三|zhangsan@example.com|-|-|1
+2|李四|lisi@example.com|-|-|0
+3|赵六|-|-|-|1
+4|王五|-|-|-|0
+
+   voiceprints (id, person_id, source_profile_id, sample_count):
+1|1|1|3
+2|3|2|1
+
+3) 结论: 张三(email) 由 contacts+speaker_profiles 归并为一行且声纹样本数 3 保留; 赵六(纯名字档案)有声纹; 王五(纯名字)无声纹入库; 无重复人。
+
+4) 幂等复检(第二次重启后):
+4 people, 2 voiceprints
+   仍为 4 people / 2 voiceprints —— 迁移幂等,无重复。
+
+5) 旧表只读未动:
+contacts=2
+speaker_profiles=2
+speaker_names=1
+
+6) 修复记录: voiceprints 的 ON CONFLICT(source_profile_id) 需带部分唯一索引的 WHERE 子句,否则 profiles 循环中止(首次迁移只并了 contacts)。已修复并复测。
