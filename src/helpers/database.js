@@ -2876,7 +2876,7 @@ class DatabaseManager {
         .prepare(
           `INSERT INTO voiceprints (person_id, embedding, sample_count, source_note_id, source_profile_id)
            VALUES (?, ?, ?, ?, ?)
-           ON CONFLICT(source_profile_id) DO UPDATE SET
+           ON CONFLICT(source_profile_id) WHERE source_profile_id IS NOT NULL DO UPDATE SET
              embedding = excluded.embedding,
              sample_count = excluded.sample_count,
              person_id = excluded.person_id,
