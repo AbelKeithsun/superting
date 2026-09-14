@@ -1,0 +1,51 @@
+== G0 · 工程规约与基线 ==
+  [32mPASS[0m 分支为 codex/meeting-experience-v2.0.5（非 main）
+  [32mPASS[0m Node 主版本 24
+  [33mWARN[0m main..HEAD 无提交（可能尚未开工）
+  [32mPASS[0m package-lock.json 未被改动
+  [33mWARN[0m 工作区有未提交改动（门禁放行时建议先提交）
+  [2mINFO[0m HEAD: b01b7295 · 仓库: /Users/mac/Documents/workspace/super_listen/superting-worktrees/codex-meeting-experience-v2.0.5
+== G1 · 录音音质 ==
+  [31mFAIL[0m 缺音质档设置项 meetingAudioQuality（USE: useSettings + SettingsPage + i18n）
+  [31mFAIL[0m 未发现 48 kHz（48000）：留存采集与编码需升到 48k
+  [31mFAIL[0m audioStorage.js 仍使用 application: "voip"
+  [31mFAIL[0m ffmpegUtils.js 默认仍为 application = "voip"
+  [31mFAIL[0m audioStorage.js 仍默认 bitrate "24k"
+  [31mFAIL[0m ffmpegUtils.js 仍默认 bitrate = "24k"
+  [31mFAIL[0m ipcHandlers.js 仍以门控后的 outbound 留存音频（会丢本地人声）
+  [31mFAIL[0m connectOpts 未声明 sampleRate：Deepgram/AssemblyAI 仍按 16k 解码 24k 数据
+  [31mFAIL[0m meetingRetainedAudioWriter.js 未实现 stereo 混音策略
+  [33mWARN[0m meetingRecordingStore.ts 未见 48000（若在别处统一升采样可接受）
+  [33mWARN[0m 未见 meetingAudioMix（若用其它键名，请同步更新契约）
+== G2 · 实时编辑与错词沉淀 ==
+  [31mFAIL[0m meetingRecordingStore.ts 缺 updateSegmentText（编辑必须写 store，否则被 30s 落库盖回）
+  [31mFAIL[0m 缺 editedByUser 标记（合并保护依赖它）
+  [31mFAIL[0m retract 仍按 text 全等匹配：编辑后撤回会失效
+  [31mFAIL[0m mergeSpeakerFields 仍以 { ...incoming } 起手：会形成幽灵重复段
+  [31mFAIL[0m transcriptSpeakerState.ts 未使用 editedByUser
+  [31mFAIL[0m correctionLearner.js 缺 extractCorrectionPairs（中文学习依赖它）
+  [31mFAIL[0m 缺 applyMeetingDictionaryCorrections：沉淀的替换规则在会议里不生效
+  [31mFAIL[0m 缺 corrections-learned-quiet 事件：学习会弹听写悬浮窗
+  [31mFAIL[0m MeetingTranscriptChat.tsx 缺 data-live-transcript-editable 钩子（实时编辑入口）
+  [31mFAIL[0m ipcHandlers.js 无 keyterms：会议云端 ASR 不吃热词
+  [31mFAIL[0m 缺 meeting-live-edit 学习来源白名单
+== G3 · 联系人档案与声纹 ==
+  [31mFAIL[0m database.js 缺 people 表
+  [31mFAIL[0m database.js 缺 voiceprints 表
+  [31mFAIL[0m 缺 organization 字段
+  [31mFAIL[0m 缺 phone 字段
+  [31mFAIL[0m NoteParticipants.tsx 未使用 personId
+  [31mFAIL[0m NoteParticipants.tsx 仍以 search.includes("@") 作为添加门槛：名字无法添加
+  [31mFAIL[0m preload.js 未暴露 people-list
+  [31mFAIL[0m ipcHandlers.js 未实现 people-list
+  [31mFAIL[0m 代码中未见 personId
+== G4 · 集成与交付 ==
+      en 缺前缀: notes.transcript.liveEdit., notes.audioQuality., contacts.
+  [31mFAIL[0m i18n 前缀缺失（见上）
+  [32mPASS[0m 10 个语言文件 key 集合与 en 完全一致
+  [31mFAIL[0m 分支相对 main 无提交
+  [33mWARN[0m CHANGELOG 尚无 [2.0.5] 条目（发版步骤补）
+  [2mINFO[0m 跳过构建（设 RUN_BUILD=1 可执行）
+
+结果：[32mPASS 4[0m · [31mFAIL 31[0m · [33mWARN 5[0m
+门禁结论：FAIL —— 不得声明完成；请按上方 FAIL 项修复后重跑。
