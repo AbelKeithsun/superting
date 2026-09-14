@@ -416,6 +416,7 @@ function SpeakerLabel({
   participants,
   colorIdx,
   isOriginallyYou,
+  fallbackLabel,
   onMap,
   onMapSegment,
   onConfirm,
@@ -430,6 +431,8 @@ function SpeakerLabel({
   participants?: Array<{ email?: string | null; displayName: string | null; personId?: number }>;
   colorIdx: number;
   isOriginallyYou: boolean;
+  /** Label shown while no name is mapped (e.g. speaker-less pending segments). */
+  fallbackLabel?: string;
   onMap?: (
     speakerId: string,
     name: string,
@@ -493,7 +496,7 @@ function SpeakerLabel({
     mappedName ||
     (isOriginallyYou
       ? t("notes.speaker.you")
-      : t("notes.speaker.label", { n: getSpeakerNumber(speakerId) }));
+      : fallbackLabel ?? t("notes.speaker.label", { n: getSpeakerNumber(speakerId) }));
   const isUnmapped = !mappedName && !segment.speakerName;
 
   return (
@@ -522,16 +525,16 @@ function SpeakerLabel({
           speakerProfiles={speakerProfiles}
           participants={participants}
           onSelectName={(name, email, profileId, targetSpeakerId) => {
-            if (bulkEditSpeaker || !onMapSegment) {
-              onMap?.(speakerId, name, email, profileId, targetSpeakerId);
-            } else {
+            if (onMap && (bulkEditSpeaker || !onMapSegment)) {
+              onMap(speakerId, name, email, profileId, targetSpeakerId);
+            } else if (onMapSegment) {
               onMapSegment(segment.id, name, email, profileId);
             }
             setOpen(false);
           }}
           t={t}
         />
-        {onMapSegment && (
+        {onMap && onMapSegment && (
           <div className="border-t border-border/40 px-3 py-2">
             <label className="flex items-center gap-2 text-xs text-foreground/65 cursor-pointer">
               <input
@@ -978,6 +981,19 @@ export function MeetingTranscriptChat({
                     onMapSegment={onMapSegmentSpeaker}
                     onConfirm={onConfirmSuggestion}
                     onDismiss={onDismissSuggestion}
+                    variant="inline"
+                    t={t}
+                  />
+                ) : onMapSegmentSpeaker ? (
+                  <SpeakerLabel
+                    speakerId={`pending-${segment.id}`}
+                    segment={segment}
+                    speakerProfiles={speakerProfiles}
+                    participants={participants}
+                    colorIdx={colorIdx}
+                    isOriginallyYou={isOriginallyYou}
+                    fallbackLabel={fallbackSpeakerLabel}
+                    onMapSegment={onMapSegmentSpeaker}
                     variant="inline"
                     t={t}
                   />

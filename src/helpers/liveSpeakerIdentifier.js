@@ -591,6 +591,9 @@ class LiveSpeakerIdentifier {
     if (samples.length < MIN_SEGMENT_SAMPLES) {
       return;
     }
+    debugLogger.debug("Live speaker speech segment finalized", {
+      seconds: Number((samples.length / SAMPLE_RATE).toFixed(1)),
+    });
 
     const embedding = await speakerEmbeddings.extractEmbeddingFromSamples(
       selectBestEmbeddingWindow(samples)

@@ -1,0 +1,44 @@
+[harness] app ready
+[harness] diarization manager set; vadModel=/Users/mac/.cache/superting/diarization-models/silero_vad.onnx; downloaded=true
+[harness] calling start()...
+[harness] STARTED true
+[harness] worker request: speaker.load
+[harness] fed 20 chunks (10.0s audio)
+[harness] worker request: speaker.extract
+[harness] IDENTIFIED speaker_0 0.00-2.73
+[harness] worker request: speaker.extract
+[harness] IDENTIFIED speaker_0 0.00-3.79
+[harness] worker request: speaker.extract
+[harness] IDENTIFIED speaker_0 0.00-4.85
+[harness] worker request: speaker.extract
+[harness] fed 40 chunks (20.0s audio)
+[harness] IDENTIFIED speaker_0 0.00-6.09
+[harness] worker request: speaker.extract
+[harness] IDENTIFIED speaker_0 0.00-7.18
+[harness] worker request: speaker.extract
+[harness] IDENTIFIED speaker_1 6.90-10.70
+[harness] worker request: speaker.extract
+[harness] IDENTIFIED speaker_2 9.62-12.72
+[harness] worker request: speaker.extract
+[harness] IDENTIFIED speaker_2 14.71-17.90
+[harness] worker request: speaker.extract
+[harness] fed 60 chunks (30.0s audio)
+[harness] IDENTIFIED speaker_2 14.71-19.31
+[harness] worker request: speaker.extract
+[harness] IDENTIFIED speaker_1 27.63-31.25
+[harness] worker request: speaker.extract
+[harness] IDENTIFIED speaker_2 29.84-32.85
+[harness] worker request: speaker.extract
+[harness] IDENTIFIED speaker_2 31.63-34.86
+[harness] worker request: speaker.extract
+[harness] IDENTIFIED speaker_2 31.63-36.46
+[harness] fed 80 chunks (40.0s audio)
+[harness] worker request: speaker.extract
+[harness] IDENTIFIED speaker_1 40.11-43.79
+[harness] worker request: speaker.extract
+[harness] feeding done (90 chunks); draining queue...
+[harness] IDENTIFIED speaker_2 42.42-45.55
+[harness] worker request: speaker.extract
+[harness] IDENTIFIED speaker_2 42.42-45.74
+[harness] EVENTS 16 WORKER_CALLS speaker.load,speaker.extract,speaker.extract,speaker.extract,speaker.extract,speaker.extract,speaker.extract,speaker.extract,speaker.extract,speaker.extract,speaker.extract,speaker.extract,speaker.extract,speaker.extract,speaker.extract,speaker.extract,speaker.extract STATE_SPEAKERS 3
+[harness] LIVE_ID_HARNESS_PASS

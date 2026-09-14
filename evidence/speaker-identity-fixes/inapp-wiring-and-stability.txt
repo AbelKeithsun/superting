@@ -1,0 +1,13 @@
+=== in-app Fix1 wiring proof (dev app, 2026-09-14T15:44 local run) ===
+}
+[2026-09-14T15:44:23.525Z] [INFO] Live speaker identification startup {
+  "started": true,
+  "systemAudioMode": "native",
+  "path": "local"
+}
+[2026-09-14T15:44:23.546Z] [INFO][meeting][renderer] Mic capture started for meeting transcription {
+
+=== Fix3 under 20-min real load: worker log crash/fatal count ===
+2
+=== worker vad.segment calls while meeting live ===
+13
