@@ -75,7 +75,7 @@ import DeveloperSection from "./DeveloperSection";
 import ChatAgentSettings from "./settings/ChatAgentSettings";
 import DictationAgentSettings from "./settings/DictationAgentSettings";
 import InferenceConfigEditor from "./settings/InferenceConfigEditor";
-import { MeetingTranscriptionPanel } from "./settings/MeetingSettings";
+import { MeetingTranscriptionPanel, MeetingAudioQualityPanel } from "./settings/MeetingSettings";
 import LanguageSelector from "./ui/LanguageSelector";
 import { Skeleton } from "./ui/skeleton";
 import { Progress } from "./ui/progress";
@@ -2969,6 +2969,13 @@ EOF`,
             renderNoteRecording={() => (
               <div className="space-y-6">
                 <MeetingTranscriptionPanel />
+                <div className="border-t border-border/40 pt-6">
+                  <SectionHeader
+                    title={t("notes.audioQuality.title")}
+                    description={t("notes.audioQuality.qualityDescription")}
+                  />
+                  <MeetingAudioQualityPanel />
+                </div>
                 {transcriptionMode === "local" &&
                   localTranscriptionProvider === "whisper" &&
                   renderWhisperVadSettings()}

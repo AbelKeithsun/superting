@@ -1982,7 +1982,21 @@
       "unmatchedSpeaker": "未匹配说话人"
     },
     "collapseNoteList": "收起笔记列表",
-    "expandNoteList": "展开笔记列表"
+    "expandNoteList": "展开笔记列表",
+    "audioQuality": {
+      "title": "会议录音音质",
+      "qualityLabel": "录音音质",
+      "qualityDescription": "仅对新会议录音生效。",
+      "standard": "标准（48 kHz · 64 kbps）",
+      "high": "高保真（48 kHz · 128 kbps）",
+      "lossless": "无损 WAV（48 kHz · 16 位）",
+      "mixLabel": "混音策略",
+      "mixDescription": "录音中麦克风与系统音频的混合方式。",
+      "mixStereo": "双声道（麦克风左声道 · 系统右声道）",
+      "mixMono": "单声道混合",
+      "mixSystemPriority": "系统优先",
+      "newRecordingsOnly": "音质设置仅对新录音生效，历史录音不会重新编码。"
+    }
   },
   "dictionary": {
     "addWord": "添加词语",

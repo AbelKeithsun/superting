@@ -456,10 +456,10 @@ function makeTempPath(suffix) {
 function _buildOpusEncodeArgs({
   input,
   output,
-  bitrate = "24k",
-  sampleRate = 24000,
-  channels = 1,
-  application = "voip",
+  bitrate = "128k",
+  sampleRate = 48000,
+  channels = 2,
+  application = "audio",
 } = {}) {
   if (!input) throw new Error("_buildOpusEncodeArgs requires `input`");
   if (!output) throw new Error("_buildOpusEncodeArgs requires `output`");
@@ -488,10 +488,10 @@ function _buildOpusEncodeArgs({
 function _buildConcatEncodeArgs({
   listFile,
   output,
-  bitrate = "24k",
-  sampleRate = 24000,
-  channels = 1,
-  application = "voip",
+  bitrate = "128k",
+  sampleRate = 48000,
+  channels = 2,
+  application = "audio",
 } = {}) {
   if (!listFile) throw new Error("_buildConcatEncodeArgs requires `listFile`");
   if (!output) throw new Error("_buildConcatEncodeArgs requires `output`");

@@ -22,8 +22,17 @@ function buildMeetingAudioFilename(noteId, timestamp) {
   return `SuperTing-meeting-${formatTimestamp(timestamp)}-${noteId}.webm`;
 }
 
-function buildMeetingWavFallbackFilename(noteId, timestamp) {
-  return `SuperTing-meeting-${formatTimestamp(timestamp)}-${noteId}.wav`;
+function buildMeetingWavFallbackFilename(noteId, timestamp, { lossless = false } = {}) {
+  const suffix = lossless ? "-lossless" : "";
+  return `SuperTing-meeting-${formatTimestamp(timestamp)}-${noteId}${suffix}.wav`;
+}
+
+// Lossless recordings are a deliberate user choice; the "-lossless" marker
+// lets automatic compression skip them permanently.
+function isLosslessAudioFilename(filename) {
+  return String(filename || "")
+    .toLowerCase()
+    .endsWith("-lossless.wav");
 }
 
 function buildMergedMeetingAudioFilename(noteId, timestamp) {
@@ -37,11 +46,11 @@ function buildUploadAudioFilename(noteId, timestamp, extension = ".wav") {
 
 function parseMeetingAudioFilename(filename) {
   const match = String(filename || "").match(
-    /^SuperTing-meeting-(merged-)?(\d{4})-(\d{2})-(\d{2})-(\d{2})-(\d{2})-(\d{2})-(\d+)\.(wav|webm)$/i
+    /^SuperTing-meeting-(merged-)?(\d{4})-(\d{2})-(\d{2})-(\d{2})-(\d{2})-(\d{2})-(\d+)(-lossless)?\.(wav|webm)$/i
   );
   if (!match) return null;
 
-  const [, merged, year, month, day, hour, minute, second, noteId] = match;
+  const [, merged, year, month, day, hour, minute, second, noteId, lossless] = match;
   return {
     noteId: Number(noteId),
     recordedAt: new Date(
@@ -53,6 +62,7 @@ function parseMeetingAudioFilename(filename) {
       Number(second)
     ).toISOString(),
     isMerged: !!merged,
+    isLossless: !!lossless,
   };
 }
 
@@ -101,6 +111,7 @@ module.exports = {
   buildMeetingWavFallbackFilename,
   buildUploadAudioFilename,
   isDictationAudioFile,
+  isLosslessAudioFilename,
   isRetainedAudioFile,
   parseMeetingAudioFilename,
   resolveRetainedAudioPath,

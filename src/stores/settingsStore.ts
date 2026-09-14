@@ -48,6 +48,24 @@ function syncAudioRetentionDaysToMain(days: number): void {
   });
 }
 
+function syncMeetingAudioSettingsToMain(state: {
+  meetingAudioQuality: string;
+  meetingAudioMix: string;
+}): void {
+  if (!isBrowser) return;
+  const syncPromise = window.electronAPI?.setMeetingAudioSettings?.({
+    quality: state.meetingAudioQuality,
+    mix: state.meetingAudioMix,
+  });
+  void syncPromise?.catch?.((error: Error) => {
+    logger.warn(
+      "Failed to sync meeting audio settings to main process",
+      { error: error.message },
+      "settings"
+    );
+  });
+}
+
 function readString(key: string, fallback: string): string {
   if (!isBrowser) return fallback;
   return localStorage.getItem(key) ?? fallback;
@@ -633,6 +651,8 @@ export interface SettingsState
   setTelemetryEnabled: (value: boolean) => void;
   setAudioRetentionDays: (days: number) => void;
   setDataRetentionEnabled: (value: boolean) => void;
+  setMeetingAudioQuality: (value: "standard" | "high" | "lossless") => void;
+  setMeetingAudioMix: (value: "stereo" | "mix" | "system-priority") => void;
   setAudioCuesEnabled: (value: boolean) => void;
   setPauseMediaOnDictation: (value: boolean) => void;
   setFloatingIconAutoHide: (enabled: boolean) => void;
@@ -870,6 +890,14 @@ export const useSettingsStore = create<SettingsState>()((set, get) => ({
     return normalizeAudioRetentionDays(stored);
   })(),
   dataRetentionEnabled: readBoolean("dataRetentionEnabled", true),
+  meetingAudioQuality: (() => {
+    const v = readString("meetingAudioQuality", "high");
+    return v === "standard" || v === "high" || v === "lossless" ? v : "high";
+  })(),
+  meetingAudioMix: (() => {
+    const v = readString("meetingAudioMix", "stereo");
+    return v === "stereo" || v === "mix" || v === "system-priority" ? v : "stereo";
+  })(),
   audioCuesEnabled: readBoolean("audioCuesEnabled", true),
   pauseMediaOnDictation: readBoolean("pauseMediaOnDictation", false),
   floatingIconAutoHide: readBoolean("floatingIconAutoHide", false),
@@ -1326,6 +1354,20 @@ export const useSettingsStore = create<SettingsState>()((set, get) => ({
       "settings"
     );
   },
+  setMeetingAudioQuality: (value: "standard" | "high" | "lossless") => {
+    const next =
+      value === "standard" || value === "high" || value === "lossless" ? value : "high";
+    if (isBrowser) localStorage.setItem("meetingAudioQuality", next);
+    set({ meetingAudioQuality: next });
+    syncMeetingAudioSettingsToMain(get());
+  },
+  setMeetingAudioMix: (value: "stereo" | "mix" | "system-priority") => {
+    const next =
+      value === "stereo" || value === "mix" || value === "system-priority" ? value : "stereo";
+    if (isBrowser) localStorage.setItem("meetingAudioMix", next);
+    set({ meetingAudioMix: next });
+    syncMeetingAudioSettingsToMain(get());
+  },
   setAudioCuesEnabled: createBooleanSetter("audioCuesEnabled"),
   setPauseMediaOnDictation: createBooleanSetter("pauseMediaOnDictation"),
 
@@ -1778,6 +1820,7 @@ export async function initializeSettings(): Promise<void> {
 
   const state = useSettingsStore.getState();
   syncAudioRetentionDaysToMain(state.audioRetentionDays);
+  syncMeetingAudioSettingsToMain(state);
 
   if (window.electronAPI) {
     try {

@@ -1576,6 +1576,8 @@ declare global {
         noteId?: number | null;
         dataRetentionEnabled?: boolean;
         audioRetentionDays?: number;
+        meetingAudioQuality?: "standard" | "high" | "lossless";
+        meetingAudioMix?: "stereo" | "mix" | "system-priority";
         customDictionary?: string[];
         customDictionaryAliases?: Array<{ from: string; to: string }>;
       }) => Promise<{
@@ -1589,6 +1591,11 @@ declare global {
         audioPath?: string;
       }>;
       meetingTranscriptionSend?: (buffer: ArrayBuffer, source: "mic" | "system") => void;
+      meetingRetentionAudioSend?: (buffer: ArrayBuffer, source: "mic" | "system") => void;
+      setMeetingAudioSettings?: (settings: {
+        quality: string;
+        mix: string;
+      }) => Promise<{ success: boolean; quality: string; mix: string }>;
       meetingTranscriptionStop?: () => Promise<{
         success: boolean;
         transcript?: string;

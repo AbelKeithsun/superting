@@ -1978,7 +1978,21 @@
       "unmatchedSpeaker": "Unmatched speaker"
     },
     "collapseNoteList": "ノートリストを折りたたむ",
-    "expandNoteList": "ノートリストを展開"
+    "expandNoteList": "ノートリストを展開",
+    "audioQuality": {
+      "title": "会議録音品質",
+      "qualityLabel": "録音品質",
+      "qualityDescription": "新しい会議録音にのみ適用されます。",
+      "standard": "標準（48 kHz・64 kbps）",
+      "high": "ハイファイ（48 kHz・128 kbps）",
+      "lossless": "ロスレス WAV（48 kHz・16 ビット）",
+      "mixLabel": "ミックス方式",
+      "mixDescription": "録音時のマイクとシステム音声の混合方法。",
+      "mixStereo": "ステレオ（マイク左・システム右）",
+      "mixMono": "モノラルミックス",
+      "mixSystemPriority": "システム優先",
+      "newRecordingsOnly": "品質設定は新しい録音にのみ適用され、既存の録音は再エンコードされません。"
+    }
   },
   "dictionary": {
     "addWord": "単語を追加",

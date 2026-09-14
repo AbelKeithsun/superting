@@ -22,7 +22,11 @@ const { i18nMain, changeLanguage } = require("./i18nMain");
 const DeepgramStreaming = require("./deepgramStreaming");
 const OpenAIRealtimeStreaming = require("./openaiRealtimeStreaming");
 const AudioStorageManager = require("./audioStorage");
-const { buildAudioDownloadFilename, buildUploadAudioFilename } = require("./audioStorageFiles");
+const {
+  buildAudioDownloadFilename,
+  buildUploadAudioFilename,
+  isLosslessAudioFilename,
+} = require("./audioStorageFiles");
 const liveSpeakerIdentifier = require("./liveSpeakerIdentifier");
 const MeetingEchoLeakDetector = require("./meetingEchoLeakDetector");
 const MeetingRetainedAudioWriter = require("./meetingRetainedAudioWriter");
@@ -467,6 +471,11 @@ class IPCHandlers {
     this.audioStorageManager = new AudioStorageManager();
     this._audioCleanupInterval = null;
     this._audioRetentionDays = null;
+    // Meeting audio quality tier (standard | high | lossless) and mix strategy
+    // (stereo | mix | system-priority), synced from renderer settings and
+    // overridden per meeting via meeting-transcription-start options.
+    this.meetingAudioQuality = "high";
+    this.meetingAudioMix = "stereo";
     this._noteFilesEnabled = false;
     this._noteAudioProtocolTokens = new Map();
     require("./markdownMirror").setDatabaseManager(this.databaseManager);
@@ -510,6 +519,9 @@ class IPCHandlers {
   async _compressNoteAudioAfterDiarization(noteId, filename) {
     if (!noteId || !filename || path.extname(filename).toLowerCase() === ".webm") {
       return { success: true, skipped: true };
+    }
+    if (isLosslessAudioFilename(filename)) {
+      return { success: true, skipped: true, skippedLossless: true };
     }
 
     try {
@@ -5599,7 +5611,10 @@ class IPCHandlers {
         return { success: false, error: "No meeting retained audio captured" };
       }
       try {
-        const result = await writer.finalize(options);
+        const result = await writer.finalize({
+          ...options,
+          mixStrategy: meetingSessionAudioMix,
+        });
         return {
           ...result,
           cleanup: () => writer.cleanup(),
@@ -5630,8 +5645,9 @@ class IPCHandlers {
           retainedAudio.pcmPath,
           retainedAudio.startedAt,
           {
-            sampleRate: 24000,
-            channels: 1,
+            sampleRate: retainedAudio.sampleRate || 24000,
+            channels: retainedAudio.channels || 1,
+            lossless: meetingSessionAudioQuality === "lossless",
           }
         );
         if (!result.success) {
@@ -5985,6 +6001,9 @@ class IPCHandlers {
         model: options.model,
         language: options.language,
         preconfigured: options.mode !== "byok",
+        // The renderer feeds 24 kHz PCM on the ASR path; Deepgram/AssemblyAI
+        // default to a 16 kHz declaration and mis-decode without this.
+        sampleRate: 24000,
       };
       meetingRealtimeProvider = options.provider || "openai-realtime";
       meetingRealtimeModel = options.model || null;
@@ -6084,23 +6103,38 @@ class IPCHandlers {
     let meetingOneOnOneProfileBound = false;
     let meetingNoteId = null;
     let meetingShouldRetainAudio = true;
+    // Session audio settings (from meeting-transcription-start options).
+    let meetingSessionAudioQuality = "high";
+    let meetingSessionAudioMix = "stereo";
+    // Sources covered by the renderer's dedicated 48 kHz retention pipeline;
+    // when present, the main-process 24 kHz fallback retention stands down for
+    // that source so retention is never written twice or downgraded.
+    const meetingRetentionRendererSources = new Set();
+
+    const MEETING_AUDIO_QUALITY_TIERS = new Set(["standard", "high", "lossless"]);
+    const MEETING_AUDIO_MIX_STRATEGIES = new Set(["stereo", "mix", "system-priority"]);
 
     const ensureMeetingRetainedAudioWriter = () => {
       if (!meetingShouldRetainAudio) return null;
       if (!meetingRetainedAudioWriter) {
         meetingRetainedAudioWriter = new MeetingRetainedAudioWriter({
-          sampleRate: 24000,
-          channels: 1,
+          sampleRate: 48000,
+          mixStrategy: meetingSessionAudioMix,
           debugLogger,
         });
       }
       return meetingRetainedAudioWriter;
     };
 
-    const retainMeetingAudioChunk = (source, buffer) => {
+    // Retention path: always the UNgated signal. The renderer's dedicated
+    // 48 kHz pipeline (meeting-retention-audio-send) owns a source once it
+    // delivers chunks; the dispatch-path fallback then stands down for it.
+    const writeRetainedMeetingAudio = (source, buffer, inputSampleRate = 24000) => {
+      if (!meetingShouldRetainAudio) return;
+      if (meetingRetentionRendererSources.has(source)) return;
       const writer = ensureMeetingRetainedAudioWriter();
       if (!writer) return;
-      writer.writeChunk(source, buffer, Date.now());
+      writer.writeChunk(source, buffer, Date.now(), inputSampleRate);
     };
 
     const getLiveSpeakerProfiles = () => {
@@ -6169,9 +6203,9 @@ class IPCHandlers {
       }
     };
 
-    const dispatchMeetingAudioBuffer = (buffer, source) => {
+    const dispatchMeetingAudioBuffer = (buffer, source, { retain = true } = {}) => {
       if (meetingLocalMode) {
-        retainMeetingAudioChunk(source, buffer);
+        if (retain) writeRetainedMeetingAudio(source, buffer);
         meetingLocalBuffers[source].push(buffer);
         return;
       }
@@ -6222,7 +6256,10 @@ class IPCHandlers {
         }
       }
 
-      retainMeetingAudioChunk(source, outbound);
+      // Retention writes the pre-gate buffer; only the ASR stream receives the
+      // gated/zeroed signal so echo-bleed muting never erases local speech
+      // from the archived audio.
+      if (retain) writeRetainedMeetingAudio(source, buffer);
       const sent = streaming.sendAudio(outbound);
       meetingSendCounts[source]++;
       if (meetingSendCounts[source] <= 5 || meetingSendCounts[source] % 100 === 0) {
@@ -6316,8 +6353,13 @@ class IPCHandlers {
           continue;
         }
         if (analysis?.shouldMute && !meetingAecEnabled) {
+          // Gated chunk: retention keeps the original mic signal; the ASR
+          // path receives zeros (cloud) or is skipped entirely (local).
+          writeRetainedMeetingAudio("mic", next.buffer);
           if (!meetingLocalMode) {
-            dispatchMeetingAudioBuffer(Buffer.alloc(next.buffer.length), "mic");
+            dispatchMeetingAudioBuffer(Buffer.alloc(next.buffer.length), "mic", {
+              retain: false,
+            });
           }
           continue;
         }
@@ -6704,6 +6746,9 @@ class IPCHandlers {
       meetingOneOnOneProfileBound = false;
       meetingNoteId = null;
       meetingShouldRetainAudio = true;
+      meetingSessionAudioQuality = "high";
+      meetingSessionAudioMix = "stereo";
+      meetingRetentionRendererSources.clear();
       meetingLocalMode = false;
       meetingLocalBuffers = { mic: [], system: [] };
       if (meetingDiarizationStream) {
@@ -6884,6 +6929,13 @@ class IPCHandlers {
       meetingStartedAt = Date.now();
       meetingNormalizationLanguage =
         options.scriptLanguage || options.normalizationLanguage || options.language || null;
+      meetingSessionAudioQuality = MEETING_AUDIO_QUALITY_TIERS.has(options.meetingAudioQuality)
+        ? options.meetingAudioQuality
+        : this.meetingAudioQuality || "high";
+      meetingSessionAudioMix = MEETING_AUDIO_MIX_STRATEGIES.has(options.meetingAudioMix)
+        ? options.meetingAudioMix
+        : this.meetingAudioMix || "stereo";
+      meetingRetentionRendererSources.clear();
       meetingCustomDictionary = Array.isArray(options.customDictionary)
         ? options.customDictionary.slice()
         : [];
@@ -7048,8 +7100,13 @@ class IPCHandlers {
         if (!hasNativeMeetingSystemAudio()) {
           const analysis = meetingEchoLeakDetector.analyzeMicChunk(outboundBuffer);
           if (analysis?.shouldMute && !meetingAecEnabled) {
+            // Gated chunk: retention keeps the original mic signal; the ASR
+            // path receives zeros (cloud) or is skipped entirely (local).
+            writeRetainedMeetingAudio("mic", outboundBuffer);
             if (!meetingLocalMode) {
-              dispatchMeetingAudioBuffer(Buffer.alloc(outboundBuffer.length), "mic");
+              dispatchMeetingAudioBuffer(Buffer.alloc(outboundBuffer.length), "mic", {
+                retain: false,
+              });
             }
             return;
           }
@@ -7152,6 +7209,31 @@ class IPCHandlers {
 
     ipcMain.on("meeting-transcription-send", (_event, audioBuffer, source) => {
       sendMeetingAudio(audioBuffer, source);
+    });
+
+    // Dedicated 48 kHz retention channel from the renderer — fully bypasses
+    // the ASR gating path so archived audio is always the raw capture.
+    ipcMain.on("meeting-retention-audio-send", (_event, audioBuffer, source) => {
+      if (source !== "mic" && source !== "system") return;
+      if (!meetingShouldRetainAudio) return;
+      const writer = ensureMeetingRetainedAudioWriter();
+      if (!writer) return;
+      meetingRetentionRendererSources.add(source);
+      writer.writeChunk(source, Buffer.from(audioBuffer), Date.now(), 48000);
+    });
+
+    ipcMain.handle("set-meeting-audio-settings", async (_event, settings = {}) => {
+      if (MEETING_AUDIO_QUALITY_TIERS.has(settings.quality)) {
+        this.meetingAudioQuality = settings.quality;
+      }
+      if (MEETING_AUDIO_MIX_STRATEGIES.has(settings.mix)) {
+        this.meetingAudioMix = settings.mix;
+      }
+      return {
+        success: true,
+        quality: this.meetingAudioQuality,
+        mix: this.meetingAudioMix,
+      };
     });
 
     const buildMeetingStopResult = ({

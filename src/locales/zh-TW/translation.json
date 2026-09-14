@@ -1978,7 +1978,21 @@
       "unmatchedSpeaker": "未匹配說話人"
     },
     "collapseNoteList": "收合筆記列表",
-    "expandNoteList": "展開筆記列表"
+    "expandNoteList": "展開筆記列表",
+    "audioQuality": {
+      "title": "會議錄音音質",
+      "qualityLabel": "錄音音質",
+      "qualityDescription": "僅對新會議錄音生效。",
+      "standard": "標準（48 kHz · 64 kbps）",
+      "high": "高保真（48 kHz · 128 kbps）",
+      "lossless": "無損 WAV（48 kHz · 16 位元）",
+      "mixLabel": "混音策略",
+      "mixDescription": "錄音中麥克風與系統音訊的混合方式。",
+      "mixStereo": "雙聲道（麥克風左聲道 · 系統右聲道）",
+      "mixMono": "單聲道混合",
+      "mixSystemPriority": "系統優先",
+      "newRecordingsOnly": "音質設定僅對新錄音生效，歷史錄音不會重新編碼。"
+    }
   },
   "dictionary": {
     "addWord": "新增詞語",

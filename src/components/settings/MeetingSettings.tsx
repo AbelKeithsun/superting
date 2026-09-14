@@ -148,3 +148,52 @@ export function MeetingTranscriptionPanel() {
     </div>
   );
 }
+
+export function MeetingAudioQualityPanel() {
+  const { t } = useTranslation();
+  const meetingAudioQuality = useSettingsStore((s) => s.meetingAudioQuality);
+  const meetingAudioMix = useSettingsStore((s) => s.meetingAudioMix);
+  const setMeetingAudioQuality = useSettingsStore((s) => s.setMeetingAudioQuality);
+  const setMeetingAudioMix = useSettingsStore((s) => s.setMeetingAudioMix);
+
+  const selectClass =
+    "h-7 rounded border border-border/70 bg-surface-1/80 px-2.5 text-xs font-medium text-foreground shadow-sm hover:border-border-hover hover:bg-surface-2/70 focus:outline-none focus:ring-2 focus:ring-ring/30 focus:ring-offset-1 transition-colors duration-200 max-w-[220px]";
+
+  return (
+    <div className="space-y-3">
+      <SettingsRow
+        label={t("notes.audioQuality.qualityLabel")}
+        description={t("notes.audioQuality.qualityDescription")}
+      >
+        <select
+          value={meetingAudioQuality}
+          onChange={(e) => setMeetingAudioQuality(e.target.value as "standard" | "high" | "lossless")}
+          className={selectClass}
+        >
+          <option value="standard">{t("notes.audioQuality.standard")}</option>
+          <option value="high">{t("notes.audioQuality.high")}</option>
+          <option value="lossless">{t("notes.audioQuality.lossless")}</option>
+        </select>
+      </SettingsRow>
+      <SettingsRow
+        label={t("notes.audioQuality.mixLabel")}
+        description={t("notes.audioQuality.mixDescription")}
+      >
+        <select
+          value={meetingAudioMix}
+          onChange={(e) =>
+            setMeetingAudioMix(e.target.value as "stereo" | "mix" | "system-priority")
+          }
+          className={selectClass}
+        >
+          <option value="stereo">{t("notes.audioQuality.mixStereo")}</option>
+          <option value="mix">{t("notes.audioQuality.mixMono")}</option>
+          <option value="system-priority">{t("notes.audioQuality.mixSystemPriority")}</option>
+        </select>
+      </SettingsRow>
+      <p className="text-xs text-muted-foreground/80 px-1">
+        {t("notes.audioQuality.newRecordingsOnly")}
+      </p>
+    </div>
+  );
+}
