@@ -6,6 +6,7 @@ const REQUEST_TIMEOUT_MS = 30_000;
 const MAX_PENDING_REQUESTS = 1000;
 const RESPAWN_BACKOFF_MS = [1000, 2000, 4000, 8000, 16000, 30000];
 const MAX_RESPAWN_ATTEMPTS = 5;
+const GAVE_UP_COOLDOWN_MS = 60_000;
 const SHUTDOWN_TIMEOUT_MS = 5000;
 
 const WORKER_SCRIPT = path.join(__dirname, "..", "workers", "onnxWorker.js");
@@ -145,8 +146,23 @@ class OnnxWorkerClient {
     if (code !== 0) {
       this.crashCount += 1;
       if (this.crashCount > MAX_RESPAWN_ATTEMPTS) {
+        // Back off instead of giving up for the rest of the session: after a
+        // cooldown, allow a fresh burst of attempts so VAD/embeddings recover
+        // from an early crash storm (e.g. a poisoned first request).
         this.gaveUp = true;
-        debugLogger.error("onnx worker giving up", { crashCount: this.crashCount });
+        debugLogger.error("onnx worker backing off after repeated crashes", {
+          crashCount: this.crashCount,
+          cooldownMs: GAVE_UP_COOLDOWN_MS,
+        });
+        this.respawnTimer = setTimeout(() => {
+          this.respawnTimer = null;
+          this.gaveUp = false;
+          this.crashCount = Math.max(1, MAX_RESPAWN_ATTEMPTS - 1);
+          debugLogger.info("onnx worker retrying after crash cooldown");
+          this._spawn().catch((spawnErr) => {
+            debugLogger.error("onnx worker respawn failed", { error: spawnErr?.message });
+          });
+        }, GAVE_UP_COOLDOWN_MS);
         return;
       }
       const delay =

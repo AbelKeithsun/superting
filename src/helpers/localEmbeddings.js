@@ -3,6 +3,7 @@ const os = require("os");
 const path = require("path");
 const debugLogger = require("./debugLogger");
 const onnxWorkerClient = require("./onnxWorkerClient");
+const { embeddingToFloat32 } = require("./embeddingTransfer");
 
 const MODEL_SUBDIR = "all-MiniLM-L6-v2";
 
@@ -70,7 +71,7 @@ class LocalEmbeddings {
   async embedText(text) {
     await this._ensureLoaded();
     const { embeddingBuffer } = await onnxWorkerClient.request("text.embed", { text });
-    return new Float32Array(embeddingBuffer);
+    return embeddingToFloat32(embeddingBuffer);
   }
 
   async embedTexts(texts) {
