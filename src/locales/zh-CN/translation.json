@@ -2000,6 +2000,7 @@
       "unmatchedSpeaker": "未匹配说话人",
       "contactCreatedToast": "已新建联系人 {{name}}，可在 词典 → 联系人 中管理",
       "contactLinkedToast": "已关联到联系人 {{name}}",
+      "voiceprintEnrolledToast": "已从本场会议音频提取 {{name}} 的声纹，可在 词典 → 联系人 中试听校准",
       "contactResolveTitle": "发现同名联系人",
       "contactResolveTitleExact": "检测到同名联系人",
       "contactResolveDescription": "标记的「{{name}}」与以下联系人可能相同，请选择如何处理：",

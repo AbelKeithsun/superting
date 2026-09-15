@@ -785,6 +785,9 @@ export default function NoteEditor({
       ) => void)
     | null
   >(null);
+  // Speakers whose voiceprint enrollment is currently running (or done) for
+  // this note, so repeated marks do not queue duplicate extraction work.
+  const voiceprintEnrollmentsRef = useRef<Set<string>>(new Set());
   const [rediarizeMode, setRediarizeMode] = useState<RediarizeSpeakerMode>("auto");
   const [rediarizeExpectedCount, setRediarizeExpectedCount] = useState(3);
   const [showRediarizeAdvanced, setShowRediarizeAdvanced] = useState(false);
@@ -1394,21 +1397,54 @@ export default function NoteEditor({
     [recordingStartedAt, transcriptAudioDurationSeconds, visibleTranscriptSegments]
   );
 
-  // A speaker group is "already named" when the marked name is the one it
-  // currently renders; re-marking the same person must not re-open the contact
-  // resolution dialog (the identity is already established).
-  const isSpeakerAlreadyNamed = useCallback(
-    (speakerId: string, displayName: string) => {
-      const normalized = displayName.trim().toLowerCase();
-      if (!normalized) return false;
-      if ((speakerMappings[speakerId] ?? "").trim().toLowerCase() === normalized) return true;
-      return displaySegments.some(
-        (segment) =>
-          segment.speaker === speakerId &&
-          (segment.speakerName ?? "").trim().toLowerCase() === normalized
-      );
+  // A manual mark carries no speaker embedding, so nothing would reach the
+  // contact's voiceprint (联系人 showed a name with no auditionable sample).
+  // Extract one from the note's own audio in the background once the mark is
+  // linked to a person.
+  const enrollSpeakerVoiceprint = useCallback(
+    async ({
+      speakerId,
+      displayName,
+      email,
+      profileId,
+      personId,
+    }: {
+      speakerId: string;
+      displayName: string;
+      email?: string | null;
+      profileId?: number | null;
+      personId?: number | null;
+    }) => {
+      // Name-only marks ("ignore") have no contact to bind the voiceprint to.
+      if (personId == null) return;
+      const key = `${note.id}:${speakerId}`;
+      if (voiceprintEnrollmentsRef.current.has(key)) return;
+      voiceprintEnrollmentsRef.current.add(key);
+      try {
+        const result = await window.electronAPI?.enrollSpeakerVoiceprint?.(
+          note.id,
+          speakerId,
+          displayName,
+          email ?? null,
+          { profileId: profileId ?? null, personId }
+        );
+        if (result?.voiceprintCreated) {
+          toast({
+            title: t("notes.speaker.voiceprintEnrolledToast", {
+              defaultValue:
+                "已从本场会议音频提取 {{name}} 的声纹，可在 词典 → 联系人 中试听校准",
+              name: displayName,
+            }),
+          });
+          refreshSpeakerProfiles();
+        }
+      } catch {
+        // Best-effort: the mark itself has already been committed.
+      } finally {
+        voiceprintEnrollmentsRef.current.delete(key);
+      }
     },
-    [displaySegments, speakerMappings]
+    [note.id, refreshSpeakerProfiles, t, toast]
   );
 
   // Resolve a speaker mark against contacts, then commit the mapping. If the
@@ -1488,10 +1524,20 @@ export default function NoteEditor({
             }),
           });
         }
+
+        if (result.person && !isRecording) {
+          void enrollSpeakerVoiceprint({
+            speakerId,
+            displayName,
+            email,
+            profileId: result.profileId ?? profileId,
+            personId: result.person.id,
+          });
+        }
       }
       return result;
     },
-    [note.id, t, toast]
+    [note.id, t, toast, isRecording, enrollSpeakerVoiceprint]
   );
 
   const handleMapSpeaker = useCallback(

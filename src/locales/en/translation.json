@@ -2038,6 +2038,7 @@
       "unmatchedSpeaker": "Unmatched speaker",
       "contactCreatedToast": "Contact {{name}} created. Manage it under Dictionary → Contacts",
       "contactLinkedToast": "Linked to contact {{name}}",
+      "voiceprintEnrolledToast": "Extracted {{name}}'s voiceprint from this meeting's audio — audition it in Dictionary → Contacts",
       "contactResolveTitle": "Same-named contacts found",
       "contactResolveTitleExact": "An identical contact was found",
       "contactResolveDescription": "The marked name 「{{name}}」 may match the following contacts. Choose how to proceed:",

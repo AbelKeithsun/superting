@@ -1996,6 +1996,7 @@
       "unmatchedSpeaker": "未匹配說話人",
       "contactCreatedToast": "已新建聯絡人 {{name}}，可在 詞典 → 聯絡人 中管理",
       "contactLinkedToast": "已關聯到聯絡人 {{name}}",
+      "voiceprintEnrolledToast": "已從本場會議音訊提取 {{name}} 的聲紋，可在 詞典 → 聯絡人 中試聽校準",
       "contactResolveTitle": "發現同名聯絡人",
       "contactResolveTitleExact": "偵測到同名聯絡人",
       "contactResolveDescription": "標記的「{{name}}」可能與以下聯絡人相同，請選擇如何處理：",

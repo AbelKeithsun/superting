@@ -1998,6 +1998,7 @@
       "unmatchedSpeaker": "Unmatched speaker",
       "contactCreatedToast": "Контакт {{name}} создан. Управление: Словарь → Контакты",
       "contactLinkedToast": "Связано с контактом {{name}}",
+      "voiceprintEnrolledToast": "Голосовой отпечаток {{name}} извлечён из аудио встречи — прослушайте в Словарь → Контакты",
       "contactResolveTitle": "Найдены однофамильцы",
       "contactResolveTitleExact": "Найден идентичный контакт",
       "contactResolveDescription": "Отмеченное имя «{{name}}» может совпадать со следующими контактами. Выберите действие:",

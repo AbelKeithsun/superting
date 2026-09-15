@@ -2037,6 +2037,7 @@
       "unmatchedSpeaker": "Unmatched speaker",
       "contactCreatedToast": "Contact {{name}} créé. Gérez-le dans Dictionnaire → Contacts",
       "contactLinkedToast": "Associé au contact {{name}}",
+      "voiceprintEnrolledToast": "Empreinte vocale de {{name}} extraite de l'audio de la réunion — à écouter dans Dictionnaire → Contacts",
       "contactResolveTitle": "Contacts homonymes trouvés",
       "contactResolveTitleExact": "Un contact identique a été trouvé",
       "contactResolveDescription": "Le nom marqué « {{name}} » peut correspondre à ces contacts. Choisissez comment procéder :",
