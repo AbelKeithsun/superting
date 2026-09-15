@@ -1996,6 +1996,7 @@
       "unmatchedSpeaker": "Unmatched speaker",
       "contactCreatedToast": "連絡先 {{name}} を作成しました。辞書 → 連絡先で管理できます",
       "contactLinkedToast": "連絡先 {{name}} に関連付けました",
+      "voiceprintEnrolledToast": "この会議の音声から {{name}} の声紋を抽出しました（辞書 → 連絡先で試聴できます）",
       "contactResolveTitle": "同名の連絡先が見つかりました",
       "contactResolveTitleExact": "同一名の連絡先が見つかりました",
       "contactResolveDescription": "マークした「{{name}}」が以下の連絡先と一致する可能性があります。処理を選択してください：",

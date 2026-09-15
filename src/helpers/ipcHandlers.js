@@ -8735,78 +8735,59 @@ class IPCHandlers {
 
     ipcMain.handle(
       "set-speaker-mapping",
-      async (_event, noteId, speakerId, displayName, email, profileId, options = {}) => {
-        const embeddings = this.databaseManager.getNoteSpeakerEmbeddings(noteId);
-        const noteSpeakerEmbedding = embeddings.find((e) => e.speaker_id === speakerId);
-        const liveSpeakerEmbedding = liveSpeakerIdentifier.getSpeakerEmbedding(speakerId);
-        const speakerEmbeddingBuffer =
-          noteSpeakerEmbedding?.embedding ||
-          (liveSpeakerEmbedding ? Buffer.from(liveSpeakerEmbedding.buffer) : null);
+      async (_event, noteId, speakerId, displayName, email, profileId, options = {}) =>
+        this._applySpeakerMapping({ noteId, speakerId, displayName, email, profileId, options })
+    );
 
-        // Contact resolution for cross-session reuse. The renderer drives the
-        // choice: explicit personId = link to an existing contact; createPerson
-        // false = skip people linkage (name-only marking); otherwise resolve
-        // find-or-create so the mark always lands on a people record.
-        const { personId = null, createPerson = true } = options || {};
-        let resolvedPerson = null;
-        let personCreated = false;
-        if (personId != null) {
-          resolvedPerson = this.databaseManager.getPerson(personId);
-        } else if (createPerson !== false) {
-          const before = this.databaseManager.findPeopleForSpeaker(displayName, email).exact;
-          resolvedPerson = this.databaseManager.findOrCreatePerson({
-            displayName,
-            email: email || null,
-          });
-          personCreated = !!resolvedPerson && !before;
-        }
-
-        let resolvedProfileId = profileId ?? null;
-        if (speakerEmbeddingBuffer) {
-          const profile = this.databaseManager.upsertSpeakerProfile(
-            displayName,
-            email || null,
-            speakerEmbeddingBuffer,
-            resolvedProfileId
-          );
-          resolvedProfileId = profile.id;
-          this._retroactiveMapping(profile);
-
-          // Mirror the sample into the people/voiceprints layer so the
-          // binding survives across meetings even without an email.
-          if (resolvedPerson) {
-            try {
-              const voiceprint = this.databaseManager.addVoiceprint(
-                resolvedPerson.id,
-                speakerEmbeddingBuffer,
-                {
-                  sourceProfileId: profile.id,
-                  sourceNoteId: noteId,
-                  sourceSpeakerId: speakerId,
-                }
-              );
-              // Snapshot the speaker's meeting utterances as auditionable
-              // voiceprint segments (click-to-play calibration evidence).
-              if (voiceprint?.id) {
-                this._captureVoiceprintSegments(noteId, speakerId, voiceprint.id);
-              }
-            } catch (personError) {
-              debugLogger.warn("Person voiceprint sync skipped", {
-                error: personError.message,
-              });
-            }
+    // Manual marks (undiarized or corrected transcripts) carry no speaker
+    // embedding, so nothing could be bound to the contact. Extract one from the
+    // marked utterances in the note audio and bind it, giving 词典 → 联系人 an
+    // auditionable voiceprint even without an automatic diarization pass.
+    ipcMain.handle(
+      "enroll-speaker-voiceprint",
+      async (_event, noteId, speakerId, displayName, email = null, options = {}) => {
+        try {
+          const { force = false, profileId = null, personId = null } = options || {};
+          if (!noteId || !speakerId || !displayName) {
+            return { success: false, error: "missing-speaker" };
           }
-        }
 
-        this.databaseManager.setSpeakerMapping(noteId, speakerId, resolvedProfileId, displayName);
-        liveSpeakerIdentifier.mapSpeaker(speakerId, resolvedProfileId, displayName, noteId);
-        return {
-          success: true,
-          profileId: resolvedProfileId,
-          person: resolvedPerson,
-          personCreated,
-          personLinked: !!resolvedPerson && personId != null,
-        };
+          const existing = this.databaseManager
+            .getNoteSpeakerEmbeddings(noteId)
+            .find((entry) => entry.speaker_id === speakerId);
+          if (existing && !force) {
+            return { success: true, voiceprintCreated: false, skipped: "already-enrolled" };
+          }
+
+          const embedding = await this._extractSpeakerVoiceprint(noteId, speakerId);
+          if (!embedding) {
+            return { success: false, error: "no-speaker-audio" };
+          }
+
+          this.databaseManager.saveNoteSpeakerEmbeddings(noteId, { [speakerId]: embedding });
+          const result = await this._applySpeakerMapping({
+            noteId,
+            speakerId,
+            displayName,
+            email,
+            profileId,
+            options: personId != null ? { personId } : {},
+          });
+
+          return {
+            success: true,
+            voiceprintCreated: true,
+            person: result?.person ?? null,
+            profileId: result?.profileId ?? null,
+          };
+        } catch (error) {
+          debugLogger.warn(
+            "Speaker voiceprint enrollment failed",
+            { error: error.message },
+            "speaker"
+          );
+          return { success: false, error: error.message };
+        }
       }
     );
 
@@ -9079,42 +9060,200 @@ class IPCHandlers {
   // After a voiceprint template is enrolled from a meeting speaker, snapshot
   // every diarized utterance of that speaker in the source note as auditionable
   // audio segments (click-to-play, multiple clips per voiceprint).
+  /**
+   * Audio windows (seconds, relative to the note's audio) covered by one
+   * speaker's segments. Epoch-ms wall-clock segments are rebased the same way
+   * `_rediarizeNoteAudio` does, so callers can slice the retained audio
+   * directly.
+   */
+  _noteSpeakerAudioWindows(note, speakerId, { minSeconds = 0 } = {}) {
+    const segments = this._parseNoteTranscriptSegments(note);
+    if (segments.length === 0) return [];
+
+    // Normalize timestamps to seconds relative to the note's audio (epoch-ms
+    // wall-clock segments are rebased like _rediarizeNoteAudio does).
+    const firstSystem = segments.find((s) => s.source === "system")?.timestamp;
+    const isEpochMs = typeof firstSystem === "number" && firstSystem > 1e9;
+    const normalize = (value) => {
+      if (typeof value !== "number" || !Number.isFinite(value)) return undefined;
+      return isEpochMs ? Math.max(0, (value - firstSystem) / 1000) : value;
+    };
+
+    return segments
+      .filter((segment) => segment.speaker === speakerId && Number.isFinite(segment.timestamp))
+      .map((segment) => {
+        const startSeconds = Math.max(0, Number(normalize(segment.timestamp)) || 0);
+        const rawEnd = normalize(segment.endTime);
+        const endSeconds =
+          Number.isFinite(rawEnd) && rawEnd > startSeconds ? rawEnd : startSeconds + 3;
+        return { startSeconds, endSeconds };
+      })
+      .filter((window) => window.endSeconds - window.startSeconds >= minSeconds);
+  }
+
+  /**
+   * Compute a speaker embedding for one speaker of a note from the note's own
+   * audio, using the longest utterances (same policy as the diarization
+   * pipeline) and a centroid over them. Returns a Buffer or null.
+   */
+  async _extractSpeakerVoiceprint(noteId, speakerId) {
+    const note = this.databaseManager.getNote(noteId);
+    if (!note) return null;
+
+    const windows = this._noteSpeakerAudioWindows(note, speakerId, { minSeconds: 1.5 });
+    if (windows.length === 0) return null;
+
+    const audioFiles = this.databaseManager.getNoteAudioFiles(noteId);
+    const audioFile = audioFiles?.[0] || null;
+    if (!audioFile) return null;
+    const audioPath = this.audioStorageManager.getRetainedAudioPath(audioFile.filename);
+    if (!audioPath) return null;
+
+    const speakerEmbeddings = require("./speakerEmbeddings");
+    if (!speakerEmbeddings.isAvailable()) {
+      debugLogger.debug("Speaker embedding model unavailable; voiceprint enrollment skipped");
+      return null;
+    }
+
+    const longest = [...windows]
+      .sort(
+        (a, b) =>
+          b.endSeconds - b.startSeconds - (a.endSeconds - a.startSeconds) ||
+          a.startSeconds - b.startSeconds
+      )
+      .slice(0, 3);
+
+    let tmpWav = null;
+    try {
+      tmpWav = await this._prepareAudioForDiarization(audioPath);
+      const embeddings = [];
+      for (const window of longest) {
+        const embedding = await speakerEmbeddings.extractEmbedding(
+          tmpWav,
+          window.startSeconds,
+          window.endSeconds
+        );
+        if (embedding) embeddings.push(embedding);
+      }
+      if (embeddings.length === 0) return null;
+      const centroid = speakerEmbeddings.computeCentroid(embeddings);
+      if (!centroid?.length) return null;
+      return Buffer.from(new Float32Array(centroid).buffer);
+    } catch (error) {
+      debugLogger.warn(
+        "Speaker voiceprint extraction failed",
+        { error: error.message },
+        "speaker"
+      );
+      return null;
+    } finally {
+      if (tmpWav) {
+        try {
+          fs.unlinkSync(tmpWav);
+        } catch (_) {}
+      }
+    }
+  }
+
+  /**
+   * Commit a speaker mark: resolve the contact, blend the speaker embedding
+   * into a profile, mirror it into the person's voiceprints and snapshot the
+   * auditionable clips. Shared by the renderer's mark flow and by manual
+   * voiceprint enrollment.
+   */
+  async _applySpeakerMapping({ noteId, speakerId, displayName, email, profileId, options = {} }) {
+    const embeddings = this.databaseManager.getNoteSpeakerEmbeddings(noteId);
+    const noteSpeakerEmbedding = embeddings.find((e) => e.speaker_id === speakerId);
+    const liveSpeakerEmbedding = liveSpeakerIdentifier.getSpeakerEmbedding(speakerId);
+    const speakerEmbeddingBuffer =
+      noteSpeakerEmbedding?.embedding ||
+      (liveSpeakerEmbedding ? Buffer.from(liveSpeakerEmbedding.buffer) : null);
+
+    // Contact resolution for cross-session reuse. The renderer drives the
+    // choice: explicit personId = link to an existing contact; createPerson
+    // false = skip people linkage (name-only marking); otherwise resolve
+    // find-or-create so the mark always lands on a people record.
+    const { personId = null, createPerson = true } = options || {};
+    let resolvedPerson = null;
+    let personCreated = false;
+    if (personId != null) {
+      resolvedPerson = this.databaseManager.getPerson(personId);
+    } else if (createPerson !== false) {
+      const before = this.databaseManager.findPeopleForSpeaker(displayName, email).exact;
+      resolvedPerson = this.databaseManager.findOrCreatePerson({
+        displayName,
+        email: email || null,
+      });
+      personCreated = !!resolvedPerson && !before;
+    }
+
+    let resolvedProfileId = profileId ?? null;
+    if (speakerEmbeddingBuffer) {
+      const profile = this.databaseManager.upsertSpeakerProfile(
+        displayName,
+        email || null,
+        speakerEmbeddingBuffer,
+        resolvedProfileId
+      );
+      resolvedProfileId = profile.id;
+      this._retroactiveMapping(profile);
+
+      // Mirror the sample into the people/voiceprints layer so the binding
+      // survives across meetings even without an email.
+      if (resolvedPerson) {
+        try {
+          const voiceprint = this.databaseManager.addVoiceprint(
+            resolvedPerson.id,
+            speakerEmbeddingBuffer,
+            {
+              sourceProfileId: profile.id,
+              sourceNoteId: noteId,
+              sourceSpeakerId: speakerId,
+            }
+          );
+          // Snapshot the speaker's meeting utterances as auditionable
+          // voiceprint segments (click-to-play calibration evidence).
+          if (voiceprint?.id) {
+            this._captureVoiceprintSegments(noteId, speakerId, voiceprint.id);
+          }
+        } catch (personError) {
+          debugLogger.warn("Person voiceprint sync skipped", {
+            error: personError.message,
+          });
+        }
+      }
+    }
+
+    this.databaseManager.setSpeakerMapping(noteId, speakerId, resolvedProfileId, displayName);
+    liveSpeakerIdentifier.mapSpeaker(speakerId, resolvedProfileId, displayName, noteId);
+    return {
+      success: true,
+      profileId: resolvedProfileId,
+      person: resolvedPerson,
+      personCreated,
+      personLinked: !!resolvedPerson && personId != null,
+    };
+  }
+
   _captureVoiceprintSegments(noteId, speakerId, voiceprintId) {
     try {
       if (!noteId || !voiceprintId) return 0;
       const note = this.databaseManager.getNote(noteId);
       if (!note) return 0;
-      const segments = this._parseNoteTranscriptSegments(note);
       const audioFiles = this.databaseManager.getNoteAudioFiles(noteId);
       const audioFile = audioFiles?.[0] || null;
-      if (!audioFile || segments.length === 0) return 0;
+      if (!audioFile) return 0;
 
-      // Normalize timestamps to seconds relative to the note's audio (epoch-ms
-      // wall-clock segments are rebased like _rediarizeNoteAudio does).
-      const firstSystem = segments.find((s) => s.source === "system")?.timestamp;
-      const isEpochMs = typeof firstSystem === "number" && firstSystem > 1e9;
-      const normalize = (value) => {
-        if (typeof value !== "number" || !Number.isFinite(value)) return undefined;
-        return isEpochMs ? Math.max(0, (value - firstSystem) / 1000) : value;
-      };
+      const windows = this._noteSpeakerAudioWindows(note, speakerId);
+      if (windows.length === 0) return 0;
 
-      const matching = segments.filter(
-        (s) => s.speaker === speakerId && Number.isFinite(s.timestamp)
-      );
-      if (matching.length === 0) return 0;
-
-      const clips = matching.map((s) => {
-        const start = Math.max(0, Number(normalize(s.timestamp)) || 0);
-        const rawEnd = normalize(s.endTime);
-        const end = Number.isFinite(rawEnd) && rawEnd > start ? rawEnd : start + 3;
-        return {
-          noteId,
-          speakerId,
-          startSeconds: start,
-          endSeconds: end,
-          audioFileId: audioFile.id,
-        };
-      });
+      const clips = windows.map((window) => ({
+        noteId,
+        speakerId,
+        startSeconds: window.startSeconds,
+        endSeconds: window.endSeconds,
+        audioFileId: audioFile.id,
+      }));
       return this.databaseManager.replaceVoiceprintSegments(voiceprintId, clips);
     } catch (error) {
       debugLogger.warn("Failed to capture voiceprint segments", { error: error.message }, "speaker");
