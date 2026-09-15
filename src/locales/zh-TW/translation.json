@@ -24,6 +24,10 @@
       "speakerDetection": {
         "title": "辨識並標記發言者",
         "description": "關閉後，逐字稿會顯示「你」和「其他人」"
+      },
+      "recordingPill": {
+        "title": "顯示懸浮錄音按鈕",
+        "description": "錄製筆記或會議時，顯示帶錄音狀態的懸浮按鈕"
       }
     }
   },

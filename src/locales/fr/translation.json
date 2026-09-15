@@ -24,6 +24,10 @@
       "speakerDetection": {
         "title": "Identifier et étiqueter les intervenants",
         "description": "Lorsque désactivé, les transcriptions affichent « Vous » et « Autres »"
+      },
+      "recordingPill": {
+        "title": "Afficher le bouton d'enregistrement flottant",
+        "description": "Affiche un bouton flottant avec l'état d'enregistrement lors de l'enregistrement de notes ou de réunions"
       }
     }
   },

@@ -24,6 +24,10 @@
       "speakerDetection": {
         "title": "Sprecher erkennen und beschriften",
         "description": "Wenn deaktiviert, zeigen Transkripte „Du“ und „Andere“"
+      },
+      "recordingPill": {
+        "title": "Schwebenden Aufnahmebutton anzeigen",
+        "description": "Zeigt beim Aufnehmen von Notizen oder Meetings einen schwebenden Button mit Aufnahmestatus an"
       }
     }
   },

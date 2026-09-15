@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { Square } from "lucide-react";
 import { stopRecording, useMeetingRecordingStore } from "../../stores/meetingRecordingStore";
+import { useSettingsStore } from "../../stores/settingsStore";
 import { cn } from "../lib/utils";
 import {
   clampMeetingRecordingPillPosition,
@@ -59,6 +60,7 @@ export default function MeetingRecordingPill({
   const recordingNoteId = useMeetingRecordingStore((s) => s.recordingNoteId);
   const recordingNoteTitle = useMeetingRecordingStore((s) => s.recordingNoteTitle);
   const micLevel = useMeetingRecordingStore((s) => s.currentMicLevel);
+  const showMeetingRecordingPill = useSettingsStore((s) => s.showMeetingRecordingPill);
   const [isStopping, setIsStopping] = useState(false);
   const [position, setPosition] = useState<MeetingRecordingPillPosition | null>(null);
   const pillRef = useRef<HTMLDivElement | null>(null);
@@ -116,7 +118,7 @@ export default function MeetingRecordingPill({
   }, [getMeasuredBounds, setMeasuredPosition]);
 
   useEffect(() => {
-    if (!isRecording || isViewingRecordingNote || !isControlPanelWindow()) return;
+    if (!isRecording || isViewingRecordingNote || !showMeetingRecordingPill || !isControlPanelWindow()) return;
 
     const frame = window.requestAnimationFrame(resolveInitialPosition);
     const handleResize = () => {
@@ -141,9 +143,10 @@ export default function MeetingRecordingPill({
     isViewingRecordingNote,
     resolveInitialPosition,
     setMeasuredPosition,
+    showMeetingRecordingPill,
   ]);
 
-  if (!isRecording || isViewingRecordingNote || !isControlPanelWindow()) {
+  if (!isRecording || isViewingRecordingNote || !showMeetingRecordingPill || !isControlPanelWindow()) {
     return null;
   }
 

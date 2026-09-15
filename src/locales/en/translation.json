@@ -24,6 +24,10 @@
       "speakerDetection": {
         "title": "Identify and label speakers",
         "description": "When off, transcripts show \"You\" and \"Others\""
+      },
+      "recordingPill": {
+        "title": "Show floating recording button",
+        "description": "Show a floating button with recording status while recording notes or meetings"
       }
     }
   },
