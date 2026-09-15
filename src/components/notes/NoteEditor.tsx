@@ -94,9 +94,13 @@ import {
   TRANSCRIPT_IMPORT_ACCEPT,
 } from "../../utils/importTranscriptFile";
 import {
+  assignSegmentSpeakerName,
   assignSpeakerGroupName,
   filterTranscriptSegmentsBySpeaker,
+  findTranscriptSpeakerIdByName,
+  getTranscriptSessionSpeakers,
   getTranscriptSpeakerFilterOptions,
+  stableManualSpeakerIdForSegmentId,
   type TranscriptSpeakerFilterOption,
 } from "../../utils/speakerAssignment";
 import NoteParticipants, { type NoteParticipant } from "./NoteParticipants";
@@ -939,8 +943,12 @@ export default function NoteEditor({
     () =>
       isTranscriptEditing
         ? renderedTranscriptSegments
-        : filterTranscriptSegmentsBySpeaker(renderedTranscriptSegments, selectedSpeakerFilterKeys),
-    [isTranscriptEditing, renderedTranscriptSegments, selectedSpeakerFilterKeys]
+        : filterTranscriptSegmentsBySpeaker(
+            renderedTranscriptSegments,
+            selectedSpeakerFilterKeys,
+            speakerMappings
+          ),
+    [isTranscriptEditing, renderedTranscriptSegments, selectedSpeakerFilterKeys, speakerMappings]
   );
   const activeTranscriptText = transcriptIsStructured
     ? visibleTranscriptSegments.map((segment) => segment.text).join("\n")
@@ -961,17 +969,20 @@ export default function NoteEditor({
   const knownSpeakers = useMemo<SpeakerOption[]>(() => {
     const seen = new Set<string>();
     const list: SpeakerOption[] = [];
-    for (const option of speakerFilterOptions) {
-      if (!option.key.startsWith("speaker:")) continue;
-      const speakerId = option.key.slice("speaker:".length);
-      const key = `session:${speakerId}`;
+    for (const session of getTranscriptSessionSpeakers(displaySegments, speakerMappings, {
+      you: t("notes.speaker.you"),
+      speaker: (n) => t("notes.speaker.label", { n }),
+      unknownTrack: t("notes.speaker.unknownTrack"),
+      unmatchedSpeaker: t("notes.speaker.unmatchedSpeaker"),
+    })) {
+      const key = `session:${session.speakerId}`;
       if (seen.has(key)) continue;
       seen.add(key);
       list.push({
-        display_name: option.label,
+        display_name: session.label,
         email: null,
         source: "session",
-        speakerId,
+        speakerId: session.speakerId,
       });
     }
     for (const p of speakerProfiles) {
@@ -996,7 +1007,7 @@ export default function NoteEditor({
       list.push({ display_name: name, email: null, source: "transcript" });
     }
     return list;
-  }, [displaySegments, speakerFilterOptions, speakerMappings, speakerNames, speakerProfiles]);
+  }, [displaySegments, speakerMappings, speakerNames, speakerProfiles, t]);
 
   useEffect(() => {
     setSelectedSpeakerFilterKeys(null);
@@ -1346,6 +1357,23 @@ export default function NoteEditor({
     [recordingStartedAt, transcriptAudioDurationSeconds, visibleTranscriptSegments]
   );
 
+  // A speaker group is "already named" when the marked name is the one it
+  // currently renders; re-marking the same person must not re-open the contact
+  // resolution dialog (the identity is already established).
+  const isSpeakerAlreadyNamed = useCallback(
+    (speakerId: string, displayName: string) => {
+      const normalized = displayName.trim().toLowerCase();
+      if (!normalized) return false;
+      if ((speakerMappings[speakerId] ?? "").trim().toLowerCase() === normalized) return true;
+      return displaySegments.some(
+        (segment) =>
+          segment.speaker === speakerId &&
+          (segment.speakerName ?? "").trim().toLowerCase() === normalized
+      );
+    },
+    [displaySegments, speakerMappings]
+  );
+
   // Resolve a speaker mark against contacts, then commit the mapping. If the
   // marked name already exists in people (exact) or has similar-named
   // candidates (ambiguous), pause for the user to choose link/create/ignore —
@@ -1356,19 +1384,22 @@ export default function NoteEditor({
       displayName,
       email,
       profileId,
+      skipResolution = false,
     }: {
       speakerId: string;
       displayName: string;
       email?: string | null;
       profileId?: number | null;
+      /** True when this speaker already carries this exact name — re-marking the
+       * same person must not re-open the contact dialog. */
+      skipResolution?: boolean;
     }) => {
       let options: { personId?: number | null; createPerson?: boolean } = {};
       let linkedPersonId: number | null = null;
 
-      const resolution = await window.electronAPI?.resolveSpeakerContact?.(
-        displayName,
-        email ?? null
-      );
+      const resolution = skipResolution
+        ? null
+        : await window.electronAPI?.resolveSpeakerContact?.(displayName, email ?? null);
       if (resolution?.success && (resolution.status === "exact" || resolution.status === "ambiguous")) {
         const choice = await new Promise<{
           action: "link" | "create" | "ignore";
@@ -1460,7 +1491,13 @@ export default function NoteEditor({
 
       await rememberSpeakerName(displayName, email ?? null);
       setSpeakerMappings((prev) => ({ ...prev, [speakerId]: displayName }));
-      await commitSpeakerWithContact({ speakerId, displayName, email, profileId });
+      await commitSpeakerWithContact({
+        speakerId,
+        displayName,
+        email,
+        profileId,
+        skipResolution: isSpeakerAlreadyNamed(speakerId, displayName),
+      });
 
       if (isRecording) {
         onLiveSpeakerLock?.(speakerId, displayName);
@@ -1497,6 +1534,7 @@ export default function NoteEditor({
       refreshSpeakerNames,
       refreshSpeakerProfiles,
       commitSpeakerWithContact,
+      isSpeakerAlreadyNamed,
     ]
   );
 
@@ -1532,27 +1570,81 @@ export default function NoteEditor({
     [displaySegments, diarizedSegments, isRecording, persistDisplaySegments]
   );
 
-  const handleAssignSingleSegmentName = useCallback(
-    async (segmentId: string, displayName: string, email?: string | null, profileId?: number) => {
-      await rememberSpeakerName(displayName, email ?? null);
-      const nextSegments = displaySegments.map((segment) =>
-        segment.id === segmentId
-          ? lockTranscriptSpeaker(segment, {
-              speaker:
-                !segment.speaker || segment.speaker === "you"
-                  ? `manual_${segment.id.replace(/[^a-zA-Z0-9_-]/g, "_")}`
-                  : segment.speaker,
-              speakerName: displayName,
-              speakerIsPlaceholder: false,
-              suggestedName: undefined,
-              suggestedProfileId: profileId ?? segment.suggestedProfileId,
-            })
+  // Name the segments the user actually clicked on. In the final transcript a
+  // rendered row can merge several stored segments into one speaker block, so
+  // the whole block is renamed at once — otherwise marking an undiarized
+  // transcript renames a single line, the block keeps its old label, and every
+  // click mints another duplicate speaker identity.
+  const handleAssignSegmentSpeaker = useCallback(
+    async (
+      segmentIds: string[],
+      displayName: string,
+      email?: string | null,
+      profileId?: number | null,
+      targetSpeakerId?: string
+    ) => {
+      const idSet = new Set(segmentIds);
+      if (idSet.size === 0) return;
+
+      const trimmedName = displayName.trim();
+      const explicitSpeakerId = targetSpeakerId?.trim() ? targetSpeakerId.trim() : null;
+      // Joining a speaker group picked from the session list keeps that group's
+      // identity — and its existing name — instead of creating a new speaker.
+      const targetGroupName = explicitSpeakerId
+        ? speakerMappings[explicitSpeakerId] ||
+          displaySegments.find(
+            (segment) => segment.speaker === explicitSpeakerId && !!segment.speakerName
+          )?.speakerName ||
+          null
+        : null;
+      const segmentSpeakerId =
+        displaySegments
+          .filter((segment) => idSet.has(segment.id))
+          .map((segment) => segment.speaker)
+          .find((speaker) => !!speaker) ?? null;
+      const speakerId =
+        explicitSpeakerId ||
+        segmentSpeakerId ||
+        findTranscriptSpeakerIdByName(displaySegments, speakerMappings, trimmedName) ||
+        stableManualSpeakerIdForSegmentId(segmentIds[0]);
+      const nameToApply = explicitSpeakerId ? targetGroupName : trimmedName;
+
+      const nextSegments = assignSegmentSpeakerName(
+        displaySegments,
+        idSet,
+        speakerId,
+        nameToApply
+      ).map((segment) =>
+        idSet.has(segment.id)
+          ? { ...segment, suggestedProfileId: profileId ?? segment.suggestedProfileId }
           : segment
       );
       await persistDisplaySegments(nextSegments);
+
+      if (explicitSpeakerId) return;
+
+      await rememberSpeakerName(trimmedName, email ?? null);
+      setSpeakerMappings((prev) => ({ ...prev, [speakerId]: trimmedName }));
+      await commitSpeakerWithContact({
+        speakerId,
+        displayName: trimmedName,
+        email,
+        profileId,
+        skipResolution: isSpeakerAlreadyNamed(speakerId, trimmedName),
+      });
+      refreshSpeakerProfiles();
       refreshSpeakerNames();
     },
-    [displaySegments, persistDisplaySegments, refreshSpeakerNames, rememberSpeakerName]
+    [
+      commitSpeakerWithContact,
+      displaySegments,
+      isSpeakerAlreadyNamed,
+      persistDisplaySegments,
+      refreshSpeakerNames,
+      refreshSpeakerProfiles,
+      rememberSpeakerName,
+      speakerMappings,
+    ]
   );
 
   const handleAssignSpeakerGroupName = useCallback(
@@ -1589,7 +1681,13 @@ export default function NoteEditor({
 
       await rememberSpeakerName(displayName, email ?? null);
       setSpeakerMappings((prev) => ({ ...prev, [speakerId]: displayName }));
-      await commitSpeakerWithContact({ speakerId, displayName, email, profileId });
+      await commitSpeakerWithContact({
+        speakerId,
+        displayName,
+        email,
+        profileId,
+        skipResolution: isSpeakerAlreadyNamed(speakerId, displayName),
+      });
       const nextSegments = assignSpeakerGroupName(displaySegments, speakerId, displayName).map(
         (segment) =>
           segment.speaker === speakerId
@@ -1609,6 +1707,7 @@ export default function NoteEditor({
       rememberSpeakerName,
       speakerMappings,
       commitSpeakerWithContact,
+      isSpeakerAlreadyNamed,
     ]
   );
 
@@ -2981,7 +3080,7 @@ export default function NoteEditor({
                 isRecording={isRecording}
                 isDiarizing={isDiarizing}
                 onMapSpeaker={isRecording ? handleMapSpeaker : handleAssignSpeakerGroupName}
-                onMapSegmentSpeaker={isRecording ? undefined : handleAssignSingleSegmentName}
+                onMapSegmentSpeaker={isRecording ? undefined : handleAssignSegmentSpeaker}
                 onConfirmSuggestion={handleConfirmSuggestion}
                 onDismissSuggestion={handleDismissSuggestion}
                 onAttachSpeakerEmail={handleAttachSpeakerEmail}

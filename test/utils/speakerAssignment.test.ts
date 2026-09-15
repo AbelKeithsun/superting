@@ -2,11 +2,15 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  assignSegmentSpeakerName,
   assignSpeakerGroupName,
   buildTranscriptSpeakerBlocks,
   filterTranscriptSegmentsBySpeaker,
+  findTranscriptSpeakerIdByName,
+  getTranscriptSessionSpeakers,
   getTranscriptSpeakerDisplay,
   getTranscriptSpeakerFilterOptions,
+  stableManualSpeakerIdForSegmentId,
 } from "../../src/utils/speakerAssignment.ts";
 
 const labels = {
@@ -82,7 +86,7 @@ test("speaker group assignment renames every segment with the same speaker id", 
   assert.equal(next[2].speakerLockSource, "user");
 });
 
-test("speaker filter options are deduped by effective speaker identity", () => {
+test("speaker filter options are deduped by resolved speaker name", () => {
   const segments = [
     { id: "seg-1", text: "first", source: "mic" as const, speaker: "you" },
     { id: "seg-2", text: "second", source: "system" as const, speaker: "speaker_0" },
@@ -100,8 +104,8 @@ test("speaker filter options are deduped by effective speaker identity", () => {
 
   assert.deepEqual(options, [
     { key: "speaker:you", label: "你", colorKey: "you" },
-    { key: "speaker:speaker_0", label: "Vicky", colorKey: "speaker_0" },
-    { key: "speaker:speaker_1", label: "苏金", colorKey: "speaker_1" },
+    { key: "name:vicky", label: "Vicky", colorKey: "speaker_0" },
+    { key: "name:苏金", label: "苏金", colorKey: "speaker_1" },
   ]);
 });
 
@@ -414,4 +418,149 @@ test("transcript speaker blocks obey time window after speaker names merge", () 
       { text: "第三句", segmentIds: ["seg-3"], speakerLabel: "苏金" },
     ]
   );
+});
+
+test("marking the next block of an undiarized transcript joins the existing name identity", () => {
+  const segments = [
+    { id: "stored-0", text: "第一句", source: "mic" as const, timestamp: 0 },
+    { id: "stored-1", text: "第二句", source: "mic" as const, timestamp: 5 },
+    { id: "stored-2", text: "第三句", source: "mic" as const, timestamp: 130 },
+  ];
+
+  // First mark: the user names the first rendered block (60s window) — a fresh
+  // manual speaker identity is minted and applied to every segment of the block.
+  const firstBlocks = buildTranscriptSpeakerBlocks(segments, {}, labels, {
+    maxBlockDurationSeconds: 60,
+  });
+  assert.deepEqual(
+    firstBlocks.map((block) => block.segments.map((segment) => segment.id)),
+    [["stored-0", "stored-1"], ["stored-2"]]
+  );
+  const firstSpeakerId = stableManualSpeakerIdForSegmentId(firstBlocks[0].segments[0].id);
+  const afterFirst = assignSegmentSpeakerName(
+    segments,
+    firstBlocks[0].segments.map((segment) => segment.id),
+    firstSpeakerId,
+    "王浩"
+  );
+  assert.deepEqual(
+    afterFirst.map((segment) => segment.speakerName ?? null),
+    ["王浩", "王浩", null]
+  );
+
+  // Second mark with the same name reuses that identity instead of piling up a
+  // second "王浩" speaker.
+  const nextBlocks = buildTranscriptSpeakerBlocks(afterFirst, {}, labels, {
+    maxBlockDurationSeconds: 60,
+  });
+  const nextBlock = nextBlocks.find((block) => block.speakerDisplay.label !== "王浩");
+  assert.ok(nextBlock);
+  assert.deepEqual(
+    nextBlock.segments.map((segment) => segment.id),
+    ["stored-2"]
+  );
+  const reusedSpeakerId = findTranscriptSpeakerIdByName(afterFirst, {}, "王浩");
+  assert.equal(reusedSpeakerId, firstSpeakerId);
+
+  const afterSecond = assignSegmentSpeakerName(
+    afterFirst,
+    nextBlock.segments.map((segment) => segment.id),
+    reusedSpeakerId!,
+    "王浩"
+  );
+
+  const options = getTranscriptSpeakerFilterOptions(afterSecond, {}, labels);
+  assert.equal(options.filter((option) => option.label === "王浩").length, 1);
+  assert.deepEqual(
+    [
+      ...new Set(
+        buildTranscriptSpeakerBlocks(afterSecond, {}, labels, {
+          maxBlockDurationSeconds: 60,
+        }).map((block) => block.speakerDisplay.label)
+      ),
+    ],
+    ["王浩"]
+  );
+});
+
+test("legacy same-name speaker identities collapse into one filter entry", () => {
+  const segments = [
+    {
+      id: "stored-0",
+      text: "第一句",
+      source: "mic" as const,
+      speaker: "manual_stored-0",
+      speakerName: "王浩",
+    },
+    {
+      id: "stored-1",
+      text: "第二句",
+      source: "mic" as const,
+      speaker: "manual_stored-1",
+      speakerName: "王浩",
+    },
+    {
+      id: "stored-2",
+      text: "第三句",
+      source: "mic" as const,
+      speaker: "manual_stored-2",
+      speakerName: "王浩",
+    },
+  ];
+
+  assert.deepEqual(
+    getTranscriptSpeakerFilterOptions(segments, {}, labels).map(({ key, label }) => ({
+      key,
+      label,
+    })),
+    [{ key: "name:王浩", label: "王浩" }]
+  );
+
+  const filtered = filterTranscriptSegmentsBySpeaker(segments, new Set(["name:王浩"]), {});
+  assert.deepEqual(
+    filtered.map((segment) => segment.id),
+    ["stored-0", "stored-1", "stored-2"]
+  );
+});
+
+test("joining a session speaker group keeps that identity and name", () => {
+  const segments = [
+    {
+      id: "stored-0",
+      text: "第一句",
+      source: "mic" as const,
+      speaker: "manual_stored-0",
+      speakerName: "王浩",
+    },
+    { id: "stored-1", text: "第二句", source: "mic" as const },
+  ];
+
+  const joined = assignSegmentSpeakerName(segments, ["stored-1"], "manual_stored-0", "王浩");
+  assert.equal(joined[1].speaker, "manual_stored-0");
+  assert.equal(joined[1].speakerName, "王浩");
+  assert.equal(joined[1].speakerLocked, true);
+  assert.equal(joined[1].speakerLockSource, "user");
+
+  const unnamedJoin = assignSegmentSpeakerName(segments, ["stored-1"], "speaker_3", null);
+  assert.equal(unnamedJoin[1].speaker, "speaker_3");
+  assert.equal(unnamedJoin[1].speakerName, undefined);
+});
+
+test("session speaker list reports one labelled entry per speaker identity", () => {
+  const segments = [
+    {
+      id: "seg-1",
+      text: "第一句",
+      source: "mic" as const,
+      speaker: "manual_stored-0",
+      speakerName: "王浩",
+    },
+    { id: "seg-2", text: "第二句", source: "system" as const, speaker: "speaker_1" },
+    { id: "seg-3", text: "第三句", source: "mic" as const, speaker: "manual_stored-0" },
+  ];
+
+  assert.deepEqual(getTranscriptSessionSpeakers(segments, {}, labels), [
+    { speakerId: "manual_stored-0", label: "王浩", named: true },
+    { speakerId: "speaker_1", label: "发言者 2", named: false },
+  ]);
 });
