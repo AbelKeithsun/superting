@@ -1544,6 +1544,20 @@
     }
   },
   "notes": {
+    "diarization": {
+      "skippedTitle": "Separazione degli interlocutori non eseguita",
+      "failedTitle": "Separazione degli interlocutori non riuscita",
+      "failedReason": "{{reason}}",
+      "skipReason": {
+        "disabled": "La separazione degli interlocutori è disattivata per questa riunione.",
+        "engineUnavailable": "Il motore o il modello di separazione degli interlocutori non è disponibile.",
+        "noAudio": "Nessun audio della riunione conservato da analizzare.",
+        "noSystemTrack": "Né traccia audio di sistema né audio della riunione conservato.",
+        "systemTrackSilent": "La traccia audio di sistema era silenziosa e non c'era audio conservato.",
+        "systemTrackUnusable": "Impossibile analizzare la traccia audio di sistema.",
+        "unknown": "Motivo sconosciuto ({{reason}})."
+      }
+    },
     "tags": {
       "add": "Aggiungi tag",
       "chooseExisting": "Scegli tag esistente",
@@ -1982,6 +1996,7 @@
       "unmatchedSpeaker": "Unmatched speaker",
       "contactCreatedToast": "Contatto {{name}} creato. Gestiscilo in Dizionario → Contatti",
       "contactLinkedToast": "Collegato al contatto {{name}}",
+      "voiceprintEnrolledToast": "Impronta vocale di {{name}} estratta dall'audio della riunione — ascoltala in Dizionario → Contatti",
       "contactResolveTitle": "Trovati contatti omonimi",
       "contactResolveTitleExact": "Trovato un contatto identico",
       "contactResolveDescription": "Il nome marcato «{{name}}» potrebbe corrispondere a questi contatti. Scegli come procedere:",

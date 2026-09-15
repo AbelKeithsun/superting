@@ -1544,6 +1544,20 @@
     "close": "Fechar"
   },
   "notes": {
+    "diarization": {
+      "skippedTitle": "A separação de falantes não foi executada",
+      "failedTitle": "Falha na separação de falantes",
+      "failedReason": "{{reason}}",
+      "skipReason": {
+        "disabled": "A separação de falantes está desativada para esta reunião.",
+        "engineUnavailable": "O motor ou modelo de separação de falantes não está disponível.",
+        "noAudio": "Não havia áudio da reunião guardado para analisar.",
+        "noSystemTrack": "Não havia faixa de áudio do sistema nem áudio da reunião guardado.",
+        "systemTrackSilent": "A faixa de áudio do sistema estava em silêncio e não havia áudio guardado.",
+        "systemTrackUnusable": "Não foi possível analisar a faixa de áudio do sistema.",
+        "unknown": "Motivo desconhecido ({{reason}})."
+      }
+    },
     "tags": {
       "add": "Adicionar etiqueta",
       "chooseExisting": "Escolher etiqueta existente",
@@ -1982,6 +1996,7 @@
       "unmatchedSpeaker": "Unmatched speaker",
       "contactCreatedToast": "Contato {{name}} criado. Gerencie em Dicionário → Contatos",
       "contactLinkedToast": "Vinculado ao contato {{name}}",
+      "voiceprintEnrolledToast": "Impressão de voz de {{name}} extraída do áudio da reunião — ouça em Dicionário → Contactos",
       "contactResolveTitle": "Contatos homônimos encontrados",
       "contactResolveTitleExact": "Um contato idêntico foi encontrado",
       "contactResolveDescription": "O nome marcado «{{name}}» pode corresponder a estes contatos. Escolha como prosseguir:",

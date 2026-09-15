@@ -473,6 +473,16 @@ type EditorMode = "rich" | "markdown";
 type ContentEditTarget = "raw" | "enhanced";
 const EDITOR_MODE_STORAGE_KEY = "superting.notesEditorMode";
 
+// Backend diarization skip reasons → notes.diarization.skipReason.* i18n keys.
+const DIARIZATION_SKIP_REASON_KEYS: Record<string, string> = {
+  disabled: "disabled",
+  "engine-unavailable": "engineUnavailable",
+  "no-audio": "noAudio",
+  "no-system-track": "noSystemTrack",
+  "system-track-silent": "systemTrackSilent",
+  "system-track-unusable": "systemTrackUnusable",
+};
+
 function readEditorModePreference(): EditorMode {
   if (typeof window === "undefined") return "rich";
   return window.localStorage.getItem(EDITOR_MODE_STORAGE_KEY) === "markdown" ? "markdown" : "rich";
@@ -771,6 +781,9 @@ export default function NoteEditor({
       ) => void)
     | null
   >(null);
+  // Speakers whose voiceprint enrollment is currently running (or done) for
+  // this note, so repeated marks do not queue duplicate extraction work.
+  const voiceprintEnrollmentsRef = useRef<Set<string>>(new Set());
   const [rediarizeMode, setRediarizeMode] = useState<RediarizeSpeakerMode>("auto");
   const [rediarizeExpectedCount, setRediarizeExpectedCount] = useState(3);
   const [showRediarizeAdvanced, setShowRediarizeAdvanced] = useState(false);
@@ -1213,6 +1226,33 @@ export default function NoteEditor({
 
       setIsDiarizing(false);
 
+      // Surface why speaker separation produced nothing instead of leaving the
+      // transcript silently without speakers. "disabled" is the user's own
+      // per-meeting choice, so it stays quiet.
+      if (data?.diarizationSkipped) {
+        if (data.skipReason !== "disabled") {
+          toast({
+            title: t("notes.diarization.skippedTitle"),
+            description: t(
+              `notes.diarization.skipReason.${
+                DIARIZATION_SKIP_REASON_KEYS[data.skipReason ?? ""] ?? "unknown"
+              }`,
+              { reason: data.skipReason ?? "" }
+            ),
+          });
+        }
+        return;
+      }
+
+      if (data?.diarizationFailed) {
+        toast({
+          title: t("notes.diarization.failedTitle"),
+          description: t("notes.diarization.failedReason", { reason: data.error ?? "" }),
+          variant: "destructive",
+        });
+        return;
+      }
+
       if (!data?.segments?.length) return;
 
       // Draft guard: while the user is mid-edit, merging into the note would
@@ -1255,7 +1295,7 @@ export default function NoteEditor({
       }
     });
     return () => cleanup?.();
-  }, [note.id, diarizationSessionId]);
+  }, [note.id, diarizationSessionId, t, toast]);
 
   // Apply a diarization result that arrived while the user was editing once
   // the edit session ends. The merge re-reads the persisted transcript, so a
@@ -1346,6 +1386,56 @@ export default function NoteEditor({
     [recordingStartedAt, transcriptAudioDurationSeconds, visibleTranscriptSegments]
   );
 
+  // A manual mark carries no speaker embedding, so nothing would reach the
+  // contact's voiceprint (联系人 showed a name with no auditionable sample).
+  // Extract one from the note's own audio in the background once the mark is
+  // linked to a person.
+  const enrollSpeakerVoiceprint = useCallback(
+    async ({
+      speakerId,
+      displayName,
+      email,
+      profileId,
+      personId,
+    }: {
+      speakerId: string;
+      displayName: string;
+      email?: string | null;
+      profileId?: number | null;
+      personId?: number | null;
+    }) => {
+      // Name-only marks ("ignore") have no contact to bind the voiceprint to.
+      if (personId == null) return;
+      const key = `${note.id}:${speakerId}`;
+      if (voiceprintEnrollmentsRef.current.has(key)) return;
+      voiceprintEnrollmentsRef.current.add(key);
+      try {
+        const result = await window.electronAPI?.enrollSpeakerVoiceprint?.(
+          note.id,
+          speakerId,
+          displayName,
+          email ?? null,
+          { profileId: profileId ?? null, personId }
+        );
+        if (result?.voiceprintCreated) {
+          toast({
+            title: t("notes.speaker.voiceprintEnrolledToast", {
+              defaultValue:
+                "已从本场会议音频提取 {{name}} 的声纹，可在 词典 → 联系人 中试听校准",
+              name: displayName,
+            }),
+          });
+          refreshSpeakerProfiles();
+        }
+      } catch {
+        // Best-effort: the mark itself has already been committed.
+      } finally {
+        voiceprintEnrollmentsRef.current.delete(key);
+      }
+    },
+    [note.id, refreshSpeakerProfiles, t, toast]
+  );
+
   // Resolve a speaker mark against contacts, then commit the mapping. If the
   // marked name already exists in people (exact) or has similar-named
   // candidates (ambiguous), pause for the user to choose link/create/ignore —
@@ -1420,10 +1510,20 @@ export default function NoteEditor({
             }),
           });
         }
+
+        if (result.person && !isRecording) {
+          void enrollSpeakerVoiceprint({
+            speakerId,
+            displayName,
+            email,
+            profileId: result.profileId ?? profileId,
+            personId: result.person.id,
+          });
+        }
       }
       return result;
     },
-    [note.id, t, toast]
+    [note.id, t, toast, isRecording, enrollSpeakerVoiceprint]
   );
 
   const handleMapSpeaker = useCallback(

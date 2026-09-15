@@ -1729,6 +1729,12 @@ declare global {
           }>;
           speakerEmbeddings?: Record<string, number[]> | null;
           diarizationDiagnostics?: DiarizationDiagnostics;
+          /** Diarization never started (see skipReason for the concrete cause). */
+          diarizationSkipped?: boolean;
+          skipReason?: string;
+          /** Diarization started but failed. */
+          diarizationFailed?: boolean;
+          error?: string;
         }) => void
       ) => () => void;
 
@@ -1766,6 +1772,25 @@ declare global {
         status: "exact" | "ambiguous" | "none";
         exact?: PersonRecord | null;
         candidates: PersonRecord[];
+        error?: string;
+      }>;
+      /** Extract this speaker's voiceprint from the note audio and bind it to the contact. */
+      enrollSpeakerVoiceprint?: (
+        noteId: number,
+        speakerId: string,
+        displayName: string,
+        email?: string | null,
+        options?: {
+          force?: boolean;
+          profileId?: number | null;
+          personId?: number | null;
+        }
+      ) => Promise<{
+        success: boolean;
+        voiceprintCreated?: boolean;
+        skipped?: string;
+        person?: PersonRecord | null;
+        profileId?: number | null;
         error?: string;
       }>;
       removeSpeakerMapping?: (noteId: number, speakerId: string) => Promise<{ success: boolean }>;

@@ -1544,6 +1544,20 @@
     }
   },
   "notes": {
+    "diarization": {
+      "skippedTitle": "本次錄音未做說話人分離",
+      "failedTitle": "說話人分離失敗",
+      "failedReason": "{{reason}}",
+      "skipReason": {
+        "disabled": "此會議已關閉說話人分離。",
+        "engineUnavailable": "說話人分離引擎或模型無法使用。",
+        "noAudio": "沒有可分析的會議音訊（未保留錄音）。",
+        "noSystemTrack": "既沒有系統音軌，也沒有保留的會議音訊。",
+        "systemTrackSilent": "系統音軌沒有聲音，且沒有保留的會議音訊。",
+        "systemTrackUnusable": "系統音軌無法分析。",
+        "unknown": "原因未知（{{reason}}）。"
+      }
+    },
     "tags": {
       "add": "新增標籤",
       "chooseExisting": "選擇既有標籤",
@@ -1982,6 +1996,7 @@
       "unmatchedSpeaker": "未匹配說話人",
       "contactCreatedToast": "已新建聯絡人 {{name}}，可在 詞典 → 聯絡人 中管理",
       "contactLinkedToast": "已關聯到聯絡人 {{name}}",
+      "voiceprintEnrolledToast": "已從本場會議音訊提取 {{name}} 的聲紋，可在 詞典 → 聯絡人 中試聽校準",
       "contactResolveTitle": "發現同名聯絡人",
       "contactResolveTitleExact": "偵測到同名聯絡人",
       "contactResolveDescription": "標記的「{{name}}」可能與以下聯絡人相同，請選擇如何處理：",

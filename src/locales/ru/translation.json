@@ -1544,6 +1544,20 @@
     }
   },
   "notes": {
+    "diarization": {
+      "skippedTitle": "Разделение говорящих не выполнено",
+      "failedTitle": "Не удалось разделить говорящих",
+      "failedReason": "{{reason}}",
+      "skipReason": {
+        "disabled": "Разделение говорящих отключено для этой встречи.",
+        "engineUnavailable": "Движок или модель разделения говорящих недоступны.",
+        "noAudio": "Нет сохранённого аудио встречи для анализа.",
+        "noSystemTrack": "Нет ни системной дорожки, ни сохранённого аудио встречи.",
+        "systemTrackSilent": "Системная дорожка была без звука, а сохранённого аудио встречи нет.",
+        "systemTrackUnusable": "Не удалось проанализировать системную дорожку.",
+        "unknown": "Причина неизвестна ({{reason}})."
+      }
+    },
     "tags": {
       "add": "Добавить тег",
       "chooseExisting": "Выбрать существующий тег",
@@ -1984,6 +1998,7 @@
       "unmatchedSpeaker": "Unmatched speaker",
       "contactCreatedToast": "Контакт {{name}} создан. Управление: Словарь → Контакты",
       "contactLinkedToast": "Связано с контактом {{name}}",
+      "voiceprintEnrolledToast": "Голосовой отпечаток {{name}} извлечён из аудио встречи — прослушайте в Словарь → Контакты",
       "contactResolveTitle": "Найдены однофамильцы",
       "contactResolveTitleExact": "Найден идентичный контакт",
       "contactResolveDescription": "Отмеченное имя «{{name}}» может совпадать со следующими контактами. Выберите действие:",
