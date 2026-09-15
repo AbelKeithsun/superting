@@ -2470,6 +2470,11 @@
     "ungrouped": "Ungruppiert",
     "addPlaceholder": "Nach Name oder E-Mail hinzufügen...",
     "pressEnterToadd": "Enter drücken, um „{{name}}“ hinzuzufügen",
-    "emptyHint": "Namen oder E-Mail eingeben, um Teilnehmer hinzuzufügen"
+    "emptyHint": "Namen oder E-Mail eingeben, um Teilnehmer hinzuzufügen",
+    "voiceprintSegments": "Stimmabdruck-Segmente",
+    "voiceprintSegmentsEmpty": "Noch keine hörbaren Stimmabdruck-Clips. Clips werden aus Meetings erfasst, in denen diese Person gesprochen hat und das Audio aufbewahrt wird.",
+    "playVoiceprintClip": "Stimmabdruck-Clip abspielen",
+    "clipUnavailable": "Clip nicht verfügbar",
+    "unnamedNote": "Unbenannte Notiz"
   }
 }

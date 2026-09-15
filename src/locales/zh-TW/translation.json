@@ -2469,6 +2469,11 @@
     "ungrouped": "未分組",
     "addPlaceholder": "輸入姓名或信箱新增...",
     "pressEnterToadd": "按 Enter 新增「{{name}}」",
-    "emptyHint": "輸入姓名或信箱以新增與會人"
+    "emptyHint": "輸入姓名或信箱以新增與會人",
+    "voiceprintSegments": "聲紋片段",
+    "voiceprintSegmentsEmpty": "暫無可試聽的聲紋片段。片段來自該人在會議中說話的語音，且會議音訊已留存。",
+    "playVoiceprintClip": "播放聲紋片段",
+    "clipUnavailable": "片段不可用",
+    "unnamedNote": "未命名筆記"
   }
 }

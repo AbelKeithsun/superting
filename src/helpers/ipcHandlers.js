@@ -63,7 +63,7 @@ const {
 } = require("./whisperVadConfig");
 const { analyzePreviewPcmSpeech, isUsablePreviewTranscript } = require("./dictationPreviewGate");
 const { DiarizationTaskTracker } = require("./diarizationTaskTracker");
-const { convertToWav, throwIfAborted } = require("./ffmpegUtils");
+const { convertToWav, throwIfAborted, extractAudioWindowToWav, makeTempPath } = require("./ffmpegUtils");
 const { LOCAL_STT_PRIORITY, LocalSttScheduler } = require("./localSttScheduler");
 const {
   UploadTranscriptionCoordinator,
@@ -89,6 +89,7 @@ const ALLOWED_MEETING_PROVIDERS = new Set([
   "deepgram-realtime",
 ]);
 const NOTE_AUDIO_PROTOCOL = "superting-note-audio";
+const CLIP_AUDIO_PROTOCOL = "superting-clip-audio";
 
 function buildRuntimeDictionaryPrompt(words) {
   if (!Array.isArray(words) || words.length === 0) return null;
@@ -483,6 +484,7 @@ class IPCHandlers {
     this.meetingAudioMix = "stereo";
     this._noteFilesEnabled = false;
     this._noteAudioProtocolTokens = new Map();
+    this._clipAudioTokens = new Map();
     require("./markdownMirror").setDatabaseManager(this.databaseManager);
     this.speakerDiarizationEnabled = true;
     this.activeMeetingSpeakerConfig = null;
@@ -494,6 +496,7 @@ class IPCHandlers {
     };
     liveSpeakerIdentifier.setDiarizationManager(this.diarizationManager);
     this._registerNoteAudioProtocol();
+    this._registerClipAudioProtocol();
     this._setupTextEditMonitor();
     this._setupAudioCleanup();
     this._logDetectedGpus();
@@ -800,6 +803,15 @@ class IPCHandlers {
           "audio-storage"
         );
       }
+      try {
+        this._purgeExpiredClipAudio();
+      } catch (error) {
+        debugLogger.error(
+          "Periodic voiceprint clip cleanup failed",
+          { error: error.message },
+          "speaker"
+        );
+      }
     }, SIX_HOURS_MS);
   }
 
@@ -840,6 +852,53 @@ class IPCHandlers {
     });
 
     IPCHandlers._noteAudioProtocolRegistered = true;
+  }
+
+  // Serves pre-sliced voiceprint audition clips (temp WAV files) over a
+  // dedicated protocol so the renderer can <audio> them without file:// access.
+  _registerClipAudioProtocol() {
+    if (IPCHandlers._clipAudioProtocolRegistered) return;
+
+    protocol.handle(CLIP_AUDIO_PROTOCOL, async (request) => {
+      try {
+        const url = new URL(request.url);
+        const token = url.hostname || url.pathname.replace(/^\/+/, "");
+        const entry = this._clipAudioTokens.get(token);
+        if (!entry || entry.expiresAt < Date.now()) {
+          return new Response("Not found", { status: 404 });
+        }
+        if (!fs.existsSync(entry.filePath)) {
+          return new Response("Not found", { status: 404 });
+        }
+        return createNoteAudioFileResponse(entry.filePath, request.headers);
+      } catch (error) {
+        debugLogger.warn("Failed to serve voiceprint clip", { error: error.message }, "speaker");
+        return new Response("Audio unavailable", { status: 500 });
+      }
+    });
+
+    IPCHandlers._clipAudioProtocolRegistered = true;
+  }
+
+  _buildClipAudioPlaybackUrl(filePath) {
+    const token = crypto.randomUUID();
+    this._clipAudioTokens.set(token, {
+      filePath,
+      expiresAt: Date.now() + 6 * 60 * 60 * 1000,
+    });
+    return `${CLIP_AUDIO_PROTOCOL}://${token}`;
+  }
+
+  _purgeExpiredClipAudio(olderThanMs = 6 * 60 * 60 * 1000) {
+    const cutoff = Date.now() - olderThanMs;
+    for (const [token, entry] of this._clipAudioTokens.entries()) {
+      if (entry.expiresAt < cutoff) {
+        try {
+          fs.unlinkSync(entry.filePath);
+        } catch (_) {}
+        this._clipAudioTokens.delete(token);
+      }
+    }
   }
 
   _buildNoteAudioPlaybackUrl(noteId, audioFileId) {
@@ -8685,10 +8744,16 @@ class IPCHandlers {
               email: email || null,
             });
             if (person) {
-              this.databaseManager.addVoiceprint(person.id, speakerEmbeddingBuffer, {
+              const voiceprint = this.databaseManager.addVoiceprint(person.id, speakerEmbeddingBuffer, {
                 sourceProfileId: profile.id,
                 sourceNoteId: noteId,
+                sourceSpeakerId: speakerId,
               });
+              // Snapshot the speaker's meeting utterances as auditionable
+              // voiceprint segments (click-to-play calibration evidence).
+              if (voiceprint?.id) {
+                this._captureVoiceprintSegments(noteId, speakerId, voiceprint.id);
+              }
             }
           } catch (personError) {
             debugLogger.warn("Person voiceprint sync skipped", {
@@ -8827,7 +8892,13 @@ class IPCHandlers {
 
           const voiceprint = this.databaseManager.addVoiceprint(personId, embeddingBuffer, {
             sourceNoteId: noteId,
+            sourceSpeakerId: speakerId,
           });
+          // Snapshot the speaker's meeting utterances as auditionable
+          // voiceprint segments (click-to-play calibration evidence).
+          if (voiceprint?.id && noteId && speakerId) {
+            this._captureVoiceprintSegments(noteId, speakerId, voiceprint.id);
+          }
           debugLogger.info("Voiceprint enrolled", { personId, noteId, speakerId }, "speaker");
           return { success: true, voiceprint, person: this.databaseManager.getPerson(personId) };
         } catch (error) {
@@ -8836,6 +8907,68 @@ class IPCHandlers {
         }
       }
     );
+
+    ipcMain.handle("voiceprint-segment-list", async (_event, personId = null) => {
+      try {
+        return {
+          success: true,
+          segments: this.databaseManager.listVoiceprintSegments(null, { personId }),
+        };
+      } catch (error) {
+        debugLogger.error("voiceprint-segment-list failed", { error: error.message }, "speaker");
+        return { success: false, error: error.message, segments: [] };
+      }
+    });
+
+    ipcMain.handle("get-voiceprint-segment-playback-url", async (_event, segmentId) => {
+      try {
+        const segment = this.databaseManager.getVoiceprintSegment(segmentId);
+        if (!segment) {
+          return { success: false, error: "Voiceprint segment not found" };
+        }
+        const noteId = segment.note_id;
+        let audioFile = null;
+        if (segment.audio_file_id != null) {
+          audioFile = this.databaseManager.getNoteAudioFile(noteId, segment.audio_file_id);
+        }
+        if (!audioFile) {
+          audioFile = this.databaseManager.getNoteAudioFiles(noteId)?.[0] || null;
+        }
+        if (!audioFile) {
+          return { success: false, error: "Meeting audio is no longer available for this clip" };
+        }
+        const audioPath = this.audioStorageManager.getRetainedAudioPath(audioFile.filename);
+        if (!audioPath) {
+          return { success: false, error: "Meeting audio has been removed or is unavailable" };
+        }
+
+        const startSeconds = Math.max(0, Number(segment.start_seconds) || 0);
+        const endSeconds = Number(segment.end_seconds);
+        const durationSeconds = Number.isFinite(endSeconds) && endSeconds > startSeconds
+          ? endSeconds - startSeconds
+          : 3;
+        const tempPath = makeTempPath("voiceprint-clip.wav");
+        await extractAudioWindowToWav(audioPath, tempPath, {
+          startSeconds,
+          durationSeconds,
+        });
+
+        return {
+          success: true,
+          url: this._buildClipAudioPlaybackUrl(tempPath),
+          startSeconds,
+          durationSeconds,
+          noteTitle: segment.note_title || null,
+        };
+      } catch (error) {
+        debugLogger.error(
+          "get-voiceprint-segment-playback-url failed",
+          { error: error.message },
+          "speaker"
+        );
+        return { success: false, error: error.message };
+      }
+    });
 
     ipcMain.handle("voiceprint-list", async (_event, personId = null) => {
       try {
@@ -8899,6 +9032,52 @@ class IPCHandlers {
       this._tryAutoLabelOneOnOne(noteId);
       return { success: true };
     });
+  }
+
+  // After a voiceprint template is enrolled from a meeting speaker, snapshot
+  // every diarized utterance of that speaker in the source note as auditionable
+  // audio segments (click-to-play, multiple clips per voiceprint).
+  _captureVoiceprintSegments(noteId, speakerId, voiceprintId) {
+    try {
+      if (!noteId || !voiceprintId) return 0;
+      const note = this.databaseManager.getNote(noteId);
+      if (!note) return 0;
+      const segments = this._parseNoteTranscriptSegments(note);
+      const audioFiles = this.databaseManager.getNoteAudioFiles(noteId);
+      const audioFile = audioFiles?.[0] || null;
+      if (!audioFile || segments.length === 0) return 0;
+
+      // Normalize timestamps to seconds relative to the note's audio (epoch-ms
+      // wall-clock segments are rebased like _rediarizeNoteAudio does).
+      const firstSystem = segments.find((s) => s.source === "system")?.timestamp;
+      const isEpochMs = typeof firstSystem === "number" && firstSystem > 1e9;
+      const normalize = (value) => {
+        if (typeof value !== "number" || !Number.isFinite(value)) return undefined;
+        return isEpochMs ? Math.max(0, (value - firstSystem) / 1000) : value;
+      };
+
+      const matching = segments.filter(
+        (s) => s.speaker === speakerId && Number.isFinite(s.timestamp)
+      );
+      if (matching.length === 0) return 0;
+
+      const clips = matching.map((s) => {
+        const start = Math.max(0, Number(normalize(s.timestamp)) || 0);
+        const rawEnd = normalize(s.endTime);
+        const end = Number.isFinite(rawEnd) && rawEnd > start ? rawEnd : start + 3;
+        return {
+          noteId,
+          speakerId,
+          startSeconds: start,
+          endSeconds: end,
+          audioFileId: audioFile.id,
+        };
+      });
+      return this.databaseManager.replaceVoiceprintSegments(voiceprintId, clips);
+    } catch (error) {
+      debugLogger.warn("Failed to capture voiceprint segments", { error: error.message }, "speaker");
+      return 0;
+    }
   }
 
   _retroactiveMapping(profile) {

@@ -2472,6 +2472,11 @@
     "ungrouped": "未分组",
     "addPlaceholder": "输入姓名或邮箱添加...",
     "pressEnterToadd": "按回车添加“{{name}}”",
-    "emptyHint": "输入姓名或邮箱以添加参会人"
+    "emptyHint": "输入姓名或邮箱以添加参会人",
+    "voiceprintSegments": "声纹片段",
+    "voiceprintSegmentsEmpty": "暂无可以试听的声纹片段。片段来自该人在会议中说话的语音，且会议音频已留存。",
+    "playVoiceprintClip": "播放声纹片段",
+    "clipUnavailable": "片段不可用",
+    "unnamedNote": "未命名笔记"
   }
 }

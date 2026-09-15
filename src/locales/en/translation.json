@@ -2466,6 +2466,11 @@
     "ungrouped": "Ungrouped",
     "addPlaceholder": "Add by name or email...",
     "pressEnterToadd": "Press Enter to add “{{name}}”",
-    "emptyHint": "Type a name or email to add participants"
+    "emptyHint": "Type a name or email to add participants",
+    "voiceprintSegments": "Voiceprint segments",
+    "voiceprintSegmentsEmpty": "No auditionable voiceprint clips yet. Clips are captured from meetings where this person spoke and the audio is retained.",
+    "playVoiceprintClip": "Play voiceprint clip",
+    "clipUnavailable": "Clip unavailable",
+    "unnamedNote": "Untitled note"
   }
 }

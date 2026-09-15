@@ -2469,6 +2469,11 @@
     "ungrouped": "Sin grupo",
     "addPlaceholder": "Añadir por nombre o correo...",
     "pressEnterToadd": "Pulsa Enter para añadir a “{{name}}”",
-    "emptyHint": "Escribe un nombre o correo para añadir participantes"
+    "emptyHint": "Escribe un nombre o correo para añadir participantes",
+    "voiceprintSegments": "Segmentos de huella de voz",
+    "voiceprintSegmentsEmpty": "Aún no hay clips de huella de voz audibles. Los clips se capturan de reuniones en las que esta persona habló y el audio se conserva.",
+    "playVoiceprintClip": "Reproducir clip de huella de voz",
+    "clipUnavailable": "Clip no disponible",
+    "unnamedNote": "Nota sin título"
   }
 }

@@ -18,8 +18,23 @@ export type VoiceprintRecord = {
   sample_count?: number;
   source_note_id?: number | null;
   source_profile_id?: number | null;
+  source_speaker_id?: string | null;
   created_at?: string;
   updated_at?: string;
+};
+
+// Auditionable audio evidence attached to a voiceprint template: a slice of
+// the source meeting audio the user can click-to-play to calibrate the binding.
+export type VoiceprintSegmentRecord = {
+  id: number;
+  voiceprint_id: number;
+  note_id: number;
+  speaker_id?: string | null;
+  start_seconds?: number | null;
+  end_seconds?: number | null;
+  audio_file_id?: number | null;
+  note_title?: string | null;
+  created_at?: string;
 };
 
 export type InferenceMode = "providers" | "local" | "self-hosted" | "enterprise";
@@ -1837,6 +1852,17 @@ declare global {
       voiceprintDeleteAll?: (
         personId?: number | null
       ) => Promise<{ success: boolean; deleted?: number; error?: string }>;
+      voiceprintSegmentList?: (
+        personId?: number | null
+      ) => Promise<{ success: boolean; segments: VoiceprintSegmentRecord[]; error?: string }>;
+      getVoiceprintSegmentPlaybackUrl?: (segmentId: number) => Promise<{
+        success: boolean;
+        url?: string;
+        startSeconds?: number;
+        durationSeconds?: number;
+        noteTitle?: string | null;
+        error?: string;
+      }>;
 
       // Dictation realtime streaming
       dictationRealtimeWarmup?: (options: {

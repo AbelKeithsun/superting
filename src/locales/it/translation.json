@@ -2469,6 +2469,11 @@
     "ungrouped": "Non raggruppato",
     "addPlaceholder": "Aggiungi per nome o email...",
     "pressEnterToadd": "Premi Invio per aggiungere “{{name}}”",
-    "emptyHint": "Digita un nome o un'email per aggiungere partecipanti"
+    "emptyHint": "Digita un nome o un'email per aggiungere partecipanti",
+    "voiceprintSegments": "Segmenti dell'impronta vocale",
+    "voiceprintSegmentsEmpty": "Nessun clip udibile dell'impronta vocale ancora. I clip vengono catturati dalle riunioni in cui questa persona ha parlato e l'audio è conservato.",
+    "playVoiceprintClip": "Riproduci clip dell'impronta vocale",
+    "clipUnavailable": "Clip non disponibile",
+    "unnamedNote": "Nota senza titolo"
   }
 }
