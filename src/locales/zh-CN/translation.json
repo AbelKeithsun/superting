@@ -1548,6 +1548,20 @@
     }
   },
   "notes": {
+    "diarization": {
+      "skippedTitle": "本次录音未做说话人分离",
+      "failedTitle": "说话人分离失败",
+      "failedReason": "{{reason}}",
+      "skipReason": {
+        "disabled": "该会议已关闭说话人分离。",
+        "engineUnavailable": "说话人分离引擎或模型不可用。",
+        "noAudio": "没有可用于分析的会议音频（未保留录音）。",
+        "noSystemTrack": "既没有系统音轨，也没有保留的会议音频。",
+        "systemTrackSilent": "系统音轨没有声音，且没有保留的会议音频。",
+        "systemTrackUnusable": "系统音轨无法分析。",
+        "unknown": "原因未知（{{reason}}）。"
+      }
+    },
     "tags": {
       "add": "添加标签",
       "chooseExisting": "选择已有标签",

@@ -543,6 +543,23 @@ class DiarizationManager {
     return analyzeAudioFile(filePath, { signal: options.signal });
   }
 
+  /**
+   * Which profile a diarization input file matches: "normal" / "low_signal" /
+   * "silent". Callers use it to decide whether a track actually holds speech
+   * worth diarizing (e.g. a system audio track that only captured silence
+   * because nobody was sharing audio). Returns null when it cannot be analyzed.
+   */
+  async classifyDiarizationInput(wavPath, options = {}) {
+    if (!wavPath || !fs.existsSync(wavPath)) return null;
+    try {
+      const analysis = await this._analyzeAudioFile(wavPath, options);
+      return selectDiarizationProfile(analysis).name;
+    } catch (error) {
+      debugLogger.debug("Diarization input analysis failed", { error: error.message });
+      return null;
+    }
+  }
+
   _extractAudioWindowToWav(inputPath, outputPath, options = {}) {
     return extractAudioWindowToWav(inputPath, outputPath, options);
   }
