@@ -546,16 +546,46 @@ class DatabaseManager {
           sample_count INTEGER DEFAULT 1,
           source_note_id INTEGER,
           source_profile_id INTEGER,
+          source_speaker_id TEXT,
           created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
           updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
           FOREIGN KEY (person_id) REFERENCES people(id) ON DELETE CASCADE
         )
       `);
+      try {
+        this.db.exec("ALTER TABLE voiceprints ADD COLUMN source_speaker_id TEXT");
+      } catch (err) {
+        if (!err.message.includes("duplicate column")) throw err;
+      }
       this.db.exec(
         "CREATE UNIQUE INDEX IF NOT EXISTS idx_people_email ON people(email) WHERE email IS NOT NULL"
       );
       this.db.exec(
         "CREATE UNIQUE INDEX IF NOT EXISTS idx_voiceprints_source_profile ON voiceprints(source_profile_id) WHERE source_profile_id IS NOT NULL"
+      );
+
+      // Auditionable audio evidence per voiceprint template: 1:N slices of the
+      // source meeting audio that produced (or matched) the template, so the
+      // user can click-to-play and calibrate the binding by ear. Local-only.
+      this.db.exec(`
+        CREATE TABLE IF NOT EXISTS voiceprint_segments (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          voiceprint_id INTEGER NOT NULL,
+          note_id INTEGER NOT NULL,
+          speaker_id TEXT,
+          start_seconds REAL,
+          end_seconds REAL,
+          audio_file_id INTEGER,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (voiceprint_id) REFERENCES voiceprints(id) ON DELETE CASCADE,
+          FOREIGN KEY (note_id) REFERENCES notes(id) ON DELETE CASCADE
+        )
+      `);
+      this.db.exec(
+        "CREATE INDEX IF NOT EXISTS idx_voiceprint_segments_voiceprint ON voiceprint_segments(voiceprint_id)"
+      );
+      this.db.exec(
+        "CREATE INDEX IF NOT EXISTS idx_voiceprint_segments_note ON voiceprint_segments(note_id)"
       );
 
       this.db.exec(`
@@ -2806,6 +2836,12 @@ class DatabaseManager {
   deletePerson(id) {
     try {
       if (!this.db) throw new Error("Database not initialized");
+      this.db
+        .prepare(
+          `DELETE FROM voiceprint_segments
+           WHERE voiceprint_id IN (SELECT id FROM voiceprints WHERE person_id = ?)`
+        )
+        .run(id);
       this.db.prepare("DELETE FROM people WHERE id = ?").run(id);
       return { success: true };
     } catch (error) {
@@ -2868,25 +2904,164 @@ class DatabaseManager {
     }
   }
 
-  addVoiceprint(personId, embeddingBuffer, { sampleCount = 1, sourceNoteId = null, sourceProfileId = null } = {}) {
+  addVoiceprint(personId, embeddingBuffer, { sampleCount = 1, sourceNoteId = null, sourceProfileId = null, sourceSpeakerId = null } = {}) {
     try {
       if (!this.db) throw new Error("Database not initialized");
       if (!embeddingBuffer?.length) throw new Error("Embedding buffer is required");
       const result = this.db
         .prepare(
-          `INSERT INTO voiceprints (person_id, embedding, sample_count, source_note_id, source_profile_id)
-           VALUES (?, ?, ?, ?, ?)
+          `INSERT INTO voiceprints (person_id, embedding, sample_count, source_note_id, source_profile_id, source_speaker_id)
+           VALUES (?, ?, ?, ?, ?, ?)
            ON CONFLICT(source_profile_id) WHERE source_profile_id IS NOT NULL DO UPDATE SET
              embedding = excluded.embedding,
              sample_count = excluded.sample_count,
              person_id = excluded.person_id,
+             source_speaker_id = COALESCE(excluded.source_speaker_id, voiceprints.source_speaker_id),
              updated_at = CURRENT_TIMESTAMP`
         )
-        .run(personId, embeddingBuffer, sampleCount, sourceNoteId, sourceProfileId);
+        .run(personId, embeddingBuffer, sampleCount, sourceNoteId, sourceProfileId, sourceSpeakerId);
       return this.db.prepare("SELECT * FROM voiceprints WHERE id = ?").get(result.lastInsertRowid);
     } catch (error) {
       debugLogger.error("Error adding voiceprint", { error: error.message }, "database");
       throw error;
+    }
+  }
+
+  // Replace the auditionable audio segments attached to a voiceprint template.
+  // Used at enrollment time to snapshot every diarized utterance of that
+  // speaker in the source note (1:N playback evidence for calibration).
+  replaceVoiceprintSegments(voiceprintId, segments = []) {
+    try {
+      if (!this.db) throw new Error("Database not initialized");
+      const tx = this.db.transaction((entries) => {
+        this.db.prepare("DELETE FROM voiceprint_segments WHERE voiceprint_id = ?").run(voiceprintId);
+        if (entries.length === 0) return 0;
+        const stmt = this.db.prepare(
+          `INSERT INTO voiceprint_segments
+             (voiceprint_id, note_id, speaker_id, start_seconds, end_seconds, audio_file_id)
+           VALUES (?, ?, ?, ?, ?, ?)`
+        );
+        for (const entry of entries) {
+          stmt.run(
+            voiceprintId,
+            entry.noteId,
+            entry.speakerId ?? null,
+            entry.startSeconds ?? 0,
+            entry.endSeconds ?? null,
+            entry.audioFileId ?? null
+          );
+        }
+        return entries.length;
+      });
+      return { success: true, inserted: tx(segments) };
+    } catch (error) {
+      debugLogger.error("Error replacing voiceprint segments", { error: error.message }, "database");
+      throw error;
+    }
+  }
+
+  addVoiceprintSegments(voiceprintId, segments = []) {
+    try {
+      if (!this.db) throw new Error("Database not initialized");
+      const stmt = this.db.prepare(
+        `INSERT INTO voiceprint_segments
+           (voiceprint_id, note_id, speaker_id, start_seconds, end_seconds, audio_file_id)
+         VALUES (?, ?, ?, ?, ?, ?)`
+      );
+      let inserted = 0;
+      for (const entry of segments) {
+        stmt.run(
+          voiceprintId,
+          entry.noteId,
+          entry.speakerId ?? null,
+          entry.startSeconds ?? 0,
+          entry.endSeconds ?? null,
+          entry.audioFileId ?? null
+        );
+        inserted += 1;
+      }
+      return { success: true, inserted };
+    } catch (error) {
+      debugLogger.error("Error adding voiceprint segments", { error: error.message }, "database");
+      throw error;
+    }
+  }
+
+  listVoiceprintSegments(voiceprintId = null, { personId = null, limit = 50 } = {}) {
+    try {
+      if (!this.db) throw new Error("Database not initialized");
+      if (voiceprintId != null) {
+        return this.db
+          .prepare(
+            `SELECT s.*, n.title AS note_title
+             FROM voiceprint_segments s
+             LEFT JOIN notes n ON n.id = s.note_id
+             WHERE s.voiceprint_id = ?
+             ORDER BY s.created_at DESC, s.id DESC
+             LIMIT ?`
+          )
+          .all(voiceprintId, limit);
+      }
+      if (personId != null) {
+        return this.db
+          .prepare(
+            `SELECT s.*, n.title AS note_title
+             FROM voiceprint_segments s
+             JOIN voiceprints v ON v.id = s.voiceprint_id
+             LEFT JOIN notes n ON n.id = s.note_id
+             WHERE v.person_id = ?
+             ORDER BY s.created_at DESC, s.id DESC
+             LIMIT ?`
+          )
+          .all(personId, limit);
+      }
+      return this.db
+        .prepare(
+          `SELECT s.*, n.title AS note_title
+           FROM voiceprint_segments s
+           LEFT JOIN notes n ON n.id = s.note_id
+           ORDER BY s.created_at DESC, s.id DESC
+           LIMIT ?`
+        )
+        .all(limit);
+    } catch (error) {
+      debugLogger.error("Error listing voiceprint segments", { error: error.message }, "database");
+      throw error;
+    }
+  }
+
+  getVoiceprintSegment(id) {
+    try {
+      if (!this.db) throw new Error("Database not initialized");
+      return this.db
+        .prepare(
+          `SELECT s.*, n.title AS note_title
+           FROM voiceprint_segments s
+           LEFT JOIN notes n ON n.id = s.note_id
+           WHERE s.id = ?`
+        )
+        .get(id);
+    } catch (error) {
+      debugLogger.error("Error getting voiceprint segment", { error: error.message }, "database");
+      throw error;
+    }
+  }
+
+  deleteVoiceprintSegmentsForNotes(noteIds = []) {
+    try {
+      if (!this.db || noteIds.length === 0) return { success: true, deleted: 0 };
+      const placeholders = noteIds.map(() => "?").join(",");
+      const result = this.db
+        .prepare(`DELETE FROM voiceprint_segments WHERE note_id IN (${placeholders})`)
+        .run(...noteIds);
+      return { success: true, deleted: result.changes };
+    } catch (error) {
+      debugLogger.error(
+        "Error deleting voiceprint segments for notes",
+        { error: error.message },
+        "database"
+      );
+      return { success: false, error: error.message };
     }
   }
 
@@ -2895,7 +3070,7 @@ class DatabaseManager {
       if (!this.db) throw new Error("Database not initialized");
       const columns = includeEmbedding
         ? "v.*"
-        : "v.id, v.person_id, v.sample_count, v.source_note_id, v.source_profile_id, v.created_at, v.updated_at";
+        : "v.id, v.person_id, v.sample_count, v.source_note_id, v.source_profile_id, v.source_speaker_id, v.created_at, v.updated_at";
       const where = personId ? "WHERE v.person_id = ?" : "";
       const params = personId ? [personId] : [];
       return this.db
@@ -2910,6 +3085,7 @@ class DatabaseManager {
   deleteVoiceprint(id) {
     try {
       if (!this.db) throw new Error("Database not initialized");
+      this.db.prepare("DELETE FROM voiceprint_segments WHERE voiceprint_id = ?").run(id);
       this.db.prepare("DELETE FROM voiceprints WHERE id = ?").run(id);
       return { success: true };
     } catch (error) {
@@ -2921,6 +3097,7 @@ class DatabaseManager {
   deleteAllVoiceprints() {
     try {
       if (!this.db) throw new Error("Database not initialized");
+      this.db.prepare("DELETE FROM voiceprint_segments").run();
       const result = this.db.prepare("DELETE FROM voiceprints").run();
       return { success: true, deleted: result.changes };
     } catch (error) {
@@ -3169,6 +3346,7 @@ class DatabaseManager {
           "notes"
         );
       }
+      this.db.prepare("DELETE FROM voiceprint_segments WHERE note_id = ?").run(id);
       const result = this.db.prepare("DELETE FROM notes WHERE id = ?").run(id);
       return { success: result.changes > 0, id };
     } catch (error) {

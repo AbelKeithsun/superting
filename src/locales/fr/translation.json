@@ -2465,6 +2465,11 @@
     "ungrouped": "Non groupé",
     "addPlaceholder": "Ajouter par nom ou e-mail...",
     "pressEnterToadd": "Appuyez sur Entrée pour ajouter « {{name}} »",
-    "emptyHint": "Saisissez un nom ou un e-mail pour ajouter des participants"
+    "emptyHint": "Saisissez un nom ou un e-mail pour ajouter des participants",
+    "voiceprintSegments": "Segments d'empreinte vocale",
+    "voiceprintSegmentsEmpty": "Pas encore de segments d'empreinte vocale audibles. Les segments sont capturés lors des réunions où cette personne a parlé et où l'audio est conservé.",
+    "playVoiceprintClip": "Lire le segment d'empreinte vocale",
+    "clipUnavailable": "Segment indisponible",
+    "unnamedNote": "Note sans titre"
   }
 }

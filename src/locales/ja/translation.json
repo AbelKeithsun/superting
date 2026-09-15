@@ -2465,6 +2465,11 @@
     "ungrouped": "未分類",
     "addPlaceholder": "名前またはメールで追加...",
     "pressEnterToadd": "Enter キーで「{{name}}」を追加",
-    "emptyHint": "名前またはメールを入力して参加者を追加"
+    "emptyHint": "名前またはメールを入力して参加者を追加",
+    "voiceprintSegments": "声紋セグメント",
+    "voiceprintSegmentsEmpty": "試聴できる声紋クリップはまだありません。クリップはこの人物が話した会議と、音声が保持されている場合に記録されます。",
+    "playVoiceprintClip": "声紋クリップを再生",
+    "clipUnavailable": "クリップを利用できません",
+    "unnamedNote": "無題のノート"
   }
 }

@@ -1,6 +1,6 @@
-import { useEffect, useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo } from "react";
 import { useTranslation } from "react-i18next";
-import { BookOpen, X, CornerDownLeft, Info, Users, ArrowRight, Search } from "lucide-react";
+import { BookOpen, X, Info, ArrowRight, Search } from "lucide-react";
 import { Input } from "./ui/input";
 import { Button } from "./ui/button";
 import { ConfirmDialog } from "./ui/dialog";
@@ -13,12 +13,7 @@ import {
   type DictionaryDisplayItem,
 } from "../utils/dictionaryListItems";
 import { resolveDictionaryInputSubmission } from "../utils/dictionaryInput";
-
-interface SpeakerNameEntry {
-  id: number;
-  display_name: string;
-  email: string | null;
-}
+import PeopleManagerPanel from "./notes/PeopleManagerPanel";
 
 export default function DictionaryView() {
   const { t } = useTranslation();
@@ -33,10 +28,8 @@ export default function DictionaryView() {
   const [dictionarySearch, setDictionarySearch] = useState("");
   const [aliasFrom, setAliasFrom] = useState("");
   const [aliasTo, setAliasTo] = useState("");
-  const [newSpeakerName, setNewSpeakerName] = useState("");
   const [confirmClear, setConfirmClear] = useState(false);
   const [showInfo, setShowInfo] = useState(false);
-  const [speakerNames, setSpeakerNames] = useState<SpeakerNameEntry[]>([]);
 
   const dictionaryItems = useMemo(
     () =>
@@ -54,22 +47,6 @@ export default function DictionaryView() {
   const hasSearchQuery = dictionarySearch.trim().length > 0;
   const activeTabDescription =
     activeTab === "dictionary" ? t("dictionary.dictionaryUsage") : t("dictionary.peopleUsage");
-
-  const refreshSpeakerNames = useCallback(() => {
-    window.electronAPI?.getSpeakerNames?.().then((names) => {
-      setSpeakerNames(
-        (names || []).map((entry) => ({
-          id: entry.id,
-          display_name: entry.display_name,
-          email: entry.email,
-        }))
-      );
-    });
-  }, []);
-
-  useEffect(() => {
-    refreshSpeakerNames();
-  }, [refreshSpeakerNames]);
 
   const handleRemove = useCallback(
     (word: string) => {
@@ -125,57 +102,6 @@ export default function DictionaryView() {
       );
     },
     [customDictionaryAliases, setCustomDictionaryAliases]
-  );
-
-  const handleAddSpeakerName = useCallback(async () => {
-    const name = newSpeakerName.trim();
-    if (!name) return;
-    const result = await window.electronAPI?.upsertSpeakerName?.(name, null);
-    if (result?.success) {
-      setNewSpeakerName("");
-      refreshSpeakerNames();
-    }
-  }, [newSpeakerName, refreshSpeakerNames]);
-
-  const handleRemoveSpeakerName = useCallback(
-    async (id: number) => {
-      const result = await window.electronAPI?.deleteSpeakerName?.(id);
-      if (result?.success) refreshSpeakerNames();
-    },
-    [refreshSpeakerNames]
-  );
-
-  const renderAddInput = (
-    value: string,
-    setValue: (value: string) => void,
-    onAdd: () => void,
-    placeholder: string,
-    ariaLabel: string
-  ) => (
-    <div className="relative">
-      <Input
-        placeholder={placeholder}
-        value={value}
-        onChange={(e) => setValue(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") onAdd();
-        }}
-        className="w-full h-8 text-xs pr-8"
-      />
-      {value.trim() ? (
-        <button
-          onClick={onAdd}
-          aria-label={ariaLabel}
-          className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
-        >
-          <CornerDownLeft size={10} />
-        </button>
-      ) : (
-        <kbd className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-muted-foreground/70 font-mono select-none pointer-events-none">
-          ⏎
-        </kbd>
-      )}
-    </div>
   );
 
   const renderDictionaryRow = (item: DictionaryDisplayItem) => {
@@ -285,51 +211,16 @@ export default function DictionaryView() {
               <div className="ow-section-header">
                 <div className="flex items-baseline gap-2">
                   <h2 className="ow-section-title">{t("dictionary.peopleTitle")}</h2>
-                  <span className="text-xs text-muted-foreground font-mono tabular-nums">
-                    {speakerNames.length}
-                  </span>
                 </div>
               </div>
               <div className="ow-section-muted">
-                {renderAddInput(
-                  newSpeakerName,
-                  setNewSpeakerName,
-                  handleAddSpeakerName,
-                  t("dictionary.addPersonPlaceholder"),
-                  t("dictionary.addPerson")
-                )}
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  {t("dictionary.peopleDescription")}
+                </p>
               </div>
-              {speakerNames.length === 0 ? (
-                <div className="ow-empty-state-card mx-auto mt-4">
-                  <div className="ow-empty-state-visual mx-auto h-11 w-11">
-                    <Users size={17} strokeWidth={1.5} className="text-muted-foreground" />
-                  </div>
-                  <h2 className="ow-empty-state-title">{t("dictionary.peopleTitle")}</h2>
-                  <p className="ow-empty-state-description mx-auto">
-                    {t("dictionary.peopleDescription")}
-                  </p>
-                </div>
-              ) : (
-                <div className="ow-section-muted mt-3">
-                  <div className="flex flex-wrap gap-1.5">
-                    {speakerNames.map((entry) => (
-                      <span
-                        key={entry.id}
-                        className="group inline-flex items-center gap-1 rounded-md border border-border/60 bg-background px-2.5 py-1 text-xs text-muted-foreground transition-colors duration-150 hover:border-border-hover hover:bg-muted/60 hover:text-foreground dark:border-white/8 dark:bg-white/[0.03] dark:hover:bg-white/[0.06]"
-                      >
-                        {entry.display_name}
-                        <button
-                          onClick={() => handleRemoveSpeakerName(entry.id)}
-                          aria-label={t("dictionary.removePerson", { name: entry.display_name })}
-                          className="p-0.5 rounded-sm opacity-0 group-hover:opacity-100 text-foreground/25 hover:!text-destructive/70 transition-colors duration-150"
-                        >
-                          <X size={10} strokeWidth={2} />
-                        </button>
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              )}
+              <div className="ow-section-flat">
+                <PeopleManagerPanel />
+              </div>
             </div>
           ) : (
             <div className="ow-section flex min-h-0 max-w-full flex-col p-0">
