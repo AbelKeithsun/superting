@@ -891,6 +891,11 @@ class DiarizationManager {
             speaker: speakerMap.get(matchedSpeaker) || matchedSpeaker,
             speakerIsPlaceholder: false,
           });
+          // Keep the resolved utterance end so voiceprint clips and playback
+          // seeking do not have to guess it later.
+          if (!Number.isFinite(enriched.endTime) && Number.isFinite(segEnd) && segEnd > segStart) {
+            enriched.endTime = segEnd;
+          }
           enriched.speakerMatchStatus = "matched";
           enriched.speakerMatchMethod = matchMethod;
           diagnostics.matchedSegmentCount += 1;
