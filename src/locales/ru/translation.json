@@ -1981,7 +1981,16 @@
       "filterAria": "Фильтровать говорящих в расшифровке",
       "currentSessionSpeakers": "Текущая сессия",
       "unknownTrack": "Unknown track",
-      "unmatchedSpeaker": "Unmatched speaker"
+      "unmatchedSpeaker": "Unmatched speaker",
+      "contactCreatedToast": "Контакт {{name}} создан. Управление: Словарь → Контакты",
+      "contactLinkedToast": "Связано с контактом {{name}}",
+      "contactResolveTitle": "Найдены однофамильцы",
+      "contactResolveTitleExact": "Найден идентичный контакт",
+      "contactResolveDescription": "Отмеченное имя «{{name}}» может совпадать со следующими контактами. Выберите действие:",
+      "contactResolveNoDetails": "Нет дополнительных данных",
+      "contactResolveLink": "Связать с «{{name}}»",
+      "contactResolveCreate": "Создать отдельный контакт",
+      "contactResolveIgnore": "Игнорировать (только имя в этой сессии)"
     },
     "collapseNoteList": "Свернуть список заметок",
     "expandNoteList": "Развернуть список заметок",

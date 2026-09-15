@@ -55,6 +55,7 @@ import type {
   NoteAudioFile,
   NoteItem,
   FolderItem,
+  PersonRecord,
   SingleNoteExportFormat,
   SingleNoteExportOptions,
 } from "../../types/electron";
@@ -749,6 +750,27 @@ export default function NoteEditor({
   >([]);
   const [speakerNames, setSpeakerNames] = useState<SpeakerNameEntry[]>([]);
   const [isRediarizeDialogOpen, setIsRediarizeDialogOpen] = useState(false);
+  // Cross-session contact resolution on speaker mark: when the marked name
+  // matches an existing contact (exact) or similar-named ones (ambiguous), we
+  // pause and ask the user to link / create / ignore before committing.
+  const [speakerContactPrompt, setSpeakerContactPrompt] = useState<{
+    speakerId: string;
+    displayName: string;
+    email: string | null;
+    profileId: number | null;
+    status: "exact" | "ambiguous";
+    exact: PersonRecord | null;
+    candidates: PersonRecord[];
+  } | null>(null);
+  const speakerContactResolveRef = useRef<
+    | ((
+        choice:
+          | { action: "link"; personId: number }
+          | { action: "create" }
+          | { action: "ignore" }
+      ) => void)
+    | null
+  >(null);
   const [rediarizeMode, setRediarizeMode] = useState<RediarizeSpeakerMode>("auto");
   const [rediarizeExpectedCount, setRediarizeExpectedCount] = useState(3);
   const [showRediarizeAdvanced, setShowRediarizeAdvanced] = useState(false);
@@ -1324,6 +1346,86 @@ export default function NoteEditor({
     [recordingStartedAt, transcriptAudioDurationSeconds, visibleTranscriptSegments]
   );
 
+  // Resolve a speaker mark against contacts, then commit the mapping. If the
+  // marked name already exists in people (exact) or has similar-named
+  // candidates (ambiguous), pause for the user to choose link/create/ignore —
+  // otherwise auto-create so the contact is reusable across meetings.
+  const commitSpeakerWithContact = useCallback(
+    async ({
+      speakerId,
+      displayName,
+      email,
+      profileId,
+    }: {
+      speakerId: string;
+      displayName: string;
+      email?: string | null;
+      profileId?: number | null;
+    }) => {
+      let options: { personId?: number | null; createPerson?: boolean } = {};
+      let linkedPersonId: number | null = null;
+
+      const resolution = await window.electronAPI?.resolveSpeakerContact?.(
+        displayName,
+        email ?? null
+      );
+      if (resolution?.success && (resolution.status === "exact" || resolution.status === "ambiguous")) {
+        const choice = await new Promise<{
+          action: "link" | "create" | "ignore";
+          personId?: number;
+        }>((resolveChoice) => {
+          speakerContactResolveRef.current = resolveChoice;
+          setSpeakerContactPrompt({
+            speakerId,
+            displayName,
+            email: email ?? null,
+            profileId: profileId ?? null,
+            status: resolution.status as "exact" | "ambiguous",
+            exact: resolution.exact ?? null,
+            candidates: resolution.candidates ?? [],
+          });
+        });
+        speakerContactResolveRef.current = null;
+        setSpeakerContactPrompt(null);
+        if (choice.action === "link") {
+          options = { personId: choice.personId };
+          linkedPersonId = choice.personId ?? null;
+        } else if (choice.action === "ignore") {
+          options = { createPerson: false };
+        }
+        // "create" → options stays {} (createPerson defaults to true)
+      }
+
+      const result = await window.electronAPI?.setSpeakerMapping?.(
+        note.id,
+        speakerId,
+        displayName,
+        email,
+        profileId,
+        options
+      );
+      if (result?.success) {
+        if (result.personCreated) {
+          toast({
+            title: t("notes.speaker.contactCreatedToast", {
+              defaultValue: "已新建联系人 {{name}}，可在 词典 → 联系人 中管理",
+              name: displayName,
+            }),
+          });
+        } else if (linkedPersonId != null && result.person) {
+          toast({
+            title: t("notes.speaker.contactLinkedToast", {
+              defaultValue: "已关联到联系人 {{name}}",
+              name: result.person.display_name,
+            }),
+          });
+        }
+      }
+      return result;
+    },
+    [note.id, t, toast]
+  );
+
   const handleMapSpeaker = useCallback(
     async (
       speakerId: string,
@@ -1358,13 +1460,7 @@ export default function NoteEditor({
 
       await rememberSpeakerName(displayName, email ?? null);
       setSpeakerMappings((prev) => ({ ...prev, [speakerId]: displayName }));
-      await window.electronAPI?.setSpeakerMapping?.(
-        note.id,
-        speakerId,
-        displayName,
-        email,
-        profileId
-      );
+      await commitSpeakerWithContact({ speakerId, displayName, email, profileId });
 
       if (isRecording) {
         onLiveSpeakerLock?.(speakerId, displayName);
@@ -1400,6 +1496,7 @@ export default function NoteEditor({
       persistDisplaySegments,
       refreshSpeakerNames,
       refreshSpeakerProfiles,
+      commitSpeakerWithContact,
     ]
   );
 
@@ -1492,13 +1589,7 @@ export default function NoteEditor({
 
       await rememberSpeakerName(displayName, email ?? null);
       setSpeakerMappings((prev) => ({ ...prev, [speakerId]: displayName }));
-      await window.electronAPI?.setSpeakerMapping?.(
-        note.id,
-        speakerId,
-        displayName,
-        email,
-        profileId
-      );
+      await commitSpeakerWithContact({ speakerId, displayName, email, profileId });
       const nextSegments = assignSpeakerGroupName(displaySegments, speakerId, displayName).map(
         (segment) =>
           segment.speaker === speakerId
@@ -1517,6 +1608,7 @@ export default function NoteEditor({
       refreshSpeakerProfiles,
       rememberSpeakerName,
       speakerMappings,
+      commitSpeakerWithContact,
     ]
   );
 
@@ -3243,6 +3335,87 @@ export default function NoteEditor({
               disabled={isImportingNote}
             >
               {t("common.cancel")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Cross-session contact resolution: user chooses link / create / ignore */}
+      <Dialog
+        open={!!speakerContactPrompt}
+        onOpenChange={(open) => {
+          if (!open && speakerContactPrompt) {
+            speakerContactResolveRef.current?.({ action: "ignore" });
+            speakerContactResolveRef.current = null;
+            setSpeakerContactPrompt(null);
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-105 p-5 gap-4">
+          <DialogHeader>
+            <DialogTitle>
+              {speakerContactPrompt?.status === "exact"
+                ? t("notes.speaker.contactResolveTitleExact", "检测到同名联系人")
+                : t("notes.speaker.contactResolveTitle", "发现同名联系人")}
+            </DialogTitle>
+            <DialogDescription>
+              {t("notes.speaker.contactResolveDescription", {
+                defaultValue:
+                  "标记的「{{name}}」与以下联系人可能相同，请选择如何处理：",
+                name: speakerContactPrompt?.displayName ?? "",
+              })}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="flex max-h-56 flex-col gap-1.5 overflow-y-auto">
+            {[
+              ...(speakerContactPrompt?.exact ? [speakerContactPrompt.exact] : []),
+              ...(speakerContactPrompt?.candidates ?? []),
+            ].map((person) => (
+              <div
+                key={person.id}
+                className="flex items-center gap-2 rounded-md border border-border/70 bg-background px-2.5 py-2"
+              >
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-xs font-medium text-foreground">
+                    {person.display_name}
+                  </div>
+                  <div className="truncate text-[11px] text-muted-foreground">
+                    {[person.email, person.organization]
+                      .filter(Boolean)
+                      .join(" · ") ||
+                      t("notes.speaker.contactResolveNoDetails", "未填写更多信息")}
+                  </div>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-7 shrink-0 px-2.5 text-xs"
+                  onClick={() => speakerContactResolveRef.current?.({ action: "link", personId: person.id })}
+                >
+                  {t("notes.speaker.contactResolveLink", {
+                    defaultValue: "关联到「{{name}}」",
+                    name: person.display_name,
+                  })}
+                </Button>
+              </div>
+            ))}
+          </div>
+
+          <DialogFooter className="flex-col gap-2 sm:flex-row sm:items-center">
+            <Button
+              variant="outline"
+              className="w-full text-xs sm:w-auto"
+              onClick={() => speakerContactResolveRef.current?.({ action: "create" })}
+            >
+              {t("notes.speaker.contactResolveCreate", "新建独立联系人")}
+            </Button>
+            <Button
+              variant="ghost"
+              className="w-full text-xs text-muted-foreground sm:w-auto"
+              onClick={() => speakerContactResolveRef.current?.({ action: "ignore" })}
+            >
+              {t("notes.speaker.contactResolveIgnore", "忽略（仅本次命名）")}
             </Button>
           </DialogFooter>
         </DialogContent>

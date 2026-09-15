@@ -8715,15 +8715,48 @@ class IPCHandlers {
       return this.databaseManager.getSpeakerMappings(noteId);
     });
 
+    // Read-only contact resolution for a speaker mark: tells the renderer
+    // whether the marked name matches an existing person (exact), has
+    // same/similar-name candidates (ambiguous), or nothing at all (none) —
+    // so the UI can decide create-vs-link instead of silently duplicating.
+    ipcMain.handle("resolve-speaker-contact", async (_event, displayName, email = null) => {
+      try {
+        const { exact, candidates } = this.databaseManager.findPeopleForSpeaker(displayName, email);
+        const status = exact ? "exact" : candidates.length > 0 ? "ambiguous" : "none";
+        return { success: true, status, exact, candidates };
+      } catch (error) {
+        debugLogger.error("resolve-speaker-contact failed", { error: error.message }, "speaker");
+        return { success: false, error: error.message, status: "none", exact: null, candidates: [] };
+      }
+    });
+
     ipcMain.handle(
       "set-speaker-mapping",
-      async (_event, noteId, speakerId, displayName, email, profileId) => {
+      async (_event, noteId, speakerId, displayName, email, profileId, options = {}) => {
         const embeddings = this.databaseManager.getNoteSpeakerEmbeddings(noteId);
         const noteSpeakerEmbedding = embeddings.find((e) => e.speaker_id === speakerId);
         const liveSpeakerEmbedding = liveSpeakerIdentifier.getSpeakerEmbedding(speakerId);
         const speakerEmbeddingBuffer =
           noteSpeakerEmbedding?.embedding ||
           (liveSpeakerEmbedding ? Buffer.from(liveSpeakerEmbedding.buffer) : null);
+
+        // Contact resolution for cross-session reuse. The renderer drives the
+        // choice: explicit personId = link to an existing contact; createPerson
+        // false = skip people linkage (name-only marking); otherwise resolve
+        // find-or-create so the mark always lands on a people record.
+        const { personId = null, createPerson = true } = options || {};
+        let resolvedPerson = null;
+        let personCreated = false;
+        if (personId != null) {
+          resolvedPerson = this.databaseManager.getPerson(personId);
+        } else if (createPerson !== false) {
+          const before = this.databaseManager.findPeopleForSpeaker(displayName, email).exact;
+          resolvedPerson = this.databaseManager.findOrCreatePerson({
+            displayName,
+            email: email || null,
+          });
+          personCreated = !!resolvedPerson && !before;
+        }
 
         let resolvedProfileId = profileId ?? null;
         if (speakerEmbeddingBuffer) {
@@ -8738,33 +8771,39 @@ class IPCHandlers {
 
           // Mirror the sample into the people/voiceprints layer so the
           // binding survives across meetings even without an email.
-          try {
-            const person = this.databaseManager.findOrCreatePerson({
-              displayName,
-              email: email || null,
-            });
-            if (person) {
-              const voiceprint = this.databaseManager.addVoiceprint(person.id, speakerEmbeddingBuffer, {
-                sourceProfileId: profile.id,
-                sourceNoteId: noteId,
-                sourceSpeakerId: speakerId,
-              });
+          if (resolvedPerson) {
+            try {
+              const voiceprint = this.databaseManager.addVoiceprint(
+                resolvedPerson.id,
+                speakerEmbeddingBuffer,
+                {
+                  sourceProfileId: profile.id,
+                  sourceNoteId: noteId,
+                  sourceSpeakerId: speakerId,
+                }
+              );
               // Snapshot the speaker's meeting utterances as auditionable
               // voiceprint segments (click-to-play calibration evidence).
               if (voiceprint?.id) {
                 this._captureVoiceprintSegments(noteId, speakerId, voiceprint.id);
               }
+            } catch (personError) {
+              debugLogger.warn("Person voiceprint sync skipped", {
+                error: personError.message,
+              });
             }
-          } catch (personError) {
-            debugLogger.warn("Person voiceprint sync skipped", {
-              error: personError.message,
-            });
           }
         }
 
         this.databaseManager.setSpeakerMapping(noteId, speakerId, resolvedProfileId, displayName);
         liveSpeakerIdentifier.mapSpeaker(speakerId, resolvedProfileId, displayName, noteId);
-        return { success: true, profileId: resolvedProfileId };
+        return {
+          success: true,
+          profileId: resolvedProfileId,
+          person: resolvedPerson,
+          personCreated,
+          personLinked: !!resolvedPerson && personId != null,
+        };
       }
     );
 

@@ -2021,7 +2021,16 @@
       "filterAria": "Filter transcript speakers",
       "currentSessionSpeakers": "Current session",
       "unknownTrack": "Unknown track",
-      "unmatchedSpeaker": "Unmatched speaker"
+      "unmatchedSpeaker": "Unmatched speaker",
+      "contactCreatedToast": "Contact {{name}} created. Manage it under Dictionary → Contacts",
+      "contactLinkedToast": "Linked to contact {{name}}",
+      "contactResolveTitle": "Same-named contacts found",
+      "contactResolveTitleExact": "An identical contact was found",
+      "contactResolveDescription": "The marked name 「{{name}}」 may match the following contacts. Choose how to proceed:",
+      "contactResolveNoDetails": "No additional details",
+      "contactResolveLink": "Link to 「{{name}}」",
+      "contactResolveCreate": "Create a separate contact",
+      "contactResolveIgnore": "Ignore (name-only for this session)"
     },
     "collapseNoteList": "Collapse note list",
     "expandNoteList": "Expand note list",

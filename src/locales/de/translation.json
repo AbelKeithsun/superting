@@ -1980,7 +1980,16 @@
       "filterAria": "Sprecher im Transkript filtern",
       "currentSessionSpeakers": "Aktuelle Sitzung",
       "unknownTrack": "Unknown track",
-      "unmatchedSpeaker": "Unmatched speaker"
+      "unmatchedSpeaker": "Unmatched speaker",
+      "contactCreatedToast": "Kontakt {{name}} erstellt. Verwalten unter Wörterbuch → Kontakte",
+      "contactLinkedToast": "Mit Kontakt {{name}} verknüpft",
+      "contactResolveTitle": "Gleichnamige Kontakte gefunden",
+      "contactResolveTitleExact": "Ein identischer Kontakt wurde gefunden",
+      "contactResolveDescription": "Der markierte Name „{{name}}“ könnte diesen Kontakten entsprechen. Wählen Sie das Vorgehen:",
+      "contactResolveNoDetails": "Keine weiteren Angaben",
+      "contactResolveLink": "Mit „{{name}}“ verknüpfen",
+      "contactResolveCreate": "Separaten Kontakt erstellen",
+      "contactResolveIgnore": "Ignorieren (nur Name für diese Sitzung)"
     },
     "collapseNoteList": "Notizenliste einklappen",
     "expandNoteList": "Notizenliste ausklappen",
