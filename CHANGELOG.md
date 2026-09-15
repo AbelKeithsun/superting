@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.7] - 2026-09-15
+
+### Meeting recording pill toggle
+
+- **Floating recording pill can be hidden.** Meeting settings gains a toggle to show/hide the floating recording pill during meetings; the preference persists in settings and the UI strings are localized across all 10 languages.
+
+### People & voiceprints
+
+- **Voiceprint audition clips.** Dictionary → 联系人 now lists, for every person with bound voiceprints, the real-time voiceprint segments captured from their meetings — click-to-play each clip to calibrate the binding by ear, with multiple segments supported per person. Segments are snapshotted from the source meeting's diarized utterances at enrollment time; playback slices the retained meeting audio via ffmpeg and serves it over a dedicated `superting-clip-audio://` protocol.
+- **Contact & voiceprint management moved to the Dictionary page.** The People section left Settings: contact profiles, voiceprint binding, merge/delete and the new audition clips all live in Dictionary → 联系人 (replacing the legacy speaker-name list, which already merges into `people` on startup).
+
 ## [2.0.6] - 2026-09-15
 
 ### Fixed
