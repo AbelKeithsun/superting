@@ -411,6 +411,7 @@ function SpeakerPicker({ speakerProfiles, participants, onSelectName, t }: Speak
 function SpeakerLabel({
   speakerId,
   segment,
+  segmentIds,
   mappedName,
   speakerProfiles,
   participants,
@@ -426,6 +427,8 @@ function SpeakerLabel({
 }: {
   speakerId: string;
   segment: TranscriptSegment;
+  /** Every stored segment this rendered row covers (a block may merge several). */
+  segmentIds: string[];
   mappedName?: string;
   speakerProfiles?: SpeakerProfileLite[];
   participants?: Array<{ email?: string | null; displayName: string | null; personId?: number }>;
@@ -441,10 +444,11 @@ function SpeakerLabel({
     targetSpeakerId?: string
   ) => void;
   onMapSegment?: (
-    segmentId: string,
+    segmentIds: string[],
     name: string,
     email?: string | null,
-    profileId?: number
+    profileId?: number,
+    targetSpeakerId?: string
   ) => void;
   onConfirm?: (speakerId: string, name: string, profileId: number) => void;
   onDismiss?: (speakerId: string) => void;
@@ -528,7 +532,7 @@ function SpeakerLabel({
             if (onMap && (bulkEditSpeaker || !onMapSegment)) {
               onMap(speakerId, name, email, profileId, targetSpeakerId);
             } else if (onMapSegment) {
-              onMapSegment(segment.id, name, email, profileId);
+              onMapSegment(segmentIds, name, email, profileId, targetSpeakerId);
             }
             setOpen(false);
           }}
@@ -580,10 +584,11 @@ interface MeetingTranscriptChatProps {
     profileId?: number
   ) => void;
   onMapSegmentSpeaker?: (
-    segmentId: string,
+    segmentIds: string[],
     displayName: string,
     email?: string | null,
-    profileId?: number
+    profileId?: number,
+    targetSpeakerId?: string
   ) => void;
   onConfirmSuggestion?: (speakerId: string, suggestedName: string, profileId: number) => void;
   onDismissSuggestion?: (speakerId: string) => void;
@@ -972,6 +977,7 @@ export function MeetingTranscriptChat({
                   <SpeakerLabel
                     speakerId={segment.speaker!}
                     segment={segment}
+                    segmentIds={blockSegments.map((blockSegment) => blockSegment.id)}
                     mappedName={speakerMappings?.[segment.speaker!]}
                     speakerProfiles={speakerProfiles}
                     participants={participants}
@@ -988,6 +994,7 @@ export function MeetingTranscriptChat({
                   <SpeakerLabel
                     speakerId={`pending-${segment.id}`}
                     segment={segment}
+                    segmentIds={blockSegments.map((blockSegment) => blockSegment.id)}
                     speakerProfiles={speakerProfiles}
                     participants={participants}
                     colorIdx={colorIdx}

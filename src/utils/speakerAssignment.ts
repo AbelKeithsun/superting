@@ -54,16 +54,53 @@ const getSpeakerNumber = (speakerId: string) => {
   return match ? Number(match[1]) + 1 : 1;
 };
 
-const getTranscriptSpeakerFilterKey = (segment: AssignableTranscriptSegment) =>
-  segment.speaker ? `speaker:${segment.speaker}` : `source:${segment.source}`;
+const normalizeSpeakerNameKey = (name?: string | null) => {
+  const normalized = (name ?? "").trim().toLowerCase();
+  return normalized || null;
+};
+
+// A speaker's resolved display name is the person-level identity: two session
+// speakers marked with the same name (or a diarized speaker joined onto an
+// already-named one) must share one filter entry instead of piling up duplicate
+// "王浩" tags. A speaker id that is named on any of its segments is presented as
+// one entry under that name, so partially renamed groups do not split either.
+const resolveSegmentSpeakerName = (
+  segment: AssignableTranscriptSegment,
+  speakerMappings: Record<string, string> = {}
+) => {
+  const mapped = segment.speaker ? speakerMappings[segment.speaker] : undefined;
+  return segment.speakerName || mapped || null;
+};
+
+export function getTranscriptSpeakerFilterKeyMap<T extends AssignableTranscriptSegment>(
+  segments: T[],
+  speakerMappings: Record<string, string> = {}
+): Map<string, string> {
+  const nameBySpeakerId = new Map<string, string>();
+  for (const segment of segments) {
+    if (!segment.speaker) continue;
+    const nameKey = normalizeSpeakerNameKey(resolveSegmentSpeakerName(segment, speakerMappings));
+    if (nameKey && !nameBySpeakerId.has(segment.speaker)) {
+      nameBySpeakerId.set(segment.speaker, nameKey);
+    }
+  }
+
+  const keys = new Map<string, string>();
+  for (const segment of segments) {
+    const namedKey = segment.speaker ? nameBySpeakerId.get(segment.speaker) : null;
+    if (namedKey) keys.set(segment.id, `name:${namedKey}`);
+    else if (segment.speaker) keys.set(segment.id, `speaker:${segment.speaker}`);
+    else keys.set(segment.id, `source:${segment.source}`);
+  }
+  return keys;
+}
 
 const getTranscriptSpeakerBlockKey = (
   segment: AssignableTranscriptSegment,
   speakerMappings: Record<string, string> = {}
 ) => {
-  const mapped = segment.speaker ? speakerMappings[segment.speaker] : undefined;
-  if (segment.speakerName) return `name:${segment.speakerName.toLowerCase()}`;
-  if (mapped) return `name:${mapped.toLowerCase()}`;
+  const nameKey = normalizeSpeakerNameKey(resolveSegmentSpeakerName(segment, speakerMappings));
+  if (nameKey) return `name:${nameKey}`;
   if (segment.speaker) return `speaker:${segment.speaker}`;
   return `source:${segment.source}`;
 };
@@ -128,19 +165,20 @@ const isUnresolvedProvisionalPlaceholder = (segment: AssignableTranscriptSegment
   !segment.speakerName &&
   !segment.speakerLocked;
 
-const stableManualSpeakerId = (segment: AssignableTranscriptSegment) =>
-  `manual_${segment.id.replace(/[^a-zA-Z0-9_-]/g, "_")}`;
+export const stableManualSpeakerIdForSegmentId = (segmentId: string) =>
+  `manual_${segmentId.replace(/[^a-zA-Z0-9_-]/g, "_")}`;
 
-const lockSpeakerName = <T extends AssignableTranscriptSegment>(
+const stableManualSpeakerId = (segment: AssignableTranscriptSegment) =>
+  stableManualSpeakerIdForSegmentId(segment.id);
+
+const lockSpeakerIdentity = <T extends AssignableTranscriptSegment>(
   segment: T,
-  displayName: string
+  speakerId: string,
+  displayName?: string | null
 ): T => ({
   ...segment,
-  speaker:
-    !segment.speaker || segment.speaker === "you"
-      ? stableManualSpeakerId(segment)
-      : segment.speaker,
-  speakerName: displayName,
+  speaker: speakerId,
+  speakerName: displayName ? displayName : segment.speakerName,
   speakerIsPlaceholder: false,
   suggestedName: undefined,
   suggestedProfileId: undefined,
@@ -148,6 +186,18 @@ const lockSpeakerName = <T extends AssignableTranscriptSegment>(
   speakerStatus: "locked",
   speakerLockSource: "user",
 });
+
+const lockSpeakerName = <T extends AssignableTranscriptSegment>(
+  segment: T,
+  displayName: string
+): T =>
+  lockSpeakerIdentity(
+    segment,
+    !segment.speaker || segment.speaker === "you"
+      ? stableManualSpeakerId(segment)
+      : segment.speaker,
+    displayName
+  );
 
 export function getTranscriptSpeakerDisplay<T extends AssignableTranscriptSegment>(
   segment: T,
@@ -191,19 +241,100 @@ export function assignSpeakerGroupName<T extends AssignableTranscriptSegment>(
   );
 }
 
+/**
+ * First session speaker already carrying this display name. Marking a second
+ * speaker (or another block of an undiarized transcript) with a name that is
+ * already in use must join that identity instead of minting a new
+ * `manual_*` speaker, otherwise the filter fills up with duplicate name tags.
+ */
+export function findTranscriptSpeakerIdByName<T extends AssignableTranscriptSegment>(
+  segments: T[],
+  speakerMappings: Record<string, string> = {},
+  displayName?: string | null
+): string | null {
+  const nameKey = normalizeSpeakerNameKey(displayName);
+  if (!nameKey) return null;
+
+  for (const segment of segments) {
+    if (!segment.speaker || segment.speaker === "you") continue;
+    if (normalizeSpeakerNameKey(resolveSegmentSpeakerName(segment, speakerMappings)) === nameKey) {
+      return segment.speaker;
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Rename a set of segments (one block, or one segment in the editing view) onto
+ * a single speaker identity. A null/empty displayName joins the target group
+ * without renaming it — used when the user picks an existing unnamed group.
+ */
+export function assignSegmentSpeakerName<T extends AssignableTranscriptSegment>(
+  segments: T[],
+  segmentIds: Iterable<string>,
+  speakerId: string,
+  displayName?: string | null
+): T[] {
+  const idSet = segmentIds instanceof Set ? segmentIds : new Set(segmentIds);
+  return segments.map((segment) =>
+    idSet.has(segment.id) ? lockSpeakerIdentity(segment, speakerId, displayName) : segment
+  );
+}
+
+export interface TranscriptSessionSpeaker {
+  speakerId: string;
+  label: string;
+  named: boolean;
+}
+
+/**
+ * Distinct speaker groups present in the transcript, in first-appearance order,
+ * with the label the transcript renders for them. The speaker picker uses this
+ * to offer "join this speaker" targets that survive name-based grouping.
+ */
+export function getTranscriptSessionSpeakers<T extends AssignableTranscriptSegment>(
+  segments: T[],
+  speakerMappings: Record<string, string> = {},
+  labels: SpeakerDisplayLabels
+): TranscriptSessionSpeaker[] {
+  const byId = new Map<string, TranscriptSessionSpeaker>();
+
+  for (const segment of segments) {
+    if (!segment.speaker) continue;
+    if (isUnresolvedProvisionalPlaceholder(segment)) continue;
+
+    const display = getTranscriptSpeakerDisplay(segment, speakerMappings, labels);
+    const named = !!normalizeSpeakerNameKey(resolveSegmentSpeakerName(segment, speakerMappings));
+    const existing = byId.get(segment.speaker);
+
+    if (!existing) {
+      byId.set(segment.speaker, { speakerId: segment.speaker, label: display.label, named });
+      continue;
+    }
+
+    if (!existing.named && (named || existing.label !== display.label)) {
+      byId.set(segment.speaker, { ...existing, label: display.label, named });
+    }
+  }
+
+  return [...byId.values()];
+}
+
 export function getTranscriptSpeakerFilterOptions<T extends AssignableTranscriptSegment>(
   segments: T[],
   speakerMappings: Record<string, string> = {},
   labels: SpeakerDisplayLabels
 ): TranscriptSpeakerFilterOption[] {
   const byKey = new Map<string, TranscriptSpeakerFilterOption>();
+  const filterKeys = getTranscriptSpeakerFilterKeyMap(segments, speakerMappings);
 
   for (const segment of segments) {
     if (isUnresolvedProvisionalPlaceholder(segment)) {
       continue;
     }
 
-    const key = getTranscriptSpeakerFilterKey(segment);
+    const key = filterKeys.get(segment.id) ?? `source:${segment.source}`;
     const display = getTranscriptSpeakerDisplay(segment, speakerMappings, labels);
     const option = {
       key,
@@ -216,7 +347,7 @@ export function getTranscriptSpeakerFilterOptions<T extends AssignableTranscript
       continue;
     }
 
-    if (segment.speakerName || (segment.speaker && speakerMappings[segment.speaker])) {
+    if (resolveSegmentSpeakerName(segment, speakerMappings)) {
       byKey.set(key, option);
     }
   }
@@ -226,11 +357,13 @@ export function getTranscriptSpeakerFilterOptions<T extends AssignableTranscript
 
 export function filterTranscriptSegmentsBySpeaker<T extends AssignableTranscriptSegment>(
   segments: T[],
-  selectedSpeakerKeys: Set<string> | null
+  selectedSpeakerKeys: Set<string> | null,
+  speakerMappings: Record<string, string> = {}
 ): T[] {
   if (!selectedSpeakerKeys) return segments;
+  const filterKeys = getTranscriptSpeakerFilterKeyMap(segments, speakerMappings);
   return segments.filter((segment) =>
-    selectedSpeakerKeys.has(getTranscriptSpeakerFilterKey(segment))
+    selectedSpeakerKeys.has(filterKeys.get(segment.id) ?? `source:${segment.source}`)
   );
 }
 
