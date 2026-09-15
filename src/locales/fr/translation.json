@@ -1585,6 +1585,20 @@
     "expandConversationList": "Développer la liste des conversations"
   },
   "notes": {
+    "diarization": {
+      "skippedTitle": "La séparation des locuteurs n'a pas été exécutée",
+      "failedTitle": "Échec de la séparation des locuteurs",
+      "failedReason": "{{reason}}",
+      "skipReason": {
+        "disabled": "La séparation des locuteurs est désactivée pour cette réunion.",
+        "engineUnavailable": "Le moteur ou le modèle de séparation des locuteurs est indisponible.",
+        "noAudio": "Aucun audio de réunion conservé à analyser.",
+        "noSystemTrack": "Ni piste audio système ni audio de réunion conservé.",
+        "systemTrackSilent": "La piste audio système était silencieuse et aucun audio de réunion n'était conservé.",
+        "systemTrackUnusable": "La piste audio système n'a pas pu être analysée.",
+        "unknown": "Raison inconnue ({{reason}})."
+      }
+    },
     "tags": {
       "add": "Ajouter un tag",
       "chooseExisting": "Choisir un tag existant",

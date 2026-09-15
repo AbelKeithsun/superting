@@ -473,6 +473,16 @@ type EditorMode = "rich" | "markdown";
 type ContentEditTarget = "raw" | "enhanced";
 const EDITOR_MODE_STORAGE_KEY = "superting.notesEditorMode";
 
+// Backend diarization skip reasons → notes.diarization.skipReason.* i18n keys.
+const DIARIZATION_SKIP_REASON_KEYS: Record<string, string> = {
+  disabled: "disabled",
+  "engine-unavailable": "engineUnavailable",
+  "no-audio": "noAudio",
+  "no-system-track": "noSystemTrack",
+  "system-track-silent": "systemTrackSilent",
+  "system-track-unusable": "systemTrackUnusable",
+};
+
 function readEditorModePreference(): EditorMode {
   if (typeof window === "undefined") return "rich";
   return window.localStorage.getItem(EDITOR_MODE_STORAGE_KEY) === "markdown" ? "markdown" : "rich";
@@ -1213,6 +1223,33 @@ export default function NoteEditor({
 
       setIsDiarizing(false);
 
+      // Surface why speaker separation produced nothing instead of leaving the
+      // transcript silently without speakers. "disabled" is the user's own
+      // per-meeting choice, so it stays quiet.
+      if (data?.diarizationSkipped) {
+        if (data.skipReason !== "disabled") {
+          toast({
+            title: t("notes.diarization.skippedTitle"),
+            description: t(
+              `notes.diarization.skipReason.${
+                DIARIZATION_SKIP_REASON_KEYS[data.skipReason ?? ""] ?? "unknown"
+              }`,
+              { reason: data.skipReason ?? "" }
+            ),
+          });
+        }
+        return;
+      }
+
+      if (data?.diarizationFailed) {
+        toast({
+          title: t("notes.diarization.failedTitle"),
+          description: t("notes.diarization.failedReason", { reason: data.error ?? "" }),
+          variant: "destructive",
+        });
+        return;
+      }
+
       if (!data?.segments?.length) return;
 
       // Draft guard: while the user is mid-edit, merging into the note would
@@ -1255,7 +1292,7 @@ export default function NoteEditor({
       }
     });
     return () => cleanup?.();
-  }, [note.id, diarizationSessionId]);
+  }, [note.id, diarizationSessionId, t, toast]);
 
   // Apply a diarization result that arrived while the user was editing once
   // the edit session ends. The merge re-reads the persisted transcript, so a
