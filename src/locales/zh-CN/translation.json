@@ -1983,7 +1983,16 @@
       "filterAria": "筛选转录发言人",
       "currentSessionSpeakers": "当前会话",
       "unknownTrack": "未知音轨",
-      "unmatchedSpeaker": "未匹配说话人"
+      "unmatchedSpeaker": "未匹配说话人",
+      "contactCreatedToast": "已新建联系人 {{name}}，可在 词典 → 联系人 中管理",
+      "contactLinkedToast": "已关联到联系人 {{name}}",
+      "contactResolveTitle": "发现同名联系人",
+      "contactResolveTitleExact": "检测到同名联系人",
+      "contactResolveDescription": "标记的「{{name}}」与以下联系人可能相同，请选择如何处理：",
+      "contactResolveNoDetails": "未填写更多信息",
+      "contactResolveLink": "关联到「{{name}}」",
+      "contactResolveCreate": "新建独立联系人",
+      "contactResolveIgnore": "忽略（仅本次命名）"
     },
     "collapseNoteList": "收起笔记列表",
     "expandNoteList": "展开笔记列表",

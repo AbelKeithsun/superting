@@ -2710,6 +2710,42 @@ class DatabaseManager {
       .get(name);
   }
 
+  // Resolve a speaker mark against the people table for cross-session reuse:
+  // `exact` is the unambiguous person (email first, then exact name);
+  // `candidates` are fuzzy name/email matches (same/similar name) that the
+  // user should choose between instead of us silently creating a duplicate.
+  findPeopleForSpeaker(displayName, email = null) {
+    try {
+      if (!this.db) throw new Error("Database not initialized");
+      const name = (displayName || "").trim();
+      const normEmail = this._normalizeEmail(email);
+
+      let exact = normEmail ? this._findPersonByEmail(normEmail) : null;
+      if (!exact && name) exact = this._findPersonByName(name);
+
+      const namePattern = name ? `%${name.toLowerCase()}%` : null;
+      const emailPattern = normEmail ? `%${normEmail.toLowerCase()}%` : null;
+      const candidates = this.db
+        .prepare(
+          `SELECT p.*, COUNT(v.id) AS voiceprint_count
+           FROM people p
+           LEFT JOIN voiceprints v ON v.person_id = p.id
+           WHERE (? IS NOT NULL AND ? != '' AND lower(p.display_name) LIKE ?)
+              OR (? IS NOT NULL AND lower(p.email) LIKE ?)
+           GROUP BY p.id
+           ORDER BY p.updated_at DESC, p.id DESC
+           LIMIT 10`
+        )
+        .all(name, name, namePattern, emailPattern, emailPattern);
+
+      const filtered = (candidates || []).filter((c) => !exact || c.id !== exact.id);
+      return { exact, candidates: filtered };
+    } catch (error) {
+      debugLogger.error("Error resolving speaker person", { error: error.message }, "database");
+      throw error;
+    }
+  }
+
   // Find-or-create a person. Email wins as the identity anchor when present;
   // otherwise the display name is used. Fields on an existing person are only
   // filled in, never overwritten.

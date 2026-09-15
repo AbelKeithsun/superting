@@ -2020,7 +2020,16 @@
       "filterAria": "Filtrer les intervenants de la transcription",
       "currentSessionSpeakers": "Session actuelle",
       "unknownTrack": "Unknown track",
-      "unmatchedSpeaker": "Unmatched speaker"
+      "unmatchedSpeaker": "Unmatched speaker",
+      "contactCreatedToast": "Contact {{name}} créé. Gérez-le dans Dictionnaire → Contacts",
+      "contactLinkedToast": "Associé au contact {{name}}",
+      "contactResolveTitle": "Contacts homonymes trouvés",
+      "contactResolveTitleExact": "Un contact identique a été trouvé",
+      "contactResolveDescription": "Le nom marqué « {{name}} » peut correspondre à ces contacts. Choisissez comment procéder :",
+      "contactResolveNoDetails": "Aucun détail supplémentaire",
+      "contactResolveLink": "Associer à « {{name}} »",
+      "contactResolveCreate": "Créer un contact distinct",
+      "contactResolveIgnore": "Ignorer (nom uniquement pour cette session)"
     },
     "collapseNoteList": "Réduire la liste des notes",
     "expandNoteList": "Développer la liste des notes",

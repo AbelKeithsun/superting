@@ -1979,7 +1979,16 @@
       "filterAria": "篩選轉錄發言者",
       "currentSessionSpeakers": "目前會話",
       "unknownTrack": "未知音軌",
-      "unmatchedSpeaker": "未匹配說話人"
+      "unmatchedSpeaker": "未匹配說話人",
+      "contactCreatedToast": "已新建聯絡人 {{name}}，可在 詞典 → 聯絡人 中管理",
+      "contactLinkedToast": "已關聯到聯絡人 {{name}}",
+      "contactResolveTitle": "發現同名聯絡人",
+      "contactResolveTitleExact": "偵測到同名聯絡人",
+      "contactResolveDescription": "標記的「{{name}}」可能與以下聯絡人相同，請選擇如何處理：",
+      "contactResolveNoDetails": "未填寫更多資訊",
+      "contactResolveLink": "關聯到「{{name}}」",
+      "contactResolveCreate": "新建獨立聯絡人",
+      "contactResolveIgnore": "忽略（僅本次命名）"
     },
     "collapseNoteList": "收合筆記列表",
     "expandNoteList": "展開筆記列表",

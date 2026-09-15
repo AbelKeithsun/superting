@@ -1979,7 +1979,16 @@
       "filterAria": "Filtra i parlanti della trascrizione",
       "currentSessionSpeakers": "Sessione corrente",
       "unknownTrack": "Unknown track",
-      "unmatchedSpeaker": "Unmatched speaker"
+      "unmatchedSpeaker": "Unmatched speaker",
+      "contactCreatedToast": "Contatto {{name}} creato. Gestiscilo in Dizionario → Contatti",
+      "contactLinkedToast": "Collegato al contatto {{name}}",
+      "contactResolveTitle": "Trovati contatti omonimi",
+      "contactResolveTitleExact": "Trovato un contatto identico",
+      "contactResolveDescription": "Il nome marcato «{{name}}» potrebbe corrispondere a questi contatti. Scegli come procedere:",
+      "contactResolveNoDetails": "Nessun dettaglio aggiuntivo",
+      "contactResolveLink": "Collega a «{{name}}»",
+      "contactResolveCreate": "Crea un contatto separato",
+      "contactResolveIgnore": "Ignora (solo nome in questa sessione)"
     },
     "collapseNoteList": "Comprimi elenco note",
     "expandNoteList": "Espandi elenco note",

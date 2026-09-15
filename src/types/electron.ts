@@ -1746,8 +1746,28 @@ declare global {
         speakerId: string,
         displayName: string,
         email?: string | null,
-        profileId?: number | null
-      ) => Promise<{ success: boolean; profileId: number | null }>;
+        profileId?: number | null,
+        options?: {
+          personId?: number | null;
+          createPerson?: boolean;
+        }
+      ) => Promise<{
+        success: boolean;
+        profileId: number | null;
+        person?: PersonRecord | null;
+        personCreated?: boolean;
+        personLinked?: boolean;
+      }>;
+      resolveSpeakerContact?: (
+        displayName: string,
+        email?: string | null
+      ) => Promise<{
+        success: boolean;
+        status: "exact" | "ambiguous" | "none";
+        exact?: PersonRecord | null;
+        candidates: PersonRecord[];
+        error?: string;
+      }>;
       removeSpeakerMapping?: (noteId: number, speakerId: string) => Promise<{ success: boolean }>;
       getSpeakerProfiles?: () => Promise<
         Array<{
