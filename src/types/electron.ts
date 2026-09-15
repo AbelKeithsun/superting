@@ -1774,6 +1774,25 @@ declare global {
         candidates: PersonRecord[];
         error?: string;
       }>;
+      /** Extract this speaker's voiceprint from the note audio and bind it to the contact. */
+      enrollSpeakerVoiceprint?: (
+        noteId: number,
+        speakerId: string,
+        displayName: string,
+        email?: string | null,
+        options?: {
+          force?: boolean;
+          profileId?: number | null;
+          personId?: number | null;
+        }
+      ) => Promise<{
+        success: boolean;
+        voiceprintCreated?: boolean;
+        skipped?: string;
+        person?: PersonRecord | null;
+        profileId?: number | null;
+        error?: string;
+      }>;
       removeSpeakerMapping?: (noteId: number, speakerId: string) => Promise<{ success: boolean }>;
       getSpeakerProfiles?: () => Promise<
         Array<{

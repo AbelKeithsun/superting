@@ -348,6 +348,15 @@ contextBridge.exposeInMainWorld("electronAPI", {
     ),
   resolveSpeakerContact: (displayName, email) =>
     ipcRenderer.invoke("resolve-speaker-contact", displayName, email),
+  enrollSpeakerVoiceprint: (noteId, speakerId, displayName, email, options) =>
+    ipcRenderer.invoke(
+      "enroll-speaker-voiceprint",
+      noteId,
+      speakerId,
+      displayName,
+      email,
+      options
+    ),
   removeSpeakerMapping: (noteId, speakerId) =>
     ipcRenderer.invoke("remove-speaker-mapping", noteId, speakerId),
   getSpeakerProfiles: () => ipcRenderer.invoke("get-speaker-profiles"),

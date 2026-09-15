@@ -1996,6 +1996,7 @@
       "unmatchedSpeaker": "Unmatched speaker",
       "contactCreatedToast": "Contatto {{name}} creato. Gestiscilo in Dizionario → Contatti",
       "contactLinkedToast": "Collegato al contatto {{name}}",
+      "voiceprintEnrolledToast": "Impronta vocale di {{name}} estratta dall'audio della riunione — ascoltala in Dizionario → Contatti",
       "contactResolveTitle": "Trovati contatti omonimi",
       "contactResolveTitleExact": "Trovato un contatto identico",
       "contactResolveDescription": "Il nome marcato «{{name}}» potrebbe corrispondere a questi contatti. Scegli come procedere:",
