@@ -1544,6 +1544,20 @@
     }
   },
   "notes": {
+    "diarization": {
+      "skippedTitle": "話者分離を実行できませんでした",
+      "failedTitle": "話者分離に失敗しました",
+      "failedReason": "{{reason}}",
+      "skipReason": {
+        "disabled": "この会議では話者分離が無効になっています。",
+        "engineUnavailable": "話者分離のエンジンまたはモデルを利用できません。",
+        "noAudio": "分析できる会議音声が保存されていません。",
+        "noSystemTrack": "システム音声トラックも保存済みの会議音声もありません。",
+        "systemTrackSilent": "システム音声トラックが無音で、保存済みの会議音声もありません。",
+        "systemTrackUnusable": "システム音声トラックを分析できませんでした。",
+        "unknown": "原因不明（{{reason}}）。"
+      }
+    },
     "tags": {
       "add": "タグを追加",
       "chooseExisting": "既存のタグを選択",

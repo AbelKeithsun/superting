@@ -1586,6 +1586,20 @@
     "expandConversationList": "Expand conversation list"
   },
   "notes": {
+    "diarization": {
+      "skippedTitle": "Speaker separation did not run",
+      "failedTitle": "Speaker separation failed",
+      "failedReason": "{{reason}}",
+      "skipReason": {
+        "disabled": "Speaker separation is turned off for this meeting.",
+        "engineUnavailable": "The speaker separation engine or model is unavailable.",
+        "noAudio": "No retained meeting audio was available to analyze.",
+        "noSystemTrack": "There was no system audio track and no retained meeting audio.",
+        "systemTrackSilent": "The system audio track was silent and no retained meeting audio was available.",
+        "systemTrackUnusable": "The system audio track could not be analyzed.",
+        "unknown": "Unknown reason ({{reason}})."
+      }
+    },
     "tags": {
       "add": "Add tag",
       "chooseExisting": "Choose existing tag",

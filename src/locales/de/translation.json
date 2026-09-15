@@ -1545,6 +1545,20 @@
     }
   },
   "notes": {
+    "diarization": {
+      "skippedTitle": "Sprechertrennung wurde nicht ausgeführt",
+      "failedTitle": "Sprechertrennung fehlgeschlagen",
+      "failedReason": "{{reason}}",
+      "skipReason": {
+        "disabled": "Die Sprechertrennung ist für dieses Meeting deaktiviert.",
+        "engineUnavailable": "Engine oder Modell der Sprechertrennung ist nicht verfügbar.",
+        "noAudio": "Es war kein gespeichertes Meeting-Audio zur Analyse vorhanden.",
+        "noSystemTrack": "Es gab weder eine System-Audiospur noch gespeichertes Meeting-Audio.",
+        "systemTrackSilent": "Die System-Audiospur war stumm und es gab kein gespeichertes Meeting-Audio.",
+        "systemTrackUnusable": "Die System-Audiospur konnte nicht analysiert werden.",
+        "unknown": "Unbekannter Grund ({{reason}})."
+      }
+    },
     "tags": {
       "add": "Tag hinzufügen",
       "chooseExisting": "Vorhandenen Tag auswählen",

@@ -1729,6 +1729,12 @@ declare global {
           }>;
           speakerEmbeddings?: Record<string, number[]> | null;
           diarizationDiagnostics?: DiarizationDiagnostics;
+          /** Diarization never started (see skipReason for the concrete cause). */
+          diarizationSkipped?: boolean;
+          skipReason?: string;
+          /** Diarization started but failed. */
+          diarizationFailed?: boolean;
+          error?: string;
         }) => void
       ) => () => void;
 

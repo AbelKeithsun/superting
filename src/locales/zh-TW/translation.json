@@ -1544,6 +1544,20 @@
     }
   },
   "notes": {
+    "diarization": {
+      "skippedTitle": "本次錄音未做說話人分離",
+      "failedTitle": "說話人分離失敗",
+      "failedReason": "{{reason}}",
+      "skipReason": {
+        "disabled": "此會議已關閉說話人分離。",
+        "engineUnavailable": "說話人分離引擎或模型無法使用。",
+        "noAudio": "沒有可分析的會議音訊（未保留錄音）。",
+        "noSystemTrack": "既沒有系統音軌，也沒有保留的會議音訊。",
+        "systemTrackSilent": "系統音軌沒有聲音，且沒有保留的會議音訊。",
+        "systemTrackUnusable": "系統音軌無法分析。",
+        "unknown": "原因未知（{{reason}}）。"
+      }
+    },
     "tags": {
       "add": "新增標籤",
       "chooseExisting": "選擇既有標籤",
