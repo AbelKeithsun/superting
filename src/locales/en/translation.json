@@ -1590,6 +1590,10 @@
       "skippedTitle": "Speaker separation did not run",
       "failedTitle": "Speaker separation failed",
       "failedReason": "{{reason}}",
+      "statusSkipped": "Not separated",
+      "statusFailed": "Separation failed",
+      "manySpeakers": "{{count}} speakers",
+      "manySpeakersHint": "One person can be split across several speakers. Use 重新分离 → 固定人数 to set the expected count, or merge a wrong speaker into the right one from its label menu.",
       "skipReason": {
         "disabled": "Speaker separation is turned off for this meeting.",
         "engineUnavailable": "The speaker separation engine or model is unavailable.",
@@ -1597,6 +1601,8 @@
         "noSystemTrack": "There was no system audio track and no retained meeting audio.",
         "systemTrackSilent": "The system audio track was silent and no retained meeting audio was available.",
         "systemTrackUnusable": "The system audio track could not be analyzed.",
+        "noSpeakerSegments": "No speaker segments were detected.",
+        "saveFailed": "The separated transcript could not be saved.",
         "unknown": "Unknown reason ({{reason}})."
       }
     },
@@ -2039,6 +2045,7 @@
       "contactCreatedToast": "Contact {{name}} created. Manage it under Dictionary → Contacts",
       "contactLinkedToast": "Linked to contact {{name}}",
       "voiceprintEnrolledToast": "Extracted {{name}}'s voiceprint from this meeting's audio — audition it in Dictionary → Contacts",
+      "reenrollVoiceprint": "Re-extract voiceprint from this meeting's audio",
       "contactResolveTitle": "Same-named contacts found",
       "contactResolveTitleExact": "An identical contact was found",
       "contactResolveDescription": "The marked name 「{{name}}」 may match the following contacts. Choose how to proceed:",

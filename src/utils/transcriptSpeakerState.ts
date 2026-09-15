@@ -351,6 +351,7 @@ export const serializeTranscriptSegments = (
       text: segment.text,
       source: segment.source,
       timestamp: getRelativeTranscriptSeconds(segment.timestamp, timelineStartedAt),
+      endTime: getRelativeTranscriptSeconds(segment.endTime, timelineStartedAt),
       editedByUser: segment.editedByUser || undefined,
       originalText: segment.originalText || undefined,
       speaker: segment.speaker,

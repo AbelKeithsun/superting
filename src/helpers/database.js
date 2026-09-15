@@ -509,6 +509,20 @@ class DatabaseManager {
       } catch (err) {
         if (!err.message.includes("duplicate column")) throw err;
       }
+      // Outcome of the last speaker-diarization run. `diarization_enabled` only
+      // records the user's per-meeting preference (and stays NULL when they never
+      // touched the toggle), so it cannot answer "did diarization actually run?".
+      for (const column of [
+        "diarization_status TEXT",
+        "diarization_skip_reason TEXT",
+        "diarization_speaker_count INTEGER",
+      ]) {
+        try {
+          this.db.exec(`ALTER TABLE notes ADD COLUMN ${column}`);
+        } catch (err) {
+          if (!err.message.includes("duplicate column")) throw err;
+        }
+      }
 
       this.db.exec(`
         CREATE TABLE IF NOT EXISTS contacts (
@@ -1216,6 +1230,9 @@ class DatabaseManager {
         "participants",
         "diarization_enabled",
         "expected_speaker_count",
+        "diarization_status",
+        "diarization_skip_reason",
+        "diarization_speaker_count",
         "source_file",
         "audio_duration_seconds",
         "recorded_at",
@@ -3747,6 +3764,31 @@ class DatabaseManager {
       return { success: true };
     } catch (error) {
       debugLogger.error("Error marking transcription synced", { error: error.message }, "database");
+      throw error;
+    }
+  }
+
+  /**
+   * Record the outcome of a diarization run ("completed" / "skipped" /
+   * "failed") without touching `updated_at`: it is metadata about a background
+   * pass, not a content edit, and must not reorder the note list.
+   */
+  setNoteDiarizationStatus(noteId, { status = null, reason = null, speakerCount = null } = {}) {
+    try {
+      if (!this.db) throw new Error("Database not initialized");
+      if (!Number.isFinite(Number(noteId))) return { success: false };
+      this.db
+        .prepare(
+          `UPDATE notes
+             SET diarization_status = ?,
+                 diarization_skip_reason = ?,
+                 diarization_speaker_count = ?
+           WHERE id = ?`
+        )
+        .run(status, reason, speakerCount, Number(noteId));
+      return { success: true };
+    } catch (error) {
+      debugLogger.error("Error recording diarization status", { error: error.message }, "database");
       throw error;
     }
   }

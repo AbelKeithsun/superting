@@ -422,6 +422,7 @@ function SpeakerLabel({
   onMapSegment,
   onConfirm,
   onDismiss,
+  onEnrollVoiceprint,
   variant = "compact",
   t,
 }: {
@@ -452,6 +453,8 @@ function SpeakerLabel({
   ) => void;
   onConfirm?: (speakerId: string, name: string, profileId: number) => void;
   onDismiss?: (speakerId: string) => void;
+  /** Re-extract this speaker's voiceprint from the note audio (force). */
+  onEnrollVoiceprint?: (speakerId: string, displayName: string) => void;
   variant?: "compact" | "inline";
   t: (key: string, opts?: Record<string, unknown>) => string;
 }) {
@@ -553,6 +556,20 @@ function SpeakerLabel({
             </label>
           </div>
         )}
+        {onEnrollVoiceprint && (segment.speakerName || mappedName) && (
+          <div className="border-t border-border/40 px-3 py-2">
+            <button
+              type="button"
+              onClick={() => {
+                onEnrollVoiceprint(speakerId, segment.speakerName || mappedName || "");
+                setOpen(false);
+              }}
+              className="w-full text-left text-xs text-foreground/60 hover:text-foreground transition-colors cursor-pointer"
+            >
+              {t("notes.speaker.reenrollVoiceprint")}
+            </button>
+          </div>
+        )}
       </PopoverContent>
     </Popover>
   );
@@ -592,6 +609,7 @@ interface MeetingTranscriptChatProps {
   ) => void;
   onConfirmSuggestion?: (speakerId: string, suggestedName: string, profileId: number) => void;
   onDismissSuggestion?: (speakerId: string) => void;
+  onEnrollVoiceprint?: (speakerId: string, displayName: string) => void;
   onAttachSpeakerEmail?: (profileId: number, email: string | null) => void;
   onSeekToSegment?: (target: TranscriptSeekTarget) => void;
   /** Commit an inline edit of a finalized live segment (recording view). */
@@ -622,6 +640,7 @@ export function MeetingTranscriptChat({
   onMapSegmentSpeaker,
   onConfirmSuggestion,
   onDismissSuggestion,
+  onEnrollVoiceprint,
   onAttachSpeakerEmail,
   onSeekToSegment,
   onLiveSegmentEdit,
@@ -987,6 +1006,7 @@ export function MeetingTranscriptChat({
                     onMapSegment={onMapSegmentSpeaker}
                     onConfirm={onConfirmSuggestion}
                     onDismiss={onDismissSuggestion}
+                    onEnrollVoiceprint={onEnrollVoiceprint}
                     variant="inline"
                     t={t}
                   />

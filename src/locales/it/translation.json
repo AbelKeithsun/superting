@@ -1548,6 +1548,10 @@
       "skippedTitle": "Separazione degli interlocutori non eseguita",
       "failedTitle": "Separazione degli interlocutori non riuscita",
       "failedReason": "{{reason}}",
+      "statusSkipped": "Non separato",
+      "statusFailed": "Separazione non riuscita",
+      "manySpeakers": "{{count}} interlocutori",
+      "manySpeakersHint": "Una persona può essere divisa su più interlocutori. Usa «Risepara → numero fisso» o unisci l'interlocutore errato a quello giusto dal suo menu.",
       "skipReason": {
         "disabled": "La separazione degli interlocutori è disattivata per questa riunione.",
         "engineUnavailable": "Il motore o il modello di separazione degli interlocutori non è disponibile.",
@@ -1555,6 +1559,8 @@
         "noSystemTrack": "Né traccia audio di sistema né audio della riunione conservato.",
         "systemTrackSilent": "La traccia audio di sistema era silenziosa e non c'era audio conservato.",
         "systemTrackUnusable": "Impossibile analizzare la traccia audio di sistema.",
+        "noSpeakerSegments": "Nessun segmento di interlocutore rilevato.",
+        "saveFailed": "Impossibile salvare la trascrizione separata.",
         "unknown": "Motivo sconosciuto ({{reason}})."
       }
     },
@@ -1997,6 +2003,7 @@
       "contactCreatedToast": "Contatto {{name}} creato. Gestiscilo in Dizionario → Contatti",
       "contactLinkedToast": "Collegato al contatto {{name}}",
       "voiceprintEnrolledToast": "Impronta vocale di {{name}} estratta dall'audio della riunione — ascoltala in Dizionario → Contatti",
+      "reenrollVoiceprint": "Estrai di nuovo l'impronta vocale dall'audio di questa riunione",
       "contactResolveTitle": "Trovati contatti omonimi",
       "contactResolveTitleExact": "Trovato un contatto identico",
       "contactResolveDescription": "Il nome marcato «{{name}}» potrebbe corrispondere a questi contatti. Scegli come procedere:",

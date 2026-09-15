@@ -1552,6 +1552,10 @@
       "skippedTitle": "本次录音未做说话人分离",
       "failedTitle": "说话人分离失败",
       "failedReason": "{{reason}}",
+      "statusSkipped": "未分离",
+      "statusFailed": "分离失败",
+      "manySpeakers": "说话人较多（{{count}}）",
+      "manySpeakersHint": "同一个人可能被拆成多个说话人：可用「重新分离」的固定人数模式指定人数，或在说话人标签菜单里把它并入正确的说话人。",
       "skipReason": {
         "disabled": "该会议已关闭说话人分离。",
         "engineUnavailable": "说话人分离引擎或模型不可用。",
@@ -1559,6 +1563,8 @@
         "noSystemTrack": "既没有系统音轨，也没有保留的会议音频。",
         "systemTrackSilent": "系统音轨没有声音，且没有保留的会议音频。",
         "systemTrackUnusable": "系统音轨无法分析。",
+        "noSpeakerSegments": "没有检测到说话人片段。",
+        "saveFailed": "分离结果保存失败。",
         "unknown": "原因未知（{{reason}}）。"
       }
     },
@@ -2001,6 +2007,7 @@
       "contactCreatedToast": "已新建联系人 {{name}}，可在 词典 → 联系人 中管理",
       "contactLinkedToast": "已关联到联系人 {{name}}",
       "voiceprintEnrolledToast": "已从本场会议音频提取 {{name}} 的声纹，可在 词典 → 联系人 中试听校准",
+      "reenrollVoiceprint": "从本场音频重新提取声纹",
       "contactResolveTitle": "发现同名联系人",
       "contactResolveTitleExact": "检测到同名联系人",
       "contactResolveDescription": "标记的「{{name}}」与以下联系人可能相同，请选择如何处理：",

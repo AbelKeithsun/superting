@@ -1548,6 +1548,10 @@
       "skippedTitle": "No se ejecutó la separación de hablantes",
       "failedTitle": "Falló la separación de hablantes",
       "failedReason": "{{reason}}",
+      "statusSkipped": "Sin separar",
+      "statusFailed": "Falló la separación",
+      "manySpeakers": "{{count}} hablantes",
+      "manySpeakersHint": "Una persona puede quedar dividida en varios hablantes. Usa «Volver a separar → número fijo» o une el hablante incorrecto con el correcto desde su menú.",
       "skipReason": {
         "disabled": "La separación de hablantes está desactivada para esta reunión.",
         "engineUnavailable": "El motor o modelo de separación de hablantes no está disponible.",
@@ -1555,6 +1559,8 @@
         "noSystemTrack": "No había pista de audio del sistema ni audio de la reunión guardado.",
         "systemTrackSilent": "La pista de audio del sistema estaba en silencio y no había audio guardado.",
         "systemTrackUnusable": "No se pudo analizar la pista de audio del sistema.",
+        "noSpeakerSegments": "No se detectaron fragmentos de hablantes.",
+        "saveFailed": "No se pudo guardar la transcripción separada.",
         "unknown": "Motivo desconocido ({{reason}})."
       }
     },
@@ -1997,6 +2003,7 @@
       "contactCreatedToast": "Contacto {{name}} creado. Gestionar en Diccionario → Contactos",
       "contactLinkedToast": "Vinculado al contacto {{name}}",
       "voiceprintEnrolledToast": "Se extrajo la huella de voz de {{name}} del audio de la reunión: escúchala en Diccionario → Contactos",
+      "reenrollVoiceprint": "Volver a extraer la huella de voz del audio de esta reunión",
       "contactResolveTitle": "Se encontraron contactos con el mismo nombre",
       "contactResolveTitleExact": "Se encontró un contacto idéntico",
       "contactResolveDescription": "El nombre marcado «{{name}}» puede coincidir con estos contactos. Elige cómo proceder:",
