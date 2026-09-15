@@ -56,7 +56,16 @@ const {
 const {
   batchConfirmedThreshold: BATCH_SPEAKER_CONFIRMED_THRESHOLD,
   batchSuggestedThreshold: BATCH_SPEAKER_SUGGESTED_THRESHOLD,
+  clusterMergeThreshold: SPEAKER_CLUSTER_MERGE_THRESHOLD,
+  clusterMergeMaxFragmentSeconds: SPEAKER_CLUSTER_MERGE_MAX_FRAGMENT_SECONDS,
 } = require("../constants/speakerThresholds.json");
+const { mergeSimilarSpeakerClusters } = require("./speakerClusterMerge");
+
+// Voiceprint audition clips: long enough to be recognisable, never long enough
+// to run into the next speaker's turn (the embedding model caps at 8s anyway).
+const MIN_VOICEPRINT_CLIP_SECONDS = 1.5;
+const DEFAULT_VOICEPRINT_CLIP_SECONDS = 3;
+const MAX_VOICEPRINT_CLIP_SECONDS = 8;
 const {
   DEFAULT_WHISPER_VAD_CONFIG,
   sanitizeWhisperVadConfig,
@@ -9079,16 +9088,104 @@ class IPCHandlers {
       return isEpochMs ? Math.max(0, (value - firstSystem) / 1000) : value;
     };
 
-    return segments
-      .filter((segment) => segment.speaker === speakerId && Number.isFinite(segment.timestamp))
-      .map((segment) => {
-        const startSeconds = Math.max(0, Number(normalize(segment.timestamp)) || 0);
-        const rawEnd = normalize(segment.endTime);
-        const endSeconds =
-          Number.isFinite(rawEnd) && rawEnd > startSeconds ? rawEnd : startSeconds + 3;
+    const timeline = segments
+      .map((segment) => ({
+        segment,
+        startSeconds: normalize(segment.timestamp),
+        endSeconds: normalize(segment.endTime),
+      }))
+      .filter((entry) => Number.isFinite(entry.startSeconds));
+
+    // Segments without an engine-provided end are bounded by the next utterance
+    // instead of a blind "+3s", which used to bleed into the following speaker.
+    const nextStartAfter = (index, startSeconds) => {
+      for (let i = index + 1; i < timeline.length; i += 1) {
+        if (timeline[i].startSeconds > startSeconds) return timeline[i].startSeconds;
+      }
+      return null;
+    };
+
+    return timeline
+      .map((entry, index) => {
+        if (entry.segment.speaker !== speakerId) return null;
+        const startSeconds = Math.max(0, entry.startSeconds);
+        let endSeconds =
+          Number.isFinite(entry.endSeconds) && entry.endSeconds > startSeconds
+            ? entry.endSeconds
+            : null;
+        if (endSeconds == null) {
+          const nextStart = nextStartAfter(index, startSeconds);
+          const boundary =
+            nextStart != null
+              ? Math.min(nextStart, startSeconds + MAX_VOICEPRINT_CLIP_SECONDS)
+              : startSeconds + DEFAULT_VOICEPRINT_CLIP_SECONDS;
+          endSeconds = Math.max(startSeconds + MIN_VOICEPRINT_CLIP_SECONDS, boundary);
+        }
+        endSeconds = Math.min(endSeconds, startSeconds + MAX_VOICEPRINT_CLIP_SECONDS);
         return { startSeconds, endSeconds };
       })
-      .filter((window) => window.endSeconds - window.startSeconds >= minSeconds);
+      .filter((window) => window && window.endSeconds - window.startSeconds >= minSeconds);
+  }
+
+  /**
+   * Voiceprint centroid per cluster of a diarization result: the longest three
+   * utterances of each cluster (≥1.5s) are embedded and averaged. Returns null
+   * when the model or the audio is unavailable.
+   */
+  async _extractSpeakerCentroids(segments, wavPath) {
+    const speakerEmbeddings = require("./speakerEmbeddings");
+    if (!wavPath || !speakerEmbeddings.isAvailable()) return null;
+
+    const bySpeaker = new Map();
+    for (const segment of segments) {
+      if (!bySpeaker.has(segment.speaker)) bySpeaker.set(segment.speaker, []);
+      bySpeaker.get(segment.speaker).push(segment);
+    }
+
+    const centroids = {};
+    for (const [speaker, list] of bySpeaker) {
+      const longest = [...list]
+        .sort((a, b) => b.end - b.start - (a.end - a.start))
+        .slice(0, 3);
+      const embeddings = [];
+      for (const segment of longest) {
+        if (segment.end - segment.start < MIN_VOICEPRINT_CLIP_SECONDS) continue;
+        const embedding = await speakerEmbeddings.extractEmbedding(
+          wavPath,
+          segment.start,
+          segment.end
+        );
+        if (embedding) embeddings.push(embedding);
+      }
+      if (embeddings.length === 0) continue;
+      const centroid = speakerEmbeddings.computeCentroid(embeddings);
+      if (centroid?.length) centroids[speaker] = Array.from(centroid);
+    }
+
+    return Object.keys(centroids).length > 0 ? centroids : null;
+  }
+
+  /**
+   * Merge clusters that voice the same person (unknown cluster counts over-split
+   * meetings) and return the remapped segments plus per-speaker centroids.
+   */
+  async _mergeSimilarSpeakerClusters(segments, wavPath, context = {}) {
+    const centroids = await this._extractSpeakerCentroids(segments, wavPath);
+    if (!centroids) return { segments, embeddings: null, mergeCount: 0 };
+
+    const merged = mergeSimilarSpeakerClusters(segments, centroids, {
+      threshold: SPEAKER_CLUSTER_MERGE_THRESHOLD,
+      maxFragmentSeconds: SPEAKER_CLUSTER_MERGE_MAX_FRAGMENT_SECONDS,
+    });
+    if (merged.mergeCount > 0) {
+      debugLogger.info("Diarization clusters merged by voiceprint", {
+        ...context,
+        before: Object.keys(centroids).length,
+        after: Object.keys(merged.embeddings).length,
+        merges: merged.mergeCount,
+      });
+    }
+    return { segments: merged.segments, embeddings: merged.embeddings, mergeCount: merged.mergeCount };
   }
 
   /**
@@ -9543,6 +9640,12 @@ class IPCHandlers {
         noteId: noteId ?? null,
         skipReason,
       });
+      try {
+        this.databaseManager.setNoteDiarizationStatus(noteId, {
+          status: "skipped",
+          reason: skipReason,
+        });
+      } catch (_) {}
       send({
         segments: transcriptSegments.map((segment, index) => ({
           ...segment,
@@ -9684,7 +9787,23 @@ class IPCHandlers {
           ...resolveDiarizationSpeakerOptions(speakerExpectation),
           stabilizeOptions: { cap: speakerExpectation.cap },
         });
-        const diarizationSegments = adaptiveResult.segments || [];
+        let diarizationSegments = adaptiveResult.segments || [];
+
+        // Same voice split across several clusters (unknown cluster count
+        // over-splits real meetings): collapse them by voiceprint before the
+        // transcript is labelled, and reuse those centroids for the voiceprints.
+        let clusterEmbeddings = null;
+        try {
+          const clusterMerge = await this._mergeSimilarSpeakerClusters(
+            diarizationSegments,
+            tmpWav,
+            { sessionId, noteId: trackedNoteId }
+          );
+          diarizationSegments = clusterMerge.segments;
+          clusterEmbeddings = clusterMerge.embeddings;
+        } catch (error) {
+          debugLogger.debug("Diarization cluster merge skipped", { error: error.message });
+        }
 
         const startMs =
           (Number.isFinite(inputReferenceMs) && inputReferenceMs) ||
@@ -9717,30 +9836,11 @@ class IPCHandlers {
         }
 
         let speakerEmbeddingsMap = null;
-        const speakerEmb = require("./speakerEmbeddings");
-        try {
-          if (speakerEmb.isAvailable() && tmpWav) {
-            const speakerIds = [...new Set(diarizationSegments.map((s) => s.speaker))];
-            speakerEmbeddingsMap = {};
-
-            for (const spk of speakerIds) {
-              const segs = diarizationSegments.filter((s) => s.speaker === spk);
-              const sorted = segs.sort((a, b) => b.end - b.start - (a.end - a.start)).slice(0, 3);
-              const embeddings = [];
-              for (const seg of sorted) {
-                if (seg.end - seg.start < 1.5) continue;
-                const emb = await speakerEmb.extractEmbedding(tmpWav, seg.start, seg.end);
-                if (emb) embeddings.push(emb);
-              }
-              if (embeddings.length > 0) {
-                const centroid = speakerEmb.computeCentroid(embeddings);
-                const mappedId = speakerRenumber.get(spk) || spk;
-                speakerEmbeddingsMap[mappedId] = Array.from(centroid);
-              }
-            }
+        if (clusterEmbeddings) {
+          speakerEmbeddingsMap = {};
+          for (const [spk, vector] of Object.entries(clusterEmbeddings)) {
+            speakerEmbeddingsMap[speakerRenumber.get(spk) || spk] = vector;
           }
-        } catch (err) {
-          debugLogger.debug("Speaker embedding extraction skipped", { error: err.message });
         }
 
         const reconciledSpeakers = this._reconcileLiveSpeakerState(
@@ -9810,6 +9910,17 @@ class IPCHandlers {
           }
         }
 
+        const speakerCount = new Set(
+          enrichedSegments.map((segment) => segment.speaker).filter(Boolean)
+        ).size;
+        try {
+          this.databaseManager.setNoteDiarizationStatus(trackedNoteId, {
+            status: "completed",
+            reason: null,
+            speakerCount,
+          });
+        } catch (_) {}
+
         send({
           segments: enrichedSegments,
           speakerEmbeddings: speakerEmbeddingsMap,
@@ -9818,6 +9929,12 @@ class IPCHandlers {
         void this._compressNoteAudioAfterDiarization(trackedNoteId, retainedAudioFilename);
       } catch (err) {
         debugLogger.warn("Background diarization failed", { error: err.message });
+        try {
+          this.databaseManager.setNoteDiarizationStatus(trackedNoteId, {
+            status: "failed",
+            reason: err.message,
+          });
+        } catch (_) {}
         send({ segments: [], diarizationFailed: true, error: err.message });
       } finally {
         clearTimeout(watchdog);
@@ -9921,10 +10038,19 @@ class IPCHandlers {
     const note = this.databaseManager.getNote(noteId);
     if (!note) return createRediarizeFailure("Note not found");
 
+    // Record the real outcome of the run (`diarization_enabled` only holds the
+    // user's preference and cannot answer "did it run?").
+    const recordStatus = (status, reason = null, speakerCount = null) => {
+      try {
+        this.databaseManager.setNoteDiarizationStatus(noteId, { status, reason, speakerCount });
+      } catch (_) {}
+    };
+
     if (note.diarization_enabled === 0 || options?.enabled === false) {
       return createRediarizeFailure("Speaker diarization is disabled for this note");
     }
     if (!this.diarizationManager?.isAvailable()) {
+      recordStatus("skipped", "engine-unavailable");
       return createRediarizeFailure("Speaker diarization model is not available");
     }
 
@@ -9990,8 +10116,24 @@ class IPCHandlers {
         }),
         stabilizeOptions,
       });
-      const diarizationSegments = adaptiveResult.segments || [];
+      let diarizationSegments = adaptiveResult.segments || [];
+
+      // Merge same-voice clusters before labelling (mirrors the automatic path).
+      let rediarizeEmbeddings = null;
+      try {
+        const clusterMerge = await this._mergeSimilarSpeakerClusters(
+          diarizationSegments,
+          tmpWav,
+          { noteId, source: "rediarize" }
+        );
+        diarizationSegments = clusterMerge.segments;
+        rediarizeEmbeddings = clusterMerge.embeddings;
+      } catch (error) {
+        debugLogger.debug("Rediarize cluster merge skipped", { error: error.message });
+      }
+
       if (!Array.isArray(diarizationSegments) || diarizationSegments.length === 0) {
+        recordStatus("failed", "no-speaker-segments");
         return {
           ...createRediarizeFailure("Speaker diarization did not detect any speaker segments"),
           diarizationDiagnostics: adaptiveResult.diagnostics,
@@ -10019,6 +10161,17 @@ class IPCHandlers {
               : segment.endTime
             : segment.endTime,
       }));
+      // mergeWithTranscript renumbers speakers in first-appearance order; mirror
+      // that so saved embeddings use the same ids as the transcript.
+      const rediarizeSpeakerRenumber = new Map();
+      {
+        let speakerIndex = 0;
+        for (const speaker of new Set(diarizationSegments.map((segment) => segment.speaker))) {
+          rediarizeSpeakerRenumber.set(speaker, `speaker_${speakerIndex}`);
+          speakerIndex += 1;
+        }
+      }
+
       const mergeResult = this.diarizationManager.mergeWithTranscript(
         normalized,
         diarizationSegments,
@@ -10035,10 +10188,24 @@ class IPCHandlers {
         transcript: JSON.stringify(enrichedSegments),
       });
       if (!result?.success) {
+        recordStatus("failed", "save-failed");
         return {
           ...createRediarizeFailure("Failed to save diarized transcript", diagnostics),
           audioFile,
         };
+      }
+
+      if (rediarizeEmbeddings) {
+        try {
+          const renumberedEmbeddings = {};
+          for (const [spk, vector] of Object.entries(rediarizeEmbeddings)) {
+            const mappedId = rediarizeSpeakerRenumber.get(spk) || spk;
+            renumberedEmbeddings[mappedId] = Buffer.from(new Float32Array(vector).buffer);
+          }
+          this.databaseManager.saveNoteSpeakerEmbeddings(noteId, renumberedEmbeddings);
+        } catch (error) {
+          debugLogger.debug("Rediarize speaker embeddings not saved", { error: error.message });
+        }
       }
 
       const updatedNote = result?.note || this.databaseManager.getNote(noteId);
@@ -10048,6 +10215,11 @@ class IPCHandlers {
         this._asyncMirrorWrite(updatedNote);
       }
       void this._compressNoteAudioAfterDiarization(noteId, audioFile.filename);
+      recordStatus(
+        "completed",
+        null,
+        new Set(enrichedSegments.map((segment) => segment.speaker).filter(Boolean)).size
+      );
       return {
         success: true,
         note: updatedNote,
@@ -10057,6 +10229,7 @@ class IPCHandlers {
         ...diagnostics,
       };
     } catch (error) {
+      recordStatus("failed", error?.message ?? "rediarize-failed");
       return { ...createRediarizeFailure(error), audioFile };
     } finally {
       if (trackedTask) {

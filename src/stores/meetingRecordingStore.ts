@@ -33,6 +33,9 @@ export interface TranscriptSegment {
   text: string;
   source: "mic" | "system";
   timestamp?: number;
+  // End of the utterance when the engine knows it (diarization fills it in);
+  // used for overlap matching and for slicing voiceprint clips.
+  endTime?: number;
   // Set on first user edit; originalText keeps the ASR wording so diarization
   // merging can still correlate the edited segment with raw engine output.
   editedByUser?: boolean;

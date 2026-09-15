@@ -13,6 +13,7 @@ import {
   Search,
   ChevronUp,
   ChevronDown,
+  TriangleAlert,
   Plus,
   Check,
   Pencil,
@@ -473,6 +474,10 @@ type EditorMode = "rich" | "markdown";
 type ContentEditTarget = "raw" | "enhanced";
 const EDITOR_MODE_STORAGE_KEY = "superting.notesEditorMode";
 
+// Above this speaker count the diarization result is worth questioning: an
+// unknown cluster count tends to split one voice across several clusters.
+const MANY_SPEAKERS_HINT_THRESHOLD = 8;
+
 // Backend diarization skip reasons → notes.diarization.skipReason.* i18n keys.
 const DIARIZATION_SKIP_REASON_KEYS: Record<string, string> = {
   disabled: "disabled",
@@ -759,6 +764,13 @@ export default function NoteEditor({
     Array<{ id: number; display_name: string; email: string | null }>
   >([]);
   const [speakerNames, setSpeakerNames] = useState<SpeakerNameEntry[]>([]);
+  // Last diarization outcome (persisted on the note, mirrored locally so the
+  // transcript can show it without a refetch).
+  const [diarizationOutcome, setDiarizationOutcome] = useState<{
+    status: string | null;
+    reason: string | null;
+    speakerCount: number | null;
+  }>({ status: null, reason: null, speakerCount: null });
   const [isRediarizeDialogOpen, setIsRediarizeDialogOpen] = useState(false);
   // Cross-session contact resolution on speaker mark: when the marked name
   // matches an existing contact (exact) or similar-named ones (ambiguous), we
@@ -911,6 +923,16 @@ export default function NoteEditor({
     setContentDraft(note.content);
     setEnhancedDraft(enhancement?.content ?? "");
   }, [note.id]);
+
+  // Sync the persisted diarization outcome (covers runs from earlier sessions,
+  // where the toast is long gone).
+  useEffect(() => {
+    setDiarizationOutcome({
+      status: note.diarization_status ?? null,
+      reason: note.diarization_skip_reason ?? null,
+      speakerCount: note.diarization_speaker_count ?? null,
+    });
+  }, [note.id, note.diarization_status, note.diarization_skip_reason]);
 
   useEffect(() => {
     if (!hasUnsavedContentDraft) return;
@@ -1230,6 +1252,11 @@ export default function NoteEditor({
       // transcript silently without speakers. "disabled" is the user's own
       // per-meeting choice, so it stays quiet.
       if (data?.diarizationSkipped) {
+        setDiarizationOutcome({
+          status: "skipped",
+          reason: data.skipReason ?? null,
+          speakerCount: null,
+        });
         if (data.skipReason !== "disabled") {
           toast({
             title: t("notes.diarization.skippedTitle"),
@@ -1245,6 +1272,11 @@ export default function NoteEditor({
       }
 
       if (data?.diarizationFailed) {
+        setDiarizationOutcome({
+          status: "failed",
+          reason: data.error ?? null,
+          speakerCount: null,
+        });
         toast({
           title: t("notes.diarization.failedTitle"),
           description: t("notes.diarization.failedReason", { reason: data.error ?? "" }),
@@ -1254,6 +1286,14 @@ export default function NoteEditor({
       }
 
       if (!data?.segments?.length) return;
+
+      setDiarizationOutcome({
+        status: "completed",
+        reason: null,
+        speakerCount: new Set(
+          data.segments.map((segment) => segment.speaker).filter(Boolean)
+        ).size,
+      });
 
       // Draft guard: while the user is mid-edit, merging into the note would
       // overwrite their unsaved draft with the diarization version. Defer the
@@ -1397,15 +1437,18 @@ export default function NoteEditor({
       email,
       profileId,
       personId,
+      force = false,
     }: {
       speakerId: string;
       displayName: string;
       email?: string | null;
       profileId?: number | null;
       personId?: number | null;
+      force?: boolean;
     }) => {
-      // Name-only marks ("ignore") have no contact to bind the voiceprint to.
-      if (personId == null) return;
+      // Name-only marks ("ignore") have no contact to bind the voiceprint to;
+      // an explicit re-extract (force) resolves the contact from the name.
+      if (personId == null && !force) return;
       const key = `${note.id}:${speakerId}`;
       if (voiceprintEnrollmentsRef.current.has(key)) return;
       voiceprintEnrollmentsRef.current.add(key);
@@ -1415,7 +1458,7 @@ export default function NoteEditor({
           speakerId,
           displayName,
           email ?? null,
-          { profileId: profileId ?? null, personId }
+          { profileId: profileId ?? null, personId, force }
         );
         if (result?.voiceprintCreated) {
           toast({
@@ -2907,6 +2950,37 @@ export default function NoteEditor({
                     </DropdownMenuContent>
                   </DropdownMenu>
                 )}
+                {viewMode === "transcript" &&
+                  diarizationOutcome.status &&
+                  diarizationOutcome.status !== "completed" && (
+                    <span
+                      className="shrink-0 inline-flex items-center gap-1 rounded-md bg-amber-500/10 px-1.5 py-0.5 text-[11px] font-medium text-amber-700 dark:text-amber-400"
+                      title={t(
+                        `notes.diarization.skipReason.${
+                          DIARIZATION_SKIP_REASON_KEYS[diarizationOutcome.reason ?? ""] ?? "unknown"
+                        }`,
+                        { reason: diarizationOutcome.reason ?? "" }
+                      )}
+                    >
+                      <TriangleAlert size={11} />
+                      {diarizationOutcome.status === "failed"
+                        ? t("notes.diarization.statusFailed")
+                        : t("notes.diarization.statusSkipped")}
+                    </span>
+                  )}
+                {viewMode === "transcript" &&
+                  diarizationOutcome.status === "completed" &&
+                  (diarizationOutcome.speakerCount ?? 0) > MANY_SPEAKERS_HINT_THRESHOLD && (
+                    <span
+                      className="shrink-0 inline-flex items-center gap-1 rounded-md bg-sky-500/10 px-1.5 py-0.5 text-[11px] font-medium text-sky-700 dark:text-sky-400"
+                      title={t("notes.diarization.manySpeakersHint")}
+                    >
+                      <TriangleAlert size={11} />
+                      {t("notes.diarization.manySpeakers", {
+                        count: diarizationOutcome.speakerCount ?? 0,
+                      })}
+                    </span>
+                  )}
                 {onRediarizeAudio && (
                   <Tooltip content={rediarizeTooltip}>
                     <button
@@ -3084,6 +3158,12 @@ export default function NoteEditor({
                 onMapSegmentSpeaker={isRecording ? undefined : handleAssignSingleSegmentName}
                 onConfirmSuggestion={handleConfirmSuggestion}
                 onDismissSuggestion={handleDismissSuggestion}
+                onEnrollVoiceprint={
+                  isRecording
+                    ? undefined
+                    : (speakerId, displayName) =>
+                        void enrollSpeakerVoiceprint({ speakerId, displayName, force: true })
+                }
                 onAttachSpeakerEmail={handleAttachSpeakerEmail}
                 recordingStartedAt={recordingStartedAt}
                 timelineDurationSeconds={transcriptAudioDurationSeconds}

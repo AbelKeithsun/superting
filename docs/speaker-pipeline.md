@@ -109,22 +109,51 @@ mic 分支从不写入。线下会议（大家共用一支麦克风、系统音�
 "没有 speaker" 而不知道原因；`diarization_enabled` 只在用户手动切分离开关时才写 1/0，
 **NULL 不代表没跑过**（不能当运行状态用）。
 
-## 5. 已知遗留 / 下一步
+## 5. 聚类质量：实测与结论（本轮补齐）
 
-1. **线下会议的聚类质量**：拿真实笔记（1730s、343 段）离线跑完整管线，稳定+封顶后仍得到 16 个
-   说话人（`threshold=0.55`、`num-clusters=-1`）。建议任选其一：①录音前用"预计人数"步进器
-   （会锁定簇数，效果最好）；②分离后增加"按声纹质心合并聚类"的后处理（cosine > 阈值即合并，
-   同时让每个真人的声纹更干净）；③提高自动模式的默认 threshold。
-2. **声纹重算**：目前 (note, speaker) 已有 embedding 就跳过，`enroll-speaker-voiceprint` 支持
-   `force: true`，但 UI 还没有"重新提取声纹"入口。
-3. **试听片段时长**：片段没有 `endTime` 时按 `start + 3s` 截取，可能与下一段重叠；后续可在
-   分离结果里回填精确 end。
-4. **`diarization_enabled` 语义**：建议改成记录"实际运行结果"（ran / skipped+reason / failed），
-   而不是"用户是否手动切过开关"。
-5. **无 diarization 的笔记**：手工标记依旧是主要玩法；同名合并 + 整块改名已经把成本降到
-   "每块一点"，但一段 30 分钟的独白仍需逐块点（60s 一块）。
+拿真实笔记（note 10，1730s、343 段、线下会议）离线跑完整管线并做阈值标定：
 
-## 6. 复现/验证手段
+| 实验 | 结果 |
+| --- | --- |
+| 引擎 `threshold=0.55`、`num-clusters=-1` | 72+ 原始簇；稳定+封顶后 **16 个说话人** |
+| 引擎 `threshold=0.75` | 原始簇降到 **41 个**（仍远超真实人数）→ 单纯调阈值不是解 |
+| 各簇声纹两两 cosine | 中位数 **0.58**、p90 **0.83**、最大 0.94（区分度差） |
+| 按声纹"相似即合并"（并查集传递） | 阈值 0.35~0.70 **全部 16 簇并成 1 个** → 不可用 |
+
+结论：这段音频（单麦克风房间录音 + mic/system 混音）上 CAM++ 的簇间相似度整体偏高，
+**不能靠相似度自动合并**，否则会把整场会议并成一个人。因此改为三件事：
+
+1. **有界碎片吸收**（`speakerClusterMerge.js`，常数 `clusterMergeThreshold=0.8`、
+   `clusterMergeMaxFragmentSeconds=20`）：只有"短于 20 秒且不到最长簇一半"的碎片，才允许并入
+   与其声纹最相似的**更长簇**；主力簇之间永不互相合并 → 结构上不可能塌成一个人。
+2. **显式人数优先**：`重新分离说话人 → 固定人数` 会以 `--clustering.num-clusters=N` 做聚类，
+   这是本录音上唯一稳定可控的解法；会议里设置过"预计人数"时自动分离也会沿用。
+3. **可发现性**：转写工具栏在结果说话人数 > 8 时显示提示标签，并保留"把说话人并入正确说话人"
+   的手工合并路径（说话人标签菜单选另一个会话说话人即并入）。
+
+## 6. 本轮（续）其他改动
+
+1. **`diarization_enabled` 语义**：新增 `notes.diarization_status`（`completed`/`skipped`/`failed`）、
+   `diarization_skip_reason`、`diarization_speaker_count` 三列，自动分离与"重新分离"都会写入真实
+   结果；工具条上用标签显示 skipped/failed（悬停看原因），`diarization_enabled` 保留为"用户偏好"。
+2. **试听片段时长**：`_noteSpeakerAudioWindows` 现在优先用片段自带的 `endTime`；没有时以**下一句
+   的起点**为界（夹在 1.5s~8s 之间），不再一律 `start + 3s` 而串到别人那句。分离合并时也会把
+   解析出的 end 写回片段（`mergeWithTranscript` → `enriched.endTime`），转写序列化已带上
+   `endTime`，供试听切片与定位复用。
+3. **声纹重算入口**：说话人标签菜单新增"从本场音频重新提取声纹"（调用
+   `enroll-speaker-voiceprint` 的 `force` 路径，会重新混合 profile 模板并刷新试听片段）。
+4. **重新分离也会保存声纹**：`_rediarizeNoteAudio` 现在把簇质心写入 `note_speaker_embeddings`，
+   因此手动重新分离之后，标记说话人即可直接绑定声纹（不再依赖补算）。
+
+## 7. 仍然遗留
+
+1. **一段 30 分钟的独白仍需逐块点**（60s 一块）；同名合并 + 整块改名已把成本降到"每块一点"。
+2. **自动模式的人数推断**：没有日历参与人、也没有实时识别结果时，自动分离仍以 `num-clusters=-1`
+   运行，线下会议会偏碎；后续可考虑按会议时长/首次分离结果给一个有界默认人数。
+3. **跨会议自动回填**依赖 `notes_speaker_embeddings` 与 profile 质心的 cosine 阈值
+   （`batchConfirmedThreshold=0.6`），在区分度差的录音上同样偏乐观，值得用更多真实会议标定。
+
+## 8. 复现/验证手段
 
 - 单测：`test/utils/speakerAssignment.test.ts`、`test/helpers/diarizationInputPolicy.test.js`
 - 离线跑真实分离管线（不需要真的开会）：把笔记音频转成 16k wav 后跑

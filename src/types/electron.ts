@@ -129,6 +129,10 @@ export interface NoteItem {
   participants: string | null;
   diarization_enabled: number | null;
   expected_speaker_count: number | null;
+  /** Outcome of the last diarization run: "completed" | "skipped" | "failed". */
+  diarization_status?: string | null;
+  diarization_skip_reason?: string | null;
+  diarization_speaker_count?: number | null;
   cloud_id: string | null;
   recorded_at: string | null;
   created_at: string;

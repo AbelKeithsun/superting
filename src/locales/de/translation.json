@@ -1549,6 +1549,10 @@
       "skippedTitle": "Sprechertrennung wurde nicht ausgeführt",
       "failedTitle": "Sprechertrennung fehlgeschlagen",
       "failedReason": "{{reason}}",
+      "statusSkipped": "Nicht getrennt",
+      "statusFailed": "Trennung fehlgeschlagen",
+      "manySpeakers": "{{count}} Sprecher",
+      "manySpeakersHint": "Eine Person kann auf mehrere Sprecher aufgeteilt sein. Nutze „Erneut trennen → feste Anzahl“ oder führe einen falschen Sprecher über sein Label-Menü mit dem richtigen zusammen.",
       "skipReason": {
         "disabled": "Die Sprechertrennung ist für dieses Meeting deaktiviert.",
         "engineUnavailable": "Engine oder Modell der Sprechertrennung ist nicht verfügbar.",
@@ -1556,6 +1560,8 @@
         "noSystemTrack": "Es gab weder eine System-Audiospur noch gespeichertes Meeting-Audio.",
         "systemTrackSilent": "Die System-Audiospur war stumm und es gab kein gespeichertes Meeting-Audio.",
         "systemTrackUnusable": "Die System-Audiospur konnte nicht analysiert werden.",
+        "noSpeakerSegments": "Es wurden keine Sprecherabschnitte erkannt.",
+        "saveFailed": "Das getrennte Transkript konnte nicht gespeichert werden.",
         "unknown": "Unbekannter Grund ({{reason}})."
       }
     },
@@ -1998,6 +2004,7 @@
       "contactCreatedToast": "Kontakt {{name}} erstellt. Verwalten unter Wörterbuch → Kontakte",
       "contactLinkedToast": "Mit Kontakt {{name}} verknüpft",
       "voiceprintEnrolledToast": "Stimmabdruck von {{name}} aus dem Meeting-Audio extrahiert — im Wörterbuch → Kontakte anhören",
+      "reenrollVoiceprint": "Stimmabdruck aus dem Meeting-Audio erneut extrahieren",
       "contactResolveTitle": "Gleichnamige Kontakte gefunden",
       "contactResolveTitleExact": "Ein identischer Kontakt wurde gefunden",
       "contactResolveDescription": "Der markierte Name „{{name}}“ könnte diesen Kontakten entsprechen. Wählen Sie das Vorgehen:",
