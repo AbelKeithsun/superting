@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.8] - 2026-09-15
+
+### Speaker marking → contacts (cross-session reuse)
+
+- **Marking a speaker now always lands on a contact.** `set-speaker-mapping` resolves the person unconditionally (previously it only created a `people` record when a speaker embedding was available; without one the mark was written only to the legacy name table and could not be reused across meetings). It accepts an explicit `personId` / `createPerson` choice and reports the resulting person.
+- **Contact resolution before committing.** A new `resolve-speaker-contact` IPC checks the marked name against contacts by email/name and reports `exact` / `ambiguous` / `none`.
+- **Choose link vs create on same-name matches.** When the marked name matches an existing contact (exact) or similar-named ones, the note editor pauses with a dialog: link to the existing contact, create a separate contact, or ignore (name-only for this session). When nothing matches, the contact is created automatically with a confirmation toast.
+
 ## [2.0.7] - 2026-09-15
 
 ### Meeting recording pill toggle
