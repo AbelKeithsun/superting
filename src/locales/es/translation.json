@@ -24,6 +24,10 @@
       "speakerDetection": {
         "title": "Identificar y etiquetar participantes",
         "description": "Cuando está desactivado, las transcripciones muestran \"Tú\" y \"Otros\""
+      },
+      "recordingPill": {
+        "title": "Mostrar botón flotante de grabación",
+        "description": "Muestra un botón flotante con el estado de grabación mientras grabas notas o reuniones"
       }
     }
   },

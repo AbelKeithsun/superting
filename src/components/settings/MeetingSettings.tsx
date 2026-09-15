@@ -24,6 +24,21 @@ export function MeetingSpeakerDetectionRow() {
   );
 }
 
+export function MeetingRecordingPillRow() {
+  const { t } = useTranslation();
+  const showMeetingRecordingPill = useSettingsStore((s) => s.showMeetingRecordingPill);
+  const setShowMeetingRecordingPill = useSettingsStore((s) => s.setShowMeetingRecordingPill);
+
+  return (
+    <SettingsRow
+      label={t("settings.meeting.recordingPill.title")}
+      description={t("settings.meeting.recordingPill.description")}
+    >
+      <Toggle checked={showMeetingRecordingPill} onChange={setShowMeetingRecordingPill} />
+    </SettingsRow>
+  );
+}
+
 const noop = () => {};
 
 export function MeetingTranscriptionPanel() {
@@ -145,6 +160,7 @@ export function MeetingTranscriptionPanel() {
         </>
       )}
       <MeetingSpeakerDetectionRow />
+      <MeetingRecordingPillRow />
     </div>
   );
 }

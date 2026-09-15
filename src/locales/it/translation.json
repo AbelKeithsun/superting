@@ -24,6 +24,10 @@
       "speakerDetection": {
         "title": "Identifica ed etichetta i partecipanti",
         "description": "Se disattivato, le trascrizioni mostrano \"Tu\" e \"Altri\""
+      },
+      "recordingPill": {
+        "title": "Mostra pulsante di registrazione flottante",
+        "description": "Mostra un pulsante flottante con lo stato di registrazione durante la registrazione di note o riunioni"
       }
     }
   },
