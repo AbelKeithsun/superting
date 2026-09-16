@@ -2815,18 +2815,32 @@ class DatabaseManager {
     }
   }
 
+  // Contacts and people are fused: people is the single identity table. The
+  // legacy contacts API surface is kept as a compatibility shim over people
+  // (the contacts table itself is untouched and still migrated on startup).
   upsertContacts(contacts) {
     try {
       if (!this.db) throw new Error("Database not initialized");
-      const transaction = this.db.transaction((list) => {
-        const stmt = this.db.prepare(
-          "INSERT INTO contacts (email, display_name, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP) ON CONFLICT(email) DO UPDATE SET display_name = COALESCE(excluded.display_name, contacts.display_name), updated_at = CURRENT_TIMESTAMP"
-        );
-        for (const c of list) {
-          if (c.email) stmt.run(c.email.toLowerCase().trim(), c.displayName || null);
+      for (const c of contacts) {
+        if (!c?.email) continue;
+        const email = this._normalizeEmail(c.email);
+        if (!email) continue;
+        const existing = this._findPersonByEmail(email);
+        if (!existing) {
+          this.findOrCreatePerson({
+            displayName: c.displayName || email.split("@")[0],
+            email,
+          });
+        } else if (c.displayName && existing.display_name === email.split("@")[0]) {
+          // Upgrade an auto-generated (email-prefix) name to the real one;
+          // a name the user set themselves is never clobbered.
+          this.db
+            .prepare(
+              "UPDATE people SET display_name = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?"
+            )
+            .run(c.displayName, existing.id);
         }
-      });
-      transaction(contacts);
+      }
       return { success: true };
     } catch (error) {
       debugLogger.error("Error upserting contacts", { error: error.message }, "database");
@@ -2840,7 +2854,9 @@ class DatabaseManager {
       const pattern = `%${query || ""}%`;
       return this.db
         .prepare(
-          "SELECT * FROM contacts WHERE email LIKE ? OR display_name LIKE ? ORDER BY display_name ASC, email ASC LIMIT 20"
+          `SELECT email, display_name FROM people
+           WHERE email IS NOT NULL AND (email LIKE ? OR display_name LIKE ?)
+           ORDER BY display_name ASC, email ASC LIMIT 20`
         )
         .all(pattern, pattern);
     } catch (error) {

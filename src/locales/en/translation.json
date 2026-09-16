@@ -1857,7 +1857,9 @@
       "addAttendees": "Add attendees",
       "addPlaceholder": "Add attendees...",
       "typeEmail": "Type an email to add...",
-      "me": "(me)"
+      "me": "(me)",
+      "peopleSection": "People",
+      "voiceprintCount": "{{count}} voiceprints"
     },
     "upload": {
       "title": "Upload Audio",

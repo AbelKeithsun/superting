@@ -1815,7 +1815,9 @@
       "addAttendees": "Aggiungi partecipanti",
       "addPlaceholder": "Aggiungi partecipanti...",
       "typeEmail": "Digita un'email per aggiungere...",
-      "me": "(io)"
+      "me": "(io)",
+      "peopleSection": "Persone",
+      "voiceprintCount": "{{count}} impronte vocali"
     },
     "upload": {
       "title": "Carica audio",

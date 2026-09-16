@@ -1816,7 +1816,9 @@
       "addAttendees": "Teilnehmer hinzufügen",
       "addPlaceholder": "Teilnehmer hinzufügen...",
       "typeEmail": "E-Mail eingeben zum Hinzufügen...",
-      "me": "(ich)"
+      "me": "(ich)",
+      "peopleSection": "Personen",
+      "voiceprintCount": "{{count}} Stimmabdrücke"
     },
     "upload": {
       "title": "Audio hochladen",

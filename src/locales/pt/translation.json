@@ -1815,7 +1815,9 @@
       "addAttendees": "Adicionar participantes",
       "addPlaceholder": "Adicionar participantes...",
       "typeEmail": "Digite um e-mail para adicionar...",
-      "me": "(eu)"
+      "me": "(eu)",
+      "peopleSection": "Pessoas",
+      "voiceprintCount": "{{count}} impressões de voz"
     },
     "upload": {
       "title": "Enviar áudio",
