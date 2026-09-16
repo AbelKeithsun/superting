@@ -55,6 +55,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **The add-attendee popover enumerates 人名表.** Open it to see everyone in the people directory (organisation/email and a voiceprint badge for people with templates); typing filters by name, email, organisation or phone. Selecting a person attaches them with their personId, so voiceprint priors and the speaker-count suggestion flow through (all 10 locales).
 - **Contacts and people are one table now.** people is the single identity table; the legacy contacts API reads/writes people (creating or name-upgrading records, never clobbering a user-set name), and legacy contacts rows keep migrating into people on startup.
 
+### Transcript view no longer fights your editing
+
+- **Fixed: correcting an earlier segment got interrupted by every new sentence.** While an inline/live segment editor is open, the transcript never snaps to the latest line (the sticky-bottom follow only resumes once the editor closes and the view is scrolled back to the bottom).
+
 ## [2.0.8] - 2026-09-15
 
 ### Speaker marking → contacts (cross-session reuse)
