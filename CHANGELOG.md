@@ -59,6 +59,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Fixed: correcting an earlier segment got interrupted by every new sentence.** While an inline/live segment editor is open, the transcript never snaps to the latest line (the sticky-bottom follow only resumes once the editor closes and the view is scrolled back to the bottom).
 
+### Resumed recordings stay on one timeline
+
+- **Fixed: stopping and starting again on the same note restarted the clock.** Live transcription reports wall-clock timestamps while stored segments are timeline-relative seconds, so a resumed session rendered its fresh lines from 00:00 again — they overlapped the previous session's range and made the earlier dialogue look mistimed. Live segments are now converted into the note timeline on arrival (previous session end + 1s), so resumed lines continue after the earlier ones, autosave no longer re-anchors them, and speaker retraction matching uses the same clock.
+
+### Meeting minutes can cite chapter timestamps
+
+- **Fixed: the chapter outline reported that no timestamps were provided.** The built-in minutes prompt asks the model to keep timestamps for the closing chapter outline, but the note-action input formatted every line as "You:/Them:" with no time at all. Structured transcript lines now carry a [MM:SS] (or [H:MM:SS]) prefix taken from their stored timeline seconds.
+
+### The update button actually checks for updates
+
+- **Fixed: 检查更新 did nothing.** The renderer's check-for-updates call had no main-process handler (only a rejection), and the update manager was a stub reporting updates as disabled. It now queries the project's latest GitHub release, compares the tag with the running version, and reports the result: a newer version shows the update badge plus an "open download page" button, an up-to-date app says so, and a failed lookup reports itself. Updates stay manual — nothing self-installs.
+
 ## [2.0.8] - 2026-09-15
 
 ### Speaker marking → contacts (cross-session reuse)
