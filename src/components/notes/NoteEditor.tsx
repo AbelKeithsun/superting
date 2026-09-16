@@ -30,6 +30,7 @@ import { MarkdownSourceEditor } from "../ui/MarkdownSourceEditor";
 import type { Editor } from "@tiptap/react";
 import { MeetingTranscriptChat, type TranscriptSeekTarget } from "./MeetingTranscriptChat";
 import CorrectionSubmitDialog from "./CorrectionSubmitDialog";
+import VoiceprintSlotDialog from "./VoiceprintSlotDialog";
 import type { TranscriptSegment } from "../../stores/meetingRecordingStore";
 import { updateSegmentText } from "../../stores/meetingRecordingStore";
 import {
@@ -60,6 +61,7 @@ import type {
   PersonRecord,
   SingleNoteExportFormat,
   SingleNoteExportOptions,
+  VoiceprintSummary,
 } from "../../types/electron";
 import type { ActionProcessingState } from "../../hooks/useActionProcessing";
 import type { ActionOutputTarget } from "../../stores/actionProcessingCore";
@@ -801,6 +803,17 @@ export default function NoteEditor({
   // Speakers whose voiceprint enrollment is currently running (or done) for
   // this note, so repeated marks do not queue duplicate extraction work.
   const voiceprintEnrollmentsRef = useRef<Set<string>>(new Set());
+  // Cap-hit state: the person already holds MAX_VOICEPRINTS templates and the
+  // user has to choose which one the new sample replaces.
+  const [voiceprintSlotPrompt, setVoiceprintSlotPrompt] = useState<{
+    speakerId: string;
+    displayName: string;
+    email: string | null;
+    profileId: number | null;
+    personId: number | null;
+    voiceprints: VoiceprintSummary[];
+    maxVoiceprints: number;
+  } | null>(null);
   const [rediarizeMode, setRediarizeMode] = useState<RediarizeSpeakerMode>("auto");
   const [rediarizeExpectedCount, setRediarizeExpectedCount] = useState(3);
   const [showRediarizeAdvanced, setShowRediarizeAdvanced] = useState(false);
@@ -1450,6 +1463,7 @@ export default function NoteEditor({
       profileId,
       personId,
       force = false,
+      replaceVoiceprintId = null,
     }: {
       speakerId: string;
       displayName: string;
@@ -1457,10 +1471,11 @@ export default function NoteEditor({
       profileId?: number | null;
       personId?: number | null;
       force?: boolean;
+      replaceVoiceprintId?: number | null;
     }) => {
       // Name-only marks ("ignore") have no contact to bind the voiceprint to;
       // an explicit re-extract (force) resolves the contact from the name.
-      if (personId == null && !force) return;
+      if (personId == null && !force && replaceVoiceprintId == null) return;
       const key = `${note.id}:${speakerId}`;
       if (voiceprintEnrollmentsRef.current.has(key)) return;
       voiceprintEnrollmentsRef.current.add(key);
@@ -1470,9 +1485,28 @@ export default function NoteEditor({
           speakerId,
           displayName,
           email ?? null,
-          { profileId: profileId ?? null, personId, force }
+          { profileId: profileId ?? null, personId, force, replaceVoiceprintId }
         );
-        if (result?.voiceprintCreated) {
+        if (result?.needsVoiceprintReplacement) {
+          // Person is at the cap: let the user pick which template to refresh.
+          setVoiceprintSlotPrompt({
+            speakerId,
+            displayName,
+            email: email ?? null,
+            profileId: profileId ?? null,
+            personId: personId ?? result.person?.id ?? null,
+            voiceprints: result.voiceprints ?? [],
+            maxVoiceprints: result.maxVoiceprints ?? 5,
+          });
+        } else if (result?.voiceprintReplaced) {
+          toast({
+            title: t("notes.speaker.voiceprintReplacedToast", {
+              defaultValue: "已用本次会议的声音更新 {{name}} 的一条声纹",
+              name: displayName,
+            }),
+          });
+          refreshSpeakerProfiles();
+        } else if (result?.voiceprintCreated) {
           toast({
             title: t("notes.speaker.voiceprintEnrolledToast", {
               defaultValue:
@@ -1569,7 +1603,17 @@ export default function NoteEditor({
           });
         }
 
-        if (result.person && !isRecording) {
+        if (result.needsVoiceprintReplacement && result.person) {
+          setVoiceprintSlotPrompt({
+            speakerId,
+            displayName,
+            email: email ?? null,
+            profileId: result.profileId ?? profileId ?? null,
+            personId: result.person.id,
+            voiceprints: result.voiceprints ?? [],
+            maxVoiceprints: result.maxVoiceprints ?? 5,
+          });
+        } else if (result.person && !isRecording) {
           void enrollSpeakerVoiceprint({
             speakerId,
             displayName,
@@ -2751,6 +2795,41 @@ export default function NoteEditor({
         onSaved={(count) => {
           toast({
             title: t("notes.transcript.correction.savedTitle", { count }),
+          });
+        }}
+      />
+      <VoiceprintSlotDialog
+        open={!!voiceprintSlotPrompt}
+        onOpenChange={(open) => {
+          if (!open && voiceprintSlotPrompt) setVoiceprintSlotPrompt(null);
+        }}
+        personName={voiceprintSlotPrompt?.displayName ?? ""}
+        voiceprints={voiceprintSlotPrompt?.voiceprints ?? []}
+        maxVoiceprints={voiceprintSlotPrompt?.maxVoiceprints ?? 5}
+        onChoose={(voiceprintId) => {
+          const prompt = voiceprintSlotPrompt;
+          setVoiceprintSlotPrompt(null);
+          if (!prompt) return;
+          void enrollSpeakerVoiceprint({
+            speakerId: prompt.speakerId,
+            displayName: prompt.displayName,
+            email: prompt.email,
+            profileId: prompt.profileId,
+            personId: prompt.personId,
+            force: true,
+            replaceVoiceprintId: voiceprintId,
+          });
+        }}
+        onCancel={() => {
+          const prompt = voiceprintSlotPrompt;
+          setVoiceprintSlotPrompt(null);
+          if (!prompt) return;
+          toast({
+            title: t("notes.speaker.voiceprintKeptToast", {
+              defaultValue: "已保留 {{name}} 原有的 {{count}} 条声纹，本次未新增",
+              name: prompt.displayName,
+              count: prompt.voiceprints.length || prompt.maxVoiceprints,
+            }),
           });
         }}
       />

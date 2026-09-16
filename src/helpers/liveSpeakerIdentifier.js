@@ -660,35 +660,36 @@ class LiveSpeakerIdentifier {
       return null;
     }
 
-    let bestProfile = null;
-    let bestSimilarity = 0;
-    let secondBestSimilarity = 0;
+    // Score every identity by its best voiceprint template: a person may hold
+    // several samples, and they must not compete with each other for the
+    // best/second-best margin.
+    const { findBestProfileMatch } = require("./speakerTemplateMatching");
+    const { profile, similarity, margin } = findBestProfileMatch(
+      embedding,
+      profiles.map((entry) => {
+        if (!entry?.embedding) return entry;
+        const own =
+          entry.embedding instanceof Float32Array
+            ? entry.embedding
+            : Array.isArray(entry.embedding)
+              ? new Float32Array(entry.embedding)
+              : getBufferFloat32View(entry.embedding);
+        const templates = Array.isArray(entry.embeddings)
+          ? entry.embeddings.map((buffer) =>
+              buffer instanceof Float32Array
+                ? buffer
+                : Array.isArray(buffer)
+                  ? new Float32Array(buffer)
+                  : getBufferFloat32View(buffer)
+            )
+          : [];
+        return { ...entry, embedding: own, embeddings: [own, ...templates].filter((v) => v?.length) };
+      }),
+      speakerEmbeddings.cosineSimilarity
+    );
 
-    for (const profile of profiles) {
-      if (!profile?.embedding) continue;
-
-      const profileEmbedding =
-        profile.embedding instanceof Float32Array
-          ? profile.embedding
-          : Array.isArray(profile.embedding)
-            ? new Float32Array(profile.embedding)
-            : getBufferFloat32View(profile.embedding);
-
-      if (!profileEmbedding.length) continue;
-
-      const similarity = speakerEmbeddings.cosineSimilarity(embedding, profileEmbedding);
-      if (similarity > bestSimilarity) {
-        secondBestSimilarity = bestSimilarity;
-        bestSimilarity = similarity;
-        bestProfile = profile;
-      } else if (similarity > secondBestSimilarity) {
-        secondBestSimilarity = similarity;
-      }
-    }
-
-    return bestSimilarity >= MATCH_THRESHOLD &&
-      bestSimilarity - secondBestSimilarity >= MATCH_MARGIN
-      ? bestProfile
+    return Number.isFinite(similarity) && similarity >= MATCH_THRESHOLD && margin >= MATCH_MARGIN
+      ? profile
       : null;
   }
 

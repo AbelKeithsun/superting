@@ -613,9 +613,13 @@ class DatabaseManager {
       this.db.exec(
         "CREATE UNIQUE INDEX IF NOT EXISTS idx_people_email ON people(email) WHERE email IS NOT NULL"
       );
-      this.db.exec(
-        "CREATE UNIQUE INDEX IF NOT EXISTS idx_voiceprints_source_profile ON voiceprints(source_profile_id) WHERE source_profile_id IS NOT NULL"
-      );
+      // Voiceprints are append-only templates (up to MAX_VOICEPRINTS_PER_PERSON
+      // per person) so one person can hold several samples — different
+      // meetings, rooms, or mic setups. The old partial unique index on
+      // source_profile_id collapsed every re-extraction into a single row,
+      // which is why "重新提取声纹" never added a second entry; drop it on
+      // existing databases.
+      this.db.exec("DROP INDEX IF EXISTS idx_voiceprints_source_profile");
 
       // Auditionable audio evidence per voiceprint template: 1:N slices of the
       // source meeting audio that produced (or matched) the template, so the
@@ -3156,10 +3160,77 @@ class DatabaseManager {
         ? "SELECT * FROM speaker_profiles"
         : `SELECT id, display_name, email, sample_count, created_at, updated_at
            FROM speaker_profiles`;
-      return this.db.prepare(query).all();
+      const profiles = this.db.prepare(query).all();
+      if (!includeEmbedding) return profiles;
+      // A person keeps up to MAX_VOICEPRINTS_PER_PERSON templates; matching
+      // scores an identity by its best-matching template, so every profile
+      // carries all of its templates (own embedding first).
+      const templatesByProfile = this._voiceprintTemplatesByProfile();
+      return profiles.map((profile) => {
+        const templates = templatesByProfile.get(profile.id) || [];
+        const embeddings = [profile.embedding, ...templates].filter(
+          (value) => value && value.length
+        );
+        return { ...profile, embeddings };
+      });
     } catch (error) {
       debugLogger.error("Error getting speaker profiles", { error: error.message }, "database");
       throw error;
+    }
+  }
+
+  /**
+   * Map speaker_profile.id → every voiceprint embedding that belongs to the
+   * same identity: linked through source_profile_id, or (for legacy rows)
+   * through the person's email / display name.
+   */
+  _voiceprintTemplatesByProfile() {
+    const byProfile = new Map();
+    if (!this.db) return byProfile;
+    try {
+      const rows = this.db
+        .prepare(
+          `SELECT v.embedding, v.source_profile_id AS profile_id, v.person_id,
+                  p.display_name AS person_name, lower(p.email) AS person_email
+             FROM voiceprints v
+             LEFT JOIN people p ON p.id = v.person_id`
+        )
+        .all();
+      if (rows.length === 0) return byProfile;
+
+      const profiles = this.db
+        .prepare("SELECT id, display_name, email FROM speaker_profiles")
+        .all();
+      const profileIdByPerson = new Map();
+      for (const profile of profiles) {
+        const email = (profile.email || "").trim().toLowerCase();
+        const name = (profile.display_name || "").trim().toLowerCase();
+        if (email) profileIdByPerson.set(`email:${email}`, profile.id);
+        if (name && !profileIdByPerson.has(`name:${name}`)) {
+          profileIdByPerson.set(`name:${name}`, profile.id);
+        }
+      }
+
+      for (const row of rows) {
+        if (!row.embedding?.length) continue;
+        let profileId = row.profile_id ?? null;
+        if (profileId == null) {
+          const email = (row.person_email || "").trim().toLowerCase();
+          const name = (row.person_name || "").trim().toLowerCase();
+          profileId =
+            (email ? profileIdByPerson.get(`email:${email}`) : undefined) ??
+            (name ? profileIdByPerson.get(`name:${name}`) : undefined) ??
+            null;
+        }
+        if (profileId == null) continue;
+        const list = byProfile.get(profileId) || [];
+        list.push(row.embedding);
+        byProfile.set(profileId, list);
+      }
+      return byProfile;
+    } catch (error) {
+      debugLogger.debug("Voiceprint template lookup failed", { error: error.message }, "database");
+      return byProfile;
     }
   }
 
@@ -3478,18 +3549,100 @@ class DatabaseManager {
       const result = this.db
         .prepare(
           `INSERT INTO voiceprints (person_id, embedding, sample_count, source_note_id, source_profile_id, source_speaker_id)
-           VALUES (?, ?, ?, ?, ?, ?)
-           ON CONFLICT(source_profile_id) WHERE source_profile_id IS NOT NULL DO UPDATE SET
-             embedding = excluded.embedding,
-             sample_count = excluded.sample_count,
-             person_id = excluded.person_id,
-             source_speaker_id = COALESCE(excluded.source_speaker_id, voiceprints.source_speaker_id),
-             updated_at = CURRENT_TIMESTAMP`
+           VALUES (?, ?, ?, ?, ?, ?)`
         )
         .run(personId, embeddingBuffer, sampleCount, sourceNoteId, sourceProfileId, sourceSpeakerId);
       return this.db.prepare("SELECT * FROM voiceprints WHERE id = ?").get(result.lastInsertRowid);
     } catch (error) {
       debugLogger.error("Error adding voiceprint", { error: error.message }, "database");
+      throw error;
+    }
+  }
+
+  getVoiceprint(id) {
+    try {
+      if (!this.db) throw new Error("Database not initialized");
+      return this.db.prepare("SELECT * FROM voiceprints WHERE id = ?").get(id) || null;
+    } catch (error) {
+      debugLogger.error("Error reading voiceprint", { error: error.message }, "database");
+      throw error;
+    }
+  }
+
+  // Number of voiceprint templates bound to a person, used to enforce the
+  // per-person cap before offering the replace-slot flow.
+  countVoiceprints(personId) {
+    try {
+      if (!this.db) throw new Error("Database not initialized");
+      const row = this.db
+        .prepare("SELECT COUNT(*) AS count FROM voiceprints WHERE person_id = ?")
+        .get(personId);
+      return Number(row?.count || 0);
+    } catch (error) {
+      debugLogger.error("Error counting voiceprints", { error: error.message }, "database");
+      throw error;
+    }
+  }
+
+  // Overwrite one template in place (the user picked which slot to refresh);
+  // its audition clips are dropped so they get re-captured for the new sample.
+  replaceVoiceprint(id, embeddingBuffer, { sampleCount = 1, sourceNoteId = null, sourceProfileId = null, sourceSpeakerId = null } = {}) {
+    try {
+      if (!this.db) throw new Error("Database not initialized");
+      if (!embeddingBuffer?.length) throw new Error("Embedding buffer is required");
+      const existing = this.db.prepare("SELECT * FROM voiceprints WHERE id = ?").get(id);
+      if (!existing) throw new Error(`Voiceprint ${id} not found`);
+      const tx = this.db.transaction(() => {
+        this.db
+          .prepare(
+            `UPDATE voiceprints
+                SET embedding = ?, sample_count = ?, source_note_id = ?, source_profile_id = ?, source_speaker_id = ?, updated_at = CURRENT_TIMESTAMP
+              WHERE id = ?`
+          )
+          .run(
+            embeddingBuffer,
+            sampleCount,
+            sourceNoteId ?? existing.source_note_id ?? null,
+            sourceProfileId ?? existing.source_profile_id ?? null,
+            sourceSpeakerId ?? existing.source_speaker_id ?? null,
+            id
+          );
+        this.db.prepare("DELETE FROM voiceprint_segments WHERE voiceprint_id = ?").run(id);
+      });
+      tx();
+      return this.db.prepare("SELECT * FROM voiceprints WHERE id = ?").get(id);
+    } catch (error) {
+      debugLogger.error("Error replacing voiceprint", { error: error.message }, "database");
+      throw error;
+    }
+  }
+
+  // Idempotent upsert keyed on the legacy speaker profile, so startup
+  // migrations do not pile up a new template on every launch.
+  upsertVoiceprintByProfile(personId, embeddingBuffer, { sampleCount = 1, sourceNoteId = null, sourceProfileId = null, sourceSpeakerId = null } = {}) {
+    try {
+      if (!this.db) throw new Error("Database not initialized");
+      if (sourceProfileId != null) {
+        const existing = this.db
+          .prepare("SELECT * FROM voiceprints WHERE source_profile_id = ?")
+          .get(sourceProfileId);
+        if (existing) {
+          return this.replaceVoiceprint(existing.id, embeddingBuffer, {
+            sampleCount,
+            sourceNoteId,
+            sourceProfileId,
+            sourceSpeakerId,
+          });
+        }
+      }
+      return this.addVoiceprint(personId, embeddingBuffer, {
+        sampleCount,
+        sourceNoteId,
+        sourceProfileId,
+        sourceSpeakerId,
+      });
+    } catch (error) {
+      debugLogger.error("Error upserting voiceprint", { error: error.message }, "database");
       throw error;
     }
   }
@@ -3649,6 +3802,29 @@ class DatabaseManager {
     }
   }
 
+  // Voiceprint templates with the context the replace-slot picker needs:
+  // source note title, creation time, and audition clip count.
+  listVoiceprintsDetailed(personId) {
+    try {
+      if (!this.db) throw new Error("Database not initialized");
+      return this.db
+        .prepare(
+          `SELECT v.id, v.person_id, v.sample_count, v.source_note_id, v.source_profile_id,
+                  v.source_speaker_id, v.created_at, v.updated_at,
+                  n.title AS note_title,
+                  (SELECT COUNT(*) FROM voiceprint_segments s WHERE s.voiceprint_id = v.id) AS segment_count
+             FROM voiceprints v
+             LEFT JOIN notes n ON n.id = v.source_note_id
+            WHERE v.person_id = ?
+            ORDER BY v.created_at DESC, v.id DESC`
+        )
+        .all(personId);
+    } catch (error) {
+      debugLogger.error("Error listing detailed voiceprints", { error: error.message }, "database");
+      throw error;
+    }
+  }
+
   deleteVoiceprint(id) {
     try {
       if (!this.db) throw new Error("Database not initialized");
@@ -3700,9 +3876,9 @@ class DatabaseManager {
         });
         if (!person) continue;
         // Keep the voiceprint in sync with the legacy profile's embedding
-        // (unique on source_profile_id, so re-runs update instead of piling
-        // up templates).
-        this.addVoiceprint(person.id, profile.embedding, {
+        // (idempotent on source_profile_id, so re-runs update instead of
+        // piling up templates).
+        this.upsertVoiceprintByProfile(person.id, profile.embedding, {
           sampleCount: profile.sample_count || 1,
           sourceProfileId: profile.id,
         });

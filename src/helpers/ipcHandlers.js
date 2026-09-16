@@ -58,8 +58,13 @@ const {
   batchSuggestedThreshold: BATCH_SPEAKER_SUGGESTED_THRESHOLD,
   clusterMergeThreshold: SPEAKER_CLUSTER_MERGE_THRESHOLD,
   clusterMergeMaxFragmentSeconds: SPEAKER_CLUSTER_MERGE_MAX_FRAGMENT_SECONDS,
+  maxVoiceprintsPerPerson: MAX_VOICEPRINTS_PER_PERSON,
 } = require("../constants/speakerThresholds.json");
 const { mergeSimilarSpeakerClusters } = require("./speakerClusterMerge");
+const {
+  similarityToProfile,
+  findBestProfileMatch,
+} = require("./speakerTemplateMatching");
 
 // Voiceprint audition clips: long enough to be recognisable, never long enough
 // to run into the next speaker's turn (the embedding model caps at 8s anyway).
@@ -8920,7 +8925,12 @@ class IPCHandlers {
       "enroll-speaker-voiceprint",
       async (_event, noteId, speakerId, displayName, email = null, options = {}) => {
         try {
-          const { force = false, profileId = null, personId = null } = options || {};
+          const {
+            force = false,
+            profileId = null,
+            personId = null,
+            replaceVoiceprintId = null,
+          } = options || {};
           if (!noteId || !speakerId || !displayName) {
             return { success: false, error: "missing-speaker" };
           }
@@ -8928,28 +8938,51 @@ class IPCHandlers {
           const existing = this.databaseManager
             .getNoteSpeakerEmbeddings(noteId)
             .find((entry) => entry.speaker_id === speakerId);
-          if (existing && !force) {
+
+          // Replacing a slot right after the cap dialog: reuse the embedding we
+          // just extracted instead of decoding the same audio twice.
+          const pending = this._takePendingVoiceprintEmbedding(noteId, speakerId);
+          let embedding = null;
+          if (replaceVoiceprintId != null && pending?.length) {
+            embedding = pending;
+          } else if (existing && !force && replaceVoiceprintId == null) {
             return { success: true, voiceprintCreated: false, skipped: "already-enrolled" };
           }
 
-          const embedding = await this._extractSpeakerVoiceprint(noteId, speakerId);
+          if (!embedding) {
+            embedding = await this._extractSpeakerVoiceprint(noteId, speakerId);
+          }
           if (!embedding) {
             return { success: false, error: "no-speaker-audio" };
           }
 
           this.databaseManager.saveNoteSpeakerEmbeddings(noteId, { [speakerId]: embedding });
+          const mappingOptions = personId != null ? { personId } : {};
+          if (replaceVoiceprintId != null) mappingOptions.replaceVoiceprintId = replaceVoiceprintId;
           const result = await this._applySpeakerMapping({
             noteId,
             speakerId,
             displayName,
             email,
             profileId,
-            options: personId != null ? { personId } : {},
+            options: mappingOptions,
           });
+
+          // The person already holds the maximum number of templates: remember
+          // this sample and hand the slot list back so the renderer can ask
+          // which one to refresh.
+          if (result?.needsVoiceprintReplacement) {
+            this._rememberPendingVoiceprintEmbedding(noteId, speakerId, embedding);
+          }
 
           return {
             success: true,
-            voiceprintCreated: true,
+            voiceprintCreated: !!result?.voiceprintCreated,
+            voiceprintReplaced: !!result?.voiceprintReplaced,
+            voiceprintSkipped: result?.needsVoiceprintReplacement ? "voiceprint-limit" : null,
+            needsVoiceprintReplacement: !!result?.needsVoiceprintReplacement,
+            voiceprints: result?.voiceprints ?? [],
+            maxVoiceprints: result?.maxVoiceprints ?? MAX_VOICEPRINTS_PER_PERSON,
             person: result?.person ?? null,
             profileId: result?.profileId ?? null,
           };
@@ -8963,6 +8996,47 @@ class IPCHandlers {
         }
       }
     );
+
+    ipcMain.handle("voiceprint-replace", async (_event, payload = {}) => {
+      try {
+        const {
+          voiceprintId,
+          noteId = null,
+          speakerId = null,
+          displayName = null,
+        } = payload || {};
+        if (voiceprintId == null) return { success: false, error: "missing-voiceprint" };
+        if (!noteId || !speakerId) return { success: false, error: "missing-speaker" };
+
+        const embedding = await this._extractSpeakerVoiceprint(noteId, speakerId);
+        if (!embedding) return { success: false, error: "no-speaker-audio" };
+
+        const target = this.databaseManager.getVoiceprint(voiceprintId);
+        if (!target) return { success: false, error: "voiceprint-not-found" };
+
+        const replaced = this.databaseManager.replaceVoiceprint(voiceprintId, embedding, {
+          sampleCount: (target.sample_count || 0) + 1,
+          sourceNoteId: noteId ?? target.source_note_id,
+          sourceSpeakerId: speakerId ?? target.source_speaker_id,
+        });
+        this.databaseManager.saveNoteSpeakerEmbeddings(noteId, { [speakerId]: embedding });
+        this._captureVoiceprintSegments(noteId, speakerId, replaced.id);
+        if (displayName) {
+          this._applySpeakerMapping({
+            noteId,
+            speakerId,
+            displayName,
+            email: null,
+            profileId: null,
+            options: { personId: replaced.person_id, replaceVoiceprintId: voiceprintId },
+          });
+        }
+        return { success: true, voiceprint: replaced };
+      } catch (error) {
+        debugLogger.warn("Voiceprint replace failed", { error: error.message }, "speaker");
+        return { success: false, error: error.message };
+      }
+    });
 
     ipcMain.handle("remove-speaker-mapping", async (_event, noteId, speakerId) => {
       this.databaseManager.removeSpeakerMapping(noteId, speakerId);
@@ -9353,6 +9427,32 @@ class IPCHandlers {
   }
 
   /**
+   * Hold the sample extracted during a cap-hit enrollment so the follow-up
+   * "replace which slot?" call reuses it instead of decoding the same audio
+   * twice. Entries expire after 30 minutes.
+   */
+  _rememberPendingVoiceprintEmbedding(noteId, speakerId, embedding) {
+    if (!embedding?.length) return;
+    if (!this._pendingVoiceprintEmbeddings) this._pendingVoiceprintEmbeddings = new Map();
+    const now = Date.now();
+    for (const [key, value] of this._pendingVoiceprintEmbeddings) {
+      if (now - value.at > 30 * 60 * 1000) this._pendingVoiceprintEmbeddings.delete(key);
+    }
+    this._pendingVoiceprintEmbeddings.set(`${noteId}:${speakerId}`, { embedding, at: now });
+  }
+
+  _takePendingVoiceprintEmbedding(noteId, speakerId) {
+    const map = this._pendingVoiceprintEmbeddings;
+    if (!map) return null;
+    const key = `${noteId}:${speakerId}`;
+    const entry = map.get(key);
+    if (!entry) return null;
+    map.delete(key);
+    if (Date.now() - entry.at > 30 * 60 * 1000) return null;
+    return entry.embedding;
+  }
+
+  /**
    * Compute a speaker embedding for one speaker of a note from the note's own
    * audio, using the longest utterances (same policy as the diarization
    * pipeline) and a centroid over them. Returns a Buffer or null.
@@ -9449,6 +9549,7 @@ class IPCHandlers {
     }
 
     let resolvedProfileId = profileId ?? null;
+    let voiceprintOutcome = null;
     if (speakerEmbeddingBuffer) {
       const profile = this.databaseManager.upsertSpeakerProfile(
         displayName,
@@ -9460,28 +9561,19 @@ class IPCHandlers {
       this._retroactiveMapping(profile);
 
       // Mirror the sample into the people/voiceprints layer so the binding
-      // survives across meetings even without an email.
+      // survives across meetings even without an email. A person keeps up to
+      // MAX_VOICEPRINTS_PER_PERSON templates; once full, the renderer is asked
+      // which slot to refresh instead of silently overwriting (or silently
+      // doing nothing, which is how the single-template model behaved).
       if (resolvedPerson) {
-        try {
-          const voiceprint = this.databaseManager.addVoiceprint(
-            resolvedPerson.id,
-            speakerEmbeddingBuffer,
-            {
-              sourceProfileId: profile.id,
-              sourceNoteId: noteId,
-              sourceSpeakerId: speakerId,
-            }
-          );
-          // Snapshot the speaker's meeting utterances as auditionable
-          // voiceprint segments (click-to-play calibration evidence).
-          if (voiceprint?.id) {
-            this._captureVoiceprintSegments(noteId, speakerId, voiceprint.id);
-          }
-        } catch (personError) {
-          debugLogger.warn("Person voiceprint sync skipped", {
-            error: personError.message,
-          });
-        }
+        voiceprintOutcome = this._bindPersonVoiceprint({
+          person: resolvedPerson,
+          profileId: profile.id,
+          noteId,
+          speakerId,
+          embedding: speakerEmbeddingBuffer,
+          replaceVoiceprintId: options?.replaceVoiceprintId ?? null,
+        });
       }
     }
 
@@ -9493,7 +9585,79 @@ class IPCHandlers {
       person: resolvedPerson,
       personCreated,
       personLinked: !!resolvedPerson && personId != null,
+      voiceprint: voiceprintOutcome?.voiceprint ?? null,
+      voiceprintCreated: voiceprintOutcome?.created ?? false,
+      voiceprintReplaced: voiceprintOutcome?.replaced ?? false,
+      needsVoiceprintReplacement: voiceprintOutcome?.needsReplacement ?? false,
+      voiceprints: voiceprintOutcome?.voiceprints ?? [],
+      maxVoiceprints: MAX_VOICEPRINTS_PER_PERSON,
     };
+  }
+
+  /**
+   * Attach a speaker sample to a person's voiceprint list, honouring the
+   * per-person cap. Returns what happened so the renderer can either confirm
+   * or ask which existing slot to refresh.
+   */
+  _bindPersonVoiceprint({
+    person,
+    profileId,
+    noteId,
+    speakerId,
+    embedding,
+    replaceVoiceprintId = null,
+  }) {
+    if (!person || !embedding?.length) return null;
+    const maxVoiceprints = MAX_VOICEPRINTS_PER_PERSON;
+    try {
+      const existing = this.databaseManager.listVoiceprints(person.id);
+
+      if (replaceVoiceprintId != null) {
+        const target = existing.find((entry) => entry.id === replaceVoiceprintId);
+        if (!target) {
+          debugLogger.warn("Voiceprint replacement target not found", {
+            personId: person.id,
+            replaceVoiceprintId,
+          });
+        } else {
+          const replaced = this.databaseManager.replaceVoiceprint(replaceVoiceprintId, embedding, {
+            sampleCount: (target.sample_count || 0) + 1,
+            sourceNoteId: noteId,
+            sourceProfileId: profileId,
+            sourceSpeakerId: speakerId,
+          });
+          this._captureVoiceprintSegments(noteId, speakerId, replaced.id);
+          return { voiceprint: replaced, created: false, replaced: true, voiceprints: [] };
+        }
+      }
+
+      if (existing.length >= maxVoiceprints) {
+        return {
+          needsReplacement: true,
+          voiceprint: null,
+          created: false,
+          replaced: false,
+          voiceprints: this.databaseManager.listVoiceprintsDetailed(person.id),
+        };
+      }
+
+      const created = this.databaseManager.addVoiceprint(person.id, embedding, {
+        sourceNoteId: noteId,
+        sourceProfileId: profileId,
+        sourceSpeakerId: speakerId,
+      });
+      // Snapshot the speaker's meeting utterances as auditionable
+      // voiceprint segments (click-to-play calibration evidence).
+      if (created?.id) {
+        this._captureVoiceprintSegments(noteId, speakerId, created.id);
+      }
+      return { voiceprint: created, created: true, replaced: false, voiceprints: [] };
+    } catch (personError) {
+      debugLogger.warn("Person voiceprint sync skipped", {
+        error: personError.message,
+      });
+      return null;
+    }
   }
 
   _captureVoiceprintSegments(noteId, speakerId, voiceprintId) {
@@ -9533,6 +9697,14 @@ class IPCHandlers {
           profile.embedding.byteOffset,
           profile.embedding.byteLength / 4
         );
+        // Match against every template of this identity, not just its centroid.
+        const templateEmbeddings = [
+          profileEmb,
+          ...(this.databaseManager._voiceprintTemplatesByProfile().get(profile.id) || []).map(
+            (buffer) =>
+              new Float32Array(buffer.buffer, buffer.byteOffset, buffer.byteLength / 4)
+          ),
+        ];
 
         for (const noteId of noteIds) {
           const embeddings = this.databaseManager.getNoteSpeakerEmbeddings(noteId);
@@ -9546,7 +9718,11 @@ class IPCHandlers {
               emb.embedding.byteOffset,
               emb.embedding.byteLength / 4
             );
-            const similarity = speakerEmbeddings.cosineSimilarity(profileEmb, speakerEmb);
+            const similarity = similarityToProfile(
+              speakerEmb,
+              { embeddings: templateEmbeddings },
+              speakerEmbeddings.cosineSimilarity
+            );
 
             if (similarity > BATCH_SPEAKER_CONFIRMED_THRESHOLD) {
               this.databaseManager.setSpeakerMapping(
@@ -10027,21 +10203,13 @@ class IPCHandlers {
                 }
 
                 const emb = new Float32Array(embArr);
-                let bestProfile = null;
-                let bestSim = 0;
-
-                for (const profile of profiles) {
-                  const profileEmb = new Float32Array(
-                    profile.embedding.buffer,
-                    profile.embedding.byteOffset,
-                    profile.embedding.byteLength / 4
-                  );
-                  const sim = speakerEmb.cosineSimilarity(emb, profileEmb);
-                  if (sim > bestSim) {
-                    bestSim = sim;
-                    bestProfile = profile;
-                  }
-                }
+                // Best template per identity, so a person's several samples do
+                // not dilute each other.
+                const { profile: bestProfile, similarity: bestSim } = findBestProfileMatch(
+                  emb,
+                  profiles,
+                  speakerEmb.cosineSimilarity
+                );
 
                 if (bestProfile && bestSim > BATCH_SPEAKER_CONFIRMED_THRESHOLD) {
                   for (const seg of enrichedSegments) {

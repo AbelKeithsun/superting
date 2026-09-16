@@ -395,6 +395,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
     ipcRenderer.invoke("voiceprint-enroll", personId, options),
   voiceprintList: (personId = null) => ipcRenderer.invoke("voiceprint-list", personId),
   voiceprintDelete: (id) => ipcRenderer.invoke("voiceprint-delete", id),
+  voiceprintReplace: (payload) => ipcRenderer.invoke("voiceprint-replace", payload),
   voiceprintDeleteAll: (personId = null) => ipcRenderer.invoke("voiceprint-delete-all", personId),
   voiceprintSegmentList: (personId = null) =>
     ipcRenderer.invoke("voiceprint-segment-list", personId),

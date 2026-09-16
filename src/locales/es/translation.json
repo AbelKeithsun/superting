@@ -1952,6 +1952,14 @@
       "title": "Error de mejora"
     },
     "speaker": {
+      "voiceprintReplacedToast": "Se actualizó una huella de voz de {{name}} con el audio de esta reunión",
+      "voiceprintKeptToast": "Se mantienen las {{count}} huellas de voz de {{name}} — no se añadió nada",
+      "voiceprintLimitTitle": "{{name}} ya tiene {{max}} huellas de voz — elige una para reemplazar",
+      "voiceprintLimitHint": "Cada persona conserva como máximo {{max}} huellas de voz. Elige una para actualizarla con el audio de esta reunión, o cancela para mantener las actuales (la marca se guarda igualmente).",
+      "voiceprintReplaceSlot": "Reemplazar esta",
+      "voiceprintKeepExisting": "Cancelar, mantener las actuales",
+      "voiceprintSlotIndex": "huella {{index}}",
+      "voiceprintSlotClips": "{{count}} clips",
       "you": "Tú",
       "them": "Ellos",
       "label": "Participante {{n}}",
@@ -2537,6 +2545,10 @@
     "audioDescription": "Notificar cuando se detecta actividad sostenida del micrófono"
   },
   "contacts": {
+    "voiceprintCountWithMax": "{{count}}/{{max}} huellas de voz",
+    "voiceprintTemplateIndex": "Huella {{index}}",
+    "voiceprintClipCount": "{{count}} clips",
+    "deleteVoiceprintTemplate": "Eliminar esta huella de voz",
     "title": "Personas",
     "titleDescription": "Perfiles de contacto entre reuniones. Añade personas por nombre en cualquier nota; el correo, teléfono y organización pueden completarse después.",
     "searchPlaceholder": "Buscar personas...",

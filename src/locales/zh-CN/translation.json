@@ -1956,6 +1956,14 @@
       "title": "增强错误"
     },
     "speaker": {
+      "voiceprintReplacedToast": "已用本场会议的声音更新 {{name}} 的一条声纹",
+      "voiceprintKeptToast": "已保留 {{name}} 原有的 {{count}} 条声纹，本次未新增",
+      "voiceprintLimitTitle": "{{name}} 已有 {{max}} 条声纹，选择要替换的一条",
+      "voiceprintLimitHint": "每人最多保留 {{max}} 条声纹。选一条用本场会议的声音替换，或取消以保留现有声纹（本次标记仍会保留）。",
+      "voiceprintReplaceSlot": "替换这一条",
+      "voiceprintKeepExisting": "取消，保留现有声纹",
+      "voiceprintSlotIndex": "第 {{index}} 条",
+      "voiceprintSlotClips": "{{count}} 段试听",
       "you": "你",
       "them": "对方",
       "label": "发言者 {{n}}",
@@ -2540,6 +2548,10 @@
     "audioDescription": "检测到持续麦克风活动时提示"
   },
   "contacts": {
+    "voiceprintCountWithMax": "声纹 {{count}}/{{max}}",
+    "voiceprintTemplateIndex": "声纹 {{index}}",
+    "voiceprintClipCount": "{{count}} 段试听",
+    "deleteVoiceprintTemplate": "删除这条声纹",
     "title": "联系人",
     "titleDescription": "跨会议的联系人档案。在任意笔记中用姓名即可添加参会人，邮箱、电话、单位可随后补充。",
     "searchPlaceholder": "搜索联系人...",

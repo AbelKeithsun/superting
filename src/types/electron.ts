@@ -23,6 +23,13 @@ export type VoiceprintRecord = {
   updated_at?: string;
 };
 
+// Voiceprint template row enriched for the "which slot should be refreshed?"
+// picker: where it came from and how much audition evidence it holds.
+export type VoiceprintSummary = VoiceprintRecord & {
+  note_title?: string | null;
+  segment_count?: number;
+};
+
 // Auditionable audio evidence attached to a voiceprint template: a slice of
 // the source meeting audio the user can click-to-play to calibrate the binding.
 export type VoiceprintSegmentRecord = {
@@ -1854,6 +1861,10 @@ declare global {
         person?: PersonRecord | null;
         personCreated?: boolean;
         personLinked?: boolean;
+        /** Person is at the voiceprint cap: the renderer must pick a slot. */
+        needsVoiceprintReplacement?: boolean;
+        voiceprints?: VoiceprintSummary[];
+        maxVoiceprints?: number;
       }>;
       resolveSpeakerContact?: (
         displayName: string,
@@ -1875,15 +1886,29 @@ declare global {
           force?: boolean;
           profileId?: number | null;
           personId?: number | null;
+          /** Refresh this existing template instead of adding a new one. */
+          replaceVoiceprintId?: number | null;
         }
       ) => Promise<{
         success: boolean;
         voiceprintCreated?: boolean;
+        voiceprintReplaced?: boolean;
         skipped?: string;
+        voiceprintSkipped?: string | null;
+        /** The person already holds maxVoiceprints templates. */
+        needsVoiceprintReplacement?: boolean;
+        voiceprints?: VoiceprintSummary[];
+        maxVoiceprints?: number;
         person?: PersonRecord | null;
         profileId?: number | null;
         error?: string;
       }>;
+      voiceprintReplace?: (payload: {
+        voiceprintId: number;
+        noteId?: number | null;
+        speakerId?: string | null;
+        displayName?: string | null;
+      }) => Promise<{ success: boolean; voiceprint?: VoiceprintRecord; error?: string }>;
       removeSpeakerMapping?: (noteId: number, speakerId: string) => Promise<{ success: boolean }>;
       getSpeakerProfiles?: () => Promise<
         Array<{
@@ -1983,7 +2008,12 @@ declare global {
       }>;
       voiceprintList?: (
         personId?: number | null
-      ) => Promise<{ success: boolean; voiceprints: VoiceprintRecord[] }>;
+      ) => Promise<{
+        success: boolean;
+        voiceprints: VoiceprintSummary[];
+        maxVoiceprints?: number;
+        error?: string;
+      }>;
       voiceprintDelete?: (id: number) => Promise<{ success: boolean; error?: string }>;
       voiceprintDeleteAll?: (
         personId?: number | null

@@ -1952,6 +1952,14 @@
       "title": "Ошибка улучшения"
     },
     "speaker": {
+      "voiceprintReplacedToast": "Один голосовой отпечаток {{name}} обновлён аудио этой встречи",
+      "voiceprintKeptToast": "Сохранены существующие отпечатки {{name}} ({{count}}) — ничего не добавлено",
+      "voiceprintLimitTitle": "У {{name}} уже {{max}} отпечатков — выберите, какой заменить",
+      "voiceprintLimitHint": "На каждого человека хранится не более {{max}} отпечатков. Выберите один для обновления аудио этой встречи или отмените — пометка всё равно сохранится.",
+      "voiceprintReplaceSlot": "Заменить этот",
+      "voiceprintKeepExisting": "Отмена, оставить текущие",
+      "voiceprintSlotIndex": "отпечаток {{index}}",
+      "voiceprintSlotClips": "клипов: {{count}}",
       "you": "Вы",
       "them": "Собеседник",
       "label": "Участник {{n}}",
@@ -2539,6 +2547,10 @@
     "audioDescription": "Уведомление при обнаружении продолжительной активности микрофона"
   },
   "contacts": {
+    "voiceprintCountWithMax": "{{count}}/{{max}} отпечатков",
+    "voiceprintTemplateIndex": "Отпечаток {{index}}",
+    "voiceprintClipCount": "клипов: {{count}}",
+    "deleteVoiceprintTemplate": "Удалить этот отпечаток",
     "title": "Люди",
     "titleDescription": "Профили контактов между встречами. Добавляйте людей по имени в любой заметке; почту, телефон и организацию можно заполнить позже.",
     "searchPlaceholder": "Поиск людей...",
