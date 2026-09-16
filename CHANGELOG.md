@@ -71,6 +71,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Fixed: 检查更新 did nothing.** The renderer's check-for-updates call had no main-process handler (only a rejection), and the update manager was a stub reporting updates as disabled. It now queries the project's latest GitHub release, compares the tag with the running version, and reports the result: a newer version shows the update badge plus an "open download page" button, an up-to-date app says so, and a failed lookup reports itself. Updates stay manual — nothing self-installs.
 
+### Dark mode: notes are readable again
+
+- **Fixed: the note canvas was white text on a white background.** The editor surfaces were hardcoded \`bg-white\` while the rich-text content inherits the theme's foreground colour, so dark mode had no contrast. The note editor, markdown source view and the transcript/enhanced read-only views now use the theme card surface and border tokens — unchanged white in light mode, dark card in dark mode.
+
 ## [2.0.8] - 2026-09-15
 
 ### Speaker marking → contacts (cross-session reuse)
