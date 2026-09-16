@@ -1336,6 +1336,9 @@
       }
     },
     "noteFormatting": {
+      "actionPrompts": "Prompts des actions de notes",
+      "actionPromptsButton": "Gérer les prompts d'actions",
+      "actionPromptsDescription": "Prompts utilisés par les actions comme les comptes rendus et la génération de notes. Consultez-les et modifiez-les dans le gestionnaire d'actions.",
       "autoGenerateTitle": "Générer automatiquement les titres des notes",
       "autoGenerateTitleDescription": "Utiliser l'IA pour générer un titre court pour les notes après la transcription ou l'amélioration"
     },

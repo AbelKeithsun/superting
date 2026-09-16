@@ -1338,6 +1338,9 @@
       }
     },
     "noteFormatting": {
+      "actionPrompts": "Note action prompts",
+      "actionPromptsButton": "Manage action prompts",
+      "actionPromptsDescription": "Prompts used by actions like meeting minutes and note generation. View and edit them in the action manager.",
       "autoGenerateTitle": "Auto-generate note titles",
       "autoGenerateTitleDescription": "Use AI to generate a short title for notes after transcription or enhancement"
     },

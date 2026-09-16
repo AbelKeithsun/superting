@@ -1336,6 +1336,9 @@
       }
     },
     "noteFormatting": {
+      "actionPrompts": "ノートアクションのプロンプト",
+      "actionPromptsButton": "アクションプロンプトを管理",
+      "actionPromptsDescription": "議事録作成やノート生成などのアクションで使うプロンプトです。アクションマネージャーで表示・編集できます。",
       "autoGenerateTitle": "ノートのタイトルを自動生成",
       "autoGenerateTitleDescription": "文字起こしや改善後にAIを使用してノートの短いタイトルを生成します"
     },

@@ -1336,6 +1336,9 @@
       }
     },
     "noteFormatting": {
+      "actionPrompts": "筆記動作提示詞",
+      "actionPromptsButton": "管理動作提示詞",
+      "actionPromptsDescription": "會議紀要、生成筆記等整理動作使用的提示詞，在動作管理器中查看和編輯",
       "autoGenerateTitle": "自動產生筆記標題",
       "autoGenerateTitleDescription": "使用 AI 在轉錄或增強後為筆記產生簡短標題"
     },

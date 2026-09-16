@@ -7,6 +7,7 @@ import {
   selectResolvedNoteFormatting,
 } from "./settingsStore";
 import { buildNoteActionSystemPrompt } from "./noteActionPrompt";
+import { computeNoteActionMaxTokens } from "./noteActionBudget.js";
 import { generateNoteTitle } from "../utils/generateTitle";
 import { buildNoteActionInput } from "../components/notes/noteActionInput";
 import {
@@ -85,6 +86,11 @@ export async function runNoteActionOnce({
     systemPrompt,
     temperature: 0.3,
     disableThinking: settings.noteFormattingDisableThinking,
+    // Reasoning models burn hidden thinking tokens before any visible output,
+    // so the provider default (4096) can end with zero content — scale the
+    // budget with the input size, and never fall back to echoing the input.
+    maxTokens: computeNoteActionMaxTokens(actionInput.content.length),
+    failOnEmptyResponse: true,
   };
 
   if (isHostedMode) {

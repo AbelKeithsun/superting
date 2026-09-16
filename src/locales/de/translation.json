@@ -1337,6 +1337,9 @@
       }
     },
     "noteFormatting": {
+      "actionPrompts": "Prompts für Notizaktionen",
+      "actionPromptsButton": "Aktions-Prompts verwalten",
+      "actionPromptsDescription": "Prompts für Aktionen wie Sitzungsprotokolle und Notizerstellung. Im Aktionsmanager ansehen und bearbeiten.",
       "autoGenerateTitle": "Notiztitel automatisch generieren",
       "autoGenerateTitleDescription": "KI verwenden, um nach der Transkription oder Verbesserung einen kurzen Titel für Notizen zu generieren"
     },

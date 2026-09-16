@@ -6,6 +6,7 @@ import { withRetry, createApiRetryStrategy } from "../../../utils/retry";
 import logger from "../../../utils/logger";
 import { getConfiguredOpenAIBase } from "../openaiBase";
 import { applyThinkingSuppression } from "../thinkingSuppression";
+import { extractOpenAiResponseText } from "../openaiResponseText.js";
 // CJS files get no interop under Vite 8 (rolldown) dev — import the ESM mirror.
 import { formatOpenAiCompatibleError } from "../openaiCompatibleErrorsCompat";
 
@@ -15,6 +16,9 @@ const PROBE_TIMEOUT_MS = 2_000;
 
 const endpointPreferenceCache = new Map<string, "responses" | "chat">();
 const probedBases = new Set<string>();
+// base|model keys whose server rejected the Responses-API `reasoning` field
+// with a 400 — skip the field on subsequent calls.
+const reasoningFieldUnsupported = new Set<string>();
 
 function readStoredPreference(base: string): "responses" | "chat" | undefined {
   if (endpointPreferenceCache.has(base)) {
@@ -172,99 +176,129 @@ export const openaiProvider: InferenceProvider = {
       let lastError: Error | null = null;
 
       for (const { url: endpoint, type } of endpointCandidates) {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
-        try {
-          const maxTokens =
-            config.maxTokens ||
-            Math.max(
-              4096,
-              ctx.calculateMaxTokens(
-                text.length,
-                TOKEN_LIMITS.MIN_TOKENS,
-                TOKEN_LIMITS.MAX_TOKENS,
-                TOKEN_LIMITS.TOKEN_MULTIPLIER
-              )
-            );
+        // Responses API: reasoning models burn hidden thinking tokens before any
+        // visible output. When thinking is disabled for the scope, ask for low
+        // reasoning effort. Strict servers that reject the unknown `reasoning`
+        // field with a 400 get one automatic retry without it (remembered).
+        const reasoningCacheKey = `${openAiBase}|${model}`;
+        for (const allowReasoningField of [true, false]) {
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+          try {
+            const maxTokens =
+              config.maxTokens ||
+              Math.max(
+                4096,
+                ctx.calculateMaxTokens(
+                  text.length,
+                  TOKEN_LIMITS.MIN_TOKENS,
+                  TOKEN_LIMITS.MAX_TOKENS,
+                  TOKEN_LIMITS.TOKEN_MULTIPLIER
+                )
+              );
 
-          const apiConfig = getOpenAiApiConfig(model);
-          const requestBody: Record<string, unknown> = { model };
+            const apiConfig = getOpenAiApiConfig(model);
+            const requestBody: Record<string, unknown> = { model };
 
-          if (type === "responses") {
-            requestBody.input = messages;
-            requestBody.store = false;
-            requestBody.max_output_tokens = maxTokens;
-          } else {
-            requestBody.messages = messages;
-            requestBody[apiConfig.tokenParam] = maxTokens;
-            applyThinkingSuppression(requestBody, model, resolvedProvider, config);
-          }
-
-          if (apiConfig.supportsTemperature) {
-            requestBody.temperature = config.temperature || 0.3;
-          }
-
-          const res = await fetch(endpoint, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${apiKey}`,
-            },
-            body: JSON.stringify(requestBody),
-            signal: controller.signal,
-          });
-
-          if (!res.ok) {
-            const errorData = await res.json().catch(() => ({ error: res.statusText }));
-            const fallbackMessage =
-              errorData.error?.message || errorData.message || `OpenAI API error: ${res.status}`;
-            const errorMessage = formatOpenAiCompatibleError({
-              status: res.status,
-              fallbackMessage,
-              isCustomProvider,
-            });
-
-            const isUnsupportedEndpoint =
-              (res.status === 404 || res.status === 405) && type === "responses";
-
-            if (isUnsupportedEndpoint) {
-              lastError = new Error(errorMessage);
-              rememberPreference(openAiBase, "chat");
-              logger.logReasoning("OPENAI_ENDPOINT_FALLBACK", {
-                attemptedEndpoint: endpoint,
-                error: errorMessage,
-              });
-              continue;
+            if (type === "responses") {
+              requestBody.input = messages;
+              requestBody.store = false;
+              requestBody.max_output_tokens = maxTokens;
+              if (
+                allowReasoningField &&
+                config.disableThinking === true &&
+                !reasoningFieldUnsupported.has(reasoningCacheKey)
+              ) {
+                requestBody.reasoning = { effort: "low" };
+              }
+            } else {
+              requestBody.messages = messages;
+              requestBody[apiConfig.tokenParam] = maxTokens;
+              applyThinkingSuppression(requestBody, model, resolvedProvider, config);
             }
 
-            throw new Error(errorMessage);
-          }
+            if (apiConfig.supportsTemperature) {
+              requestBody.temperature = config.temperature || 0.3;
+            }
 
-          rememberPreference(openAiBase, type);
-          return res.json();
-        } catch (error) {
-          if ((error as Error).name === "AbortError") {
-            throw new Error("Request timed out after 90s");
-          }
-          lastError = error as Error;
-          if (type === "responses") {
-            logger.logReasoning("OPENAI_ENDPOINT_FALLBACK", {
-              attemptedEndpoint: endpoint,
-              error: (error as Error).message,
+            const res = await fetch(endpoint, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${apiKey}`,
+              },
+              body: JSON.stringify(requestBody),
+              signal: controller.signal,
             });
-            continue;
+
+            if (!res.ok) {
+              const errorData = await res.json().catch(() => ({ error: res.statusText }));
+              const fallbackMessage =
+                errorData.error?.message || errorData.message || `OpenAI API error: ${res.status}`;
+              const errorMessage = formatOpenAiCompatibleError({
+                status: res.status,
+                fallbackMessage,
+                isCustomProvider,
+              });
+
+              const reasoningFieldRejected =
+                type === "responses" &&
+                res.status === 400 &&
+                requestBody.reasoning !== undefined &&
+                /reasoning/i.test(errorMessage);
+
+              if (reasoningFieldRejected && allowReasoningField) {
+                reasoningFieldUnsupported.add(reasoningCacheKey);
+                logger.logReasoning("OPENAI_REASONING_FIELD_UNSUPPORTED", {
+                  attemptedEndpoint: endpoint,
+                  error: errorMessage,
+                });
+                continue; // retry the same endpoint without the reasoning field
+              }
+
+              const isUnsupportedEndpoint =
+                (res.status === 404 || res.status === 405) && type === "responses";
+
+              if (isUnsupportedEndpoint) {
+                lastError = new Error(errorMessage);
+                rememberPreference(openAiBase, "chat");
+                logger.logReasoning("OPENAI_ENDPOINT_FALLBACK", {
+                  attemptedEndpoint: endpoint,
+                  error: errorMessage,
+                });
+                break;
+              }
+
+              throw new Error(errorMessage);
+            }
+
+            rememberPreference(openAiBase, type);
+            return res.json();
+          } catch (error) {
+            if ((error as Error).name === "AbortError") {
+              throw new Error("Request timed out after 90s");
+            }
+            lastError = error as Error;
+            if (type === "responses") {
+              logger.logReasoning("OPENAI_ENDPOINT_FALLBACK", {
+                attemptedEndpoint: endpoint,
+                error: (error as Error).message,
+              });
+              break;
+            }
+            throw error;
+          } finally {
+            clearTimeout(timeoutId);
           }
-          throw error;
-        } finally {
-          clearTimeout(timeoutId);
         }
       }
 
       throw lastError || new Error("No OpenAI endpoint responded");
     }, createApiRetryStrategy());
 
-    const isResponsesApi = Array.isArray(response?.output);
-    const isChatCompletions = Array.isArray(response?.choices);
+    const extraction = extractOpenAiResponseText(response);
+    const isResponsesApi = extraction.isResponsesApi;
+    const isChatCompletions = extraction.isChatCompletions;
 
     logger.logReasoning("OPENAI_RAW_RESPONSE", {
       model,
@@ -276,56 +310,13 @@ export const openaiProvider: InferenceProvider = {
         : undefined,
       hasChoices: isChatCompletions,
       choicesLength: isChatCompletions ? response.choices.length : 0,
+      status: extraction.status,
+      incompleteReason: extraction.incompleteReason,
+      reasoningOnly: extraction.reasoningOnly,
       usage: response.usage,
     });
 
-    let responseText = "";
-
-    if (isResponsesApi) {
-      for (const item of response.output) {
-        if (item.type === "message" && item.content) {
-          for (const content of item.content) {
-            if (content.type === "output_text" && content.text) {
-              responseText = content.text.trim();
-              break;
-            }
-          }
-          if (responseText) break;
-        }
-      }
-    }
-
-    if (!responseText && typeof response?.output_text === "string") {
-      responseText = response.output_text.trim();
-    }
-
-    if (!responseText && isChatCompletions) {
-      for (const choice of response.choices) {
-        const message = choice?.message ?? choice?.delta;
-        const content = message?.content;
-
-        if (typeof content === "string" && content.trim()) {
-          responseText = content.trim();
-          break;
-        }
-
-        if (Array.isArray(content)) {
-          for (const part of content) {
-            if (typeof part?.text === "string" && part.text.trim()) {
-              responseText = part.text.trim();
-              break;
-            }
-          }
-        }
-
-        if (responseText) break;
-
-        if (typeof choice?.text === "string" && choice.text.trim()) {
-          responseText = choice.text.trim();
-          break;
-        }
-      }
-    }
+    const responseText = extraction.text;
 
     logger.logReasoning("OPENAI_RESPONSE", {
       model,
@@ -340,7 +331,27 @@ export const openaiProvider: InferenceProvider = {
         model,
         originalTextLength: text.length,
         reason: "Empty response from API",
+        status: extraction.status,
+        incompleteReason: extraction.incompleteReason,
+        reasoningOnly: extraction.reasoningOnly,
+        failOnEmptyResponse: config.failOnEmptyResponse === true,
       });
+
+      if (config.failOnEmptyResponse) {
+        // Never silently hand the caller its own input back as a "result" —
+        // for note actions that meant overwriting the note with the raw
+        // transcript. Surface a descriptive error instead.
+        if (extraction.incompleteReason === "max_output_tokens" || extraction.reasoningOnly) {
+          throw new Error(
+            "The model spent its entire output budget on reasoning and returned no content. " +
+              "Raise the output token budget or lower the reasoning effort, then run the action again."
+          );
+        }
+        throw new Error(
+          "The model returned an empty or unreadable response. Check the model and endpoint configuration, then try again."
+        );
+      }
+
       return text;
     }
 
