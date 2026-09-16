@@ -232,6 +232,45 @@ class DatabaseManager {
         )
       `);
 
+      // Dictionary groups (nestable through parent_id) are a pure
+      // organization layer on top of the dictionary: getDictionary() /
+      // getDictionaryAliases() keep their string[] / {from,to}[] contracts so
+      // ASR prompt building, the CLI bridge and the MCP tools stay untouched.
+      // Membership lives in the group_id columns below and is only ever
+      // maintained by the dedicated group methods.
+      this.db.exec(`
+        CREATE TABLE IF NOT EXISTS dictionary_groups (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          name TEXT NOT NULL,
+          parent_id INTEGER,
+          sort_order INTEGER DEFAULT 0,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (parent_id) REFERENCES dictionary_groups(id) ON DELETE CASCADE
+        )
+      `);
+
+      this.db.exec(
+        "CREATE INDEX IF NOT EXISTS idx_dictionary_groups_parent ON dictionary_groups(parent_id)"
+      );
+
+      try {
+        this.db.exec("ALTER TABLE custom_dictionary ADD COLUMN group_id INTEGER");
+      } catch (err) {
+        if (!err.message.includes("duplicate column")) throw err;
+      }
+      try {
+        this.db.exec("ALTER TABLE custom_dictionary_aliases ADD COLUMN group_id INTEGER");
+      } catch (err) {
+        if (!err.message.includes("duplicate column")) throw err;
+      }
+      this.db.exec(
+        "CREATE INDEX IF NOT EXISTS idx_custom_dictionary_group ON custom_dictionary(group_id)"
+      );
+      this.db.exec(
+        "CREATE INDEX IF NOT EXISTS idx_custom_dictionary_aliases_group ON custom_dictionary_aliases(group_id)"
+      );
+
       this.db.exec(`
         CREATE TABLE IF NOT EXISTS notes (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -976,12 +1015,28 @@ class DatabaseManager {
         throw new Error("Database not initialized");
       }
       const transaction = this.db.transaction((wordList) => {
+        // setDictionary rewrites the whole table (DELETE + re-INSERT), so a
+        // group assignment would be silently dropped on every dictionary
+        // edit. Snapshot word -> group_id first and restore it on insert.
+        const byWord = new Map();
+        const byWordLower = new Map();
+        for (const row of this.db
+          .prepare("SELECT word, group_id FROM custom_dictionary WHERE group_id IS NOT NULL")
+          .all()) {
+          byWord.set(row.word, row.group_id);
+          byWordLower.set(String(row.word).toLowerCase(), row.group_id);
+        }
         this.db.prepare("DELETE FROM custom_dictionary").run();
-        const insert = this.db.prepare("INSERT OR IGNORE INTO custom_dictionary (word) VALUES (?)");
+        const insert = this.db.prepare(
+          "INSERT OR IGNORE INTO custom_dictionary (word, group_id) VALUES (?, ?)"
+        );
         for (const word of wordList) {
           const trimmed = typeof word === "string" ? word.trim() : "";
           if (trimmed) {
-            insert.run(trimmed);
+            const preserved = byWord.has(trimmed)
+              ? byWord.get(trimmed)
+              : (byWordLower.get(trimmed.toLowerCase()) ?? null);
+            insert.run(trimmed, preserved);
           }
         }
       });
@@ -1015,9 +1070,20 @@ class DatabaseManager {
         throw new Error("Database not initialized");
       }
       const transaction = this.db.transaction((aliasList) => {
+        // Same full-table rewrite as setDictionary: keep the group assignment
+        // of aliases that survive the rewrite (dedupe key is lowercased
+        // from_text, matching the loop below).
+        const byFrom = new Map();
+        for (const row of this.db
+          .prepare(
+            "SELECT from_text, group_id FROM custom_dictionary_aliases WHERE group_id IS NOT NULL"
+          )
+          .all()) {
+          byFrom.set(String(row.from_text).toLowerCase(), row.group_id);
+        }
         this.db.prepare("DELETE FROM custom_dictionary_aliases").run();
         const insert = this.db.prepare(
-          "INSERT OR IGNORE INTO custom_dictionary_aliases (from_text, to_text) VALUES (?, ?)"
+          "INSERT OR IGNORE INTO custom_dictionary_aliases (from_text, to_text, group_id) VALUES (?, ?, ?)"
         );
         const seen = new Set();
         for (const alias of Array.isArray(aliasList) ? aliasList : []) {
@@ -1027,7 +1093,7 @@ class DatabaseManager {
           const key = from.toLowerCase();
           if (seen.has(key)) continue;
           seen.add(key);
-          insert.run(from, to);
+          insert.run(from, to, byFrom.get(key) ?? null);
         }
       });
       transaction(aliases);
@@ -1036,6 +1102,454 @@ class DatabaseManager {
       debugLogger.error("Error setting dictionary aliases", { error: error.message }, "database");
       throw error;
     }
+  }
+
+  // ---------------------------------------------------------------------
+  // Dictionary groups
+  // ---------------------------------------------------------------------
+
+  /**
+   * Resolve a group id coming from the renderer. `null`/`undefined` means
+   * "no group" and is passed through when allowed; anything else must be an
+   * existing group row.
+   */
+  _resolveDictionaryGroupId(groupId, { allowNull = true } = {}) {
+    if (groupId === null || groupId === undefined || groupId === "") {
+      if (allowNull) return null;
+      throw new Error("A group id is required");
+    }
+    const parsed = Number(groupId);
+    if (!Number.isInteger(parsed) || parsed <= 0) {
+      throw new Error("Invalid group id");
+    }
+    const row = this.db.prepare("SELECT id FROM dictionary_groups WHERE id = ?").get(parsed);
+    if (!row) {
+      throw new Error(`Dictionary group ${parsed} does not exist`);
+    }
+    return parsed;
+  }
+
+  _toDictionaryGroup(row) {
+    if (!row) return null;
+    return {
+      id: row.id,
+      name: row.name,
+      parentId: row.parent_id ?? null,
+      sortOrder: row.sort_order ?? 0,
+      itemCount: row.item_count ?? 0,
+    };
+  }
+
+  /**
+   * All groups ordered parent-first (NULL parents sort first in SQLite ASC),
+   * then by sort_order and id. Each entry carries the number of directly
+   * assigned items (words + aliases) so the tree can render counts without a
+   * second round trip.
+   */
+  listDictionaryGroups() {
+    try {
+      if (!this.db) {
+        throw new Error("Database not initialized");
+      }
+      const rows = this.db
+        .prepare(
+          `SELECT
+             g.id,
+             g.name,
+             g.parent_id,
+             g.sort_order,
+             (
+               SELECT COUNT(*) FROM custom_dictionary d WHERE d.group_id = g.id
+             ) + (
+               SELECT COUNT(*) FROM custom_dictionary_aliases a WHERE a.group_id = g.id
+             ) AS item_count
+           FROM dictionary_groups g
+           ORDER BY g.parent_id, g.sort_order, g.id`
+        )
+        .all();
+      return rows.map((row) => this._toDictionaryGroup(row));
+    } catch (error) {
+      debugLogger.error("Error listing dictionary groups", { error: error.message }, "database");
+      throw error;
+    }
+  }
+
+  // Sibling names must be unique so the tree never shows two identical
+  // folders under the same parent. The code is surfaced to the renderer,
+  // which maps it onto a localized message.
+  _assertDictionaryGroupNameAvailable({ name, parentId, excludeId = null }) {
+    const row = this.db
+      .prepare(
+        `SELECT id FROM dictionary_groups
+          WHERE lower(name) = lower(?)
+            AND ${parentId == null ? "parent_id IS NULL" : "parent_id = ?"}
+            ${excludeId == null ? "" : "AND id != ?"}`
+      )
+      .get(
+        ...(parentId == null ? [name] : [name, parentId]),
+        ...(excludeId == null ? [] : [excludeId])
+      );
+    if (row) {
+      const error = new Error("A group with this name already exists here");
+      error.code = "duplicate-group-name";
+      throw error;
+    }
+  }
+
+  createDictionaryGroup(name, parentId = null) {
+    try {
+      if (!this.db) {
+        throw new Error("Database not initialized");
+      }
+      const trimmed = typeof name === "string" ? name.trim() : "";
+      if (!trimmed) {
+        throw new Error("Group name is required");
+      }
+      const resolvedParent = this._resolveDictionaryGroupId(parentId);
+      this._assertDictionaryGroupNameAvailable({ name: trimmed, parentId: resolvedParent });
+      const nextSortOrder = resolvedParent
+        ? (this.db
+            .prepare(
+              "SELECT COALESCE(MAX(sort_order), -1) + 1 AS next FROM dictionary_groups WHERE parent_id = ?"
+            )
+            .get(resolvedParent)?.next ?? 0)
+        : (this.db
+            .prepare(
+              "SELECT COALESCE(MAX(sort_order), -1) + 1 AS next FROM dictionary_groups WHERE parent_id IS NULL"
+            )
+            .get()?.next ?? 0);
+
+      const info = this.db
+        .prepare("INSERT INTO dictionary_groups (name, parent_id, sort_order) VALUES (?, ?, ?)")
+        .run(trimmed, resolvedParent, nextSortOrder);
+
+      const row = this.db
+        .prepare("SELECT id, name, parent_id, sort_order FROM dictionary_groups WHERE id = ?")
+        .get(info.lastInsertRowid);
+      return { success: true, group: this._toDictionaryGroup(row) };
+    } catch (error) {
+      debugLogger.error("Error creating dictionary group", { error: error.message }, "database");
+      throw error;
+    }
+  }
+
+  renameDictionaryGroup(id, name) {
+    try {
+      if (!this.db) {
+        throw new Error("Database not initialized");
+      }
+      const groupId = this._resolveDictionaryGroupId(id, { allowNull: false });
+      const trimmed = typeof name === "string" ? name.trim() : "";
+      if (!trimmed) {
+        throw new Error("Group name is required");
+      }
+      const current = this.db
+        .prepare("SELECT parent_id FROM dictionary_groups WHERE id = ?")
+        .get(groupId);
+      this._assertDictionaryGroupNameAvailable({
+        name: trimmed,
+        parentId: current?.parent_id ?? null,
+        excludeId: groupId,
+      });
+      this.db
+        .prepare(
+          "UPDATE dictionary_groups SET name = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?"
+        )
+        .run(trimmed, groupId);
+      const row = this.db
+        .prepare("SELECT id, name, parent_id, sort_order FROM dictionary_groups WHERE id = ?")
+        .get(groupId);
+      return { success: true, group: this._toDictionaryGroup(row) };
+    } catch (error) {
+      debugLogger.error("Error renaming dictionary group", { error: error.message }, "database");
+      throw error;
+    }
+  }
+
+  /**
+   * Move a group (and therefore its whole subtree) under another group, or to
+   * the root when `parentId` is null. Rejects moves that would create a cycle,
+   * and keeps sibling names unique.
+   */
+  moveDictionaryGroup(id, parentId = null) {
+    try {
+      if (!this.db) {
+        throw new Error("Database not initialized");
+      }
+      const groupId = this._resolveDictionaryGroupId(id, { allowNull: false });
+      const resolvedParent = this._resolveDictionaryGroupId(parentId);
+      if (resolvedParent === groupId) {
+        const error = new Error("A group cannot be moved into itself");
+        error.code = "group-cycle";
+        throw error;
+      }
+      if (resolvedParent != null) {
+        // Walk up from the target: hitting the moved group means the target is
+        // inside its own subtree.
+        let cursor = resolvedParent;
+        const guard = new Set();
+        while (cursor != null && !guard.has(cursor)) {
+          if (cursor === groupId) {
+            const error = new Error("A group cannot be moved into its own sub-group");
+            error.code = "group-cycle";
+            throw error;
+          }
+          guard.add(cursor);
+          cursor =
+            this.db.prepare("SELECT parent_id FROM dictionary_groups WHERE id = ?").get(cursor)
+              ?.parent_id ?? null;
+        }
+      }
+
+      const current = this.db
+        .prepare("SELECT name FROM dictionary_groups WHERE id = ?")
+        .get(groupId);
+      this._assertDictionaryGroupNameAvailable({
+        name: current?.name ?? "",
+        parentId: resolvedParent,
+        excludeId: groupId,
+      });
+      const nextSortOrder = resolvedParent
+        ? (this.db
+            .prepare(
+              "SELECT COALESCE(MAX(sort_order), -1) + 1 AS next FROM dictionary_groups WHERE parent_id = ?"
+            )
+            .get(resolvedParent)?.next ?? 0)
+        : (this.db
+            .prepare(
+              "SELECT COALESCE(MAX(sort_order), -1) + 1 AS next FROM dictionary_groups WHERE parent_id IS NULL"
+            )
+            .get()?.next ?? 0);
+
+      this.db
+        .prepare(
+          "UPDATE dictionary_groups SET parent_id = ?, sort_order = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?"
+        )
+        .run(resolvedParent, nextSortOrder, groupId);
+      return { success: true, movedId: groupId, parentId: resolvedParent };
+    } catch (error) {
+      debugLogger.error("Error moving dictionary group", { error: error.message }, "database");
+      throw error;
+    }
+  }
+
+  /**
+   * Delete a group. Children are re-parented onto the deleted group's parent
+   * (the subtree is preserved, never cascade-deleted) and its items fall back
+   * to "ungrouped" (group_id = NULL). The pre-delete snapshot is returned so
+   * the renderer can offer an exact undo.
+   */
+  deleteDictionaryGroup(id) {
+    try {
+      if (!this.db) {
+        throw new Error("Database not initialized");
+      }
+      const groupId = this._resolveDictionaryGroupId(id, { allowNull: false });
+      const snapshot = this.snapshotDictionaryGroups();
+      const transaction = this.db.transaction((targetId) => {
+        const row = this.db
+          .prepare("SELECT parent_id, name FROM dictionary_groups WHERE id = ?")
+          .get(targetId);
+        if (!row) return { success: false, error: `Dictionary group ${targetId} does not exist` };
+        const parentId = row.parent_id ?? null;
+
+        const wordCount = this.db
+          .prepare("SELECT COUNT(*) AS count FROM custom_dictionary WHERE group_id = ?")
+          .get(targetId).count;
+        const aliasCount = this.db
+          .prepare("SELECT COUNT(*) AS count FROM custom_dictionary_aliases WHERE group_id = ?")
+          .get(targetId).count;
+        const childCount = this.db
+          .prepare("SELECT COUNT(*) AS count FROM dictionary_groups WHERE parent_id = ?")
+          .get(targetId).count;
+
+        this.db
+          .prepare(
+            "UPDATE dictionary_groups SET parent_id = ?, updated_at = CURRENT_TIMESTAMP WHERE parent_id = ?"
+          )
+          .run(parentId, targetId);
+        this.db
+          .prepare("UPDATE custom_dictionary SET group_id = NULL WHERE group_id = ?")
+          .run(targetId);
+        this.db
+          .prepare("UPDATE custom_dictionary_aliases SET group_id = NULL WHERE group_id = ?")
+          .run(targetId);
+        this.db.prepare("DELETE FROM dictionary_groups WHERE id = ?").run(targetId);
+        return {
+          success: true,
+          deletedId: targetId,
+          deletedName: row.name,
+          reparentedTo: parentId,
+          reparentedCount: childCount,
+          ungroupedCount: (wordCount || 0) + (aliasCount || 0),
+          snapshot,
+        };
+      });
+      return transaction(groupId);
+    } catch (error) {
+      debugLogger.error("Error deleting dictionary group", { error: error.message }, "database");
+      throw error;
+    }
+  }
+
+  /** Full group tree + membership, used for undo of a group deletion. */
+  snapshotDictionaryGroups() {
+    try {
+      if (!this.db) {
+        throw new Error("Database not initialized");
+      }
+      const groups = this.db
+        .prepare(
+          "SELECT id, name, parent_id, sort_order FROM dictionary_groups ORDER BY id"
+        )
+        .all()
+        .map((row) => ({
+          id: row.id,
+          name: row.name,
+          parentId: row.parent_id ?? null,
+          sortOrder: row.sort_order ?? 0,
+        }));
+      return { groups, assignments: this.listDictionaryGroupAssignments() };
+    } catch (error) {
+      debugLogger.error("Error snapshotting dictionary groups", { error: error.message }, "database");
+      throw error;
+    }
+  }
+
+  /**
+   * Restore a snapshot produced by snapshotDictionaryGroups() (undo of a group
+   * deletion). The whole group table is rewritten with the snapshot's ids so
+   * item assignments line up again; the dictionary words themselves are not
+   * touched.
+   */
+  restoreDictionaryGroups(snapshot) {
+    try {
+      if (!this.db) {
+        throw new Error("Database not initialized");
+      }
+      const groups = Array.isArray(snapshot?.groups) ? snapshot.groups : [];
+      const assignments = snapshot?.assignments || { words: {}, aliases: {} };
+      const tx = this.db.transaction(() => {
+        this.db.prepare("DELETE FROM dictionary_groups").run();
+        const insert = this.db.prepare(
+          "INSERT INTO dictionary_groups (id, name, parent_id, sort_order) VALUES (?, ?, ?, ?)"
+        );
+        // Parents first, so the insert order stays valid even if SQLite
+        // foreign-key enforcement is ever switched on.
+        const byId = new Map(groups.filter((g) => g?.id != null).map((g) => [g.id, g]));
+        const depthOf = (group) => {
+          let depth = 0;
+          let cursor = group.parentId;
+          const guard = new Set();
+          while (cursor != null && byId.has(cursor) && !guard.has(cursor)) {
+            guard.add(cursor);
+            depth += 1;
+            cursor = byId.get(cursor).parentId ?? null;
+          }
+          return depth;
+        };
+        const ordered = [...groups]
+          .filter((group) => group?.id != null && group?.name)
+          .sort((a, b) => depthOf(a) - depthOf(b) || (a.id ?? 0) - (b.id ?? 0));
+        for (const group of ordered) {
+          insert.run(group.id, group.name, group.parentId ?? null, group.sortOrder ?? 0);
+        }
+        this.db.prepare("UPDATE custom_dictionary SET group_id = NULL").run();
+        this.db.prepare("UPDATE custom_dictionary_aliases SET group_id = NULL").run();
+        const setWord = this.db.prepare("UPDATE custom_dictionary SET group_id = ? WHERE word = ?");
+        for (const [word, groupId] of Object.entries(assignments.words || {})) {
+          setWord.run(groupId ?? null, word);
+        }
+        const setAlias = this.db.prepare(
+          "UPDATE custom_dictionary_aliases SET group_id = ? WHERE from_text = ?"
+        );
+        for (const [from, groupId] of Object.entries(assignments.aliases || {})) {
+          setAlias.run(groupId ?? null, from);
+        }
+        return groups.length;
+      });
+      const restored = tx();
+      return { success: true, restored };
+    } catch (error) {
+      debugLogger.error("Error restoring dictionary groups", { error: error.message }, "database");
+      throw error;
+    }
+  }
+
+  /**
+   * Assign (or clear) the group of one dictionary item.
+   * `itemType: "word"` matches custom_dictionary.word; `"alias"` matches
+   * custom_dictionary_aliases.from_text. `groupId: null` moves the item to
+   * "ungrouped".
+   */
+  setDictionaryGroup({ itemType, key, groupId } = {}) {
+    try {
+      if (!this.db) {
+        throw new Error("Database not initialized");
+      }
+      if (itemType !== "word" && itemType !== "alias") {
+        throw new Error('itemType must be "word" or "alias"');
+      }
+      const itemKey = typeof key === "string" ? key.trim() : "";
+      if (!itemKey) {
+        throw new Error("An item key is required");
+      }
+      const resolvedGroup = this._resolveDictionaryGroupId(groupId);
+
+      const info =
+        itemType === "word"
+          ? this.db
+              .prepare("UPDATE custom_dictionary SET group_id = ? WHERE word = ?")
+              .run(resolvedGroup, itemKey)
+          : this.db
+              .prepare("UPDATE custom_dictionary_aliases SET group_id = ? WHERE from_text = ?")
+              .run(resolvedGroup, itemKey);
+
+      return { success: true, updated: info.changes ?? 0, groupId: resolvedGroup };
+    } catch (error) {
+      debugLogger.error("Error setting dictionary group", { error: error.message }, "database");
+      throw error;
+    }
+  }
+
+  /**
+   * Flat membership map for the renderer tree:
+   *   { words: { word: groupId }, aliases: { from: groupId } }
+   * Only assigned items are included (absent = ungrouped).
+   */
+  listDictionaryGroupAssignments() {
+    try {
+      if (!this.db) {
+        throw new Error("Database not initialized");
+      }
+      const words = {};
+      for (const row of this.db
+        .prepare("SELECT word, group_id FROM custom_dictionary WHERE group_id IS NOT NULL")
+        .all()) {
+        words[row.word] = row.group_id;
+      }
+      const aliases = {};
+      for (const row of this.db
+        .prepare(
+          "SELECT from_text, group_id FROM custom_dictionary_aliases WHERE group_id IS NOT NULL"
+        )
+        .all()) {
+        aliases[row.from_text] = row.group_id;
+      }
+      return { words, aliases };
+    } catch (error) {
+      debugLogger.error(
+        "Error listing dictionary group assignments",
+        { error: error.message },
+        "database"
+      );
+      throw error;
+    }
+  }
+
+  // Alias kept for callers that read the method name as "membership of items".
+  getDictionaryGroupsForItems() {
+    return this.listDictionaryGroupAssignments();
   }
 
   normalizeTagNames(tags) {

@@ -1782,6 +1782,123 @@ class IPCHandlers {
       return this.databaseManager.getDictionaryAliases();
     });
 
+    // Dictionary groups (nestable organization layer over the dictionary).
+    // Every handler answers with { success, ... } and re-broadcasts the full
+    // tree + membership so any window can re-render without a refetch. The
+    // words/aliases arrays themselves are untouched by grouping, so the
+    // existing dictionary-updated / dictionary-aliases-updated broadcasts and
+    // their payload shapes stay exactly as they were.
+    const dictionaryGroupsSnapshot = () => ({
+      groups: this.databaseManager.listDictionaryGroups(),
+      assignments: this.databaseManager.listDictionaryGroupAssignments(),
+    });
+    const broadcastDictionaryGroups = () => {
+      this.broadcastToWindows("dictionary-groups-updated", dictionaryGroupsSnapshot());
+    };
+
+    ipcMain.handle("dictionary-groups-list", async () => {
+      try {
+        return { success: true, ...dictionaryGroupsSnapshot() };
+      } catch (error) {
+        debugLogger.debug("[DictionaryGroups] List failed", { error: error.message });
+        return { success: false, error: error.message };
+      }
+    });
+
+    ipcMain.handle("dictionary-group-create", async (_event, name, parentId = null) => {
+      try {
+        const result = this.databaseManager.createDictionaryGroup(name, parentId ?? null);
+        broadcastDictionaryGroups();
+        return { success: true, group: result.group, ...dictionaryGroupsSnapshot() };
+      } catch (error) {
+        debugLogger.debug("[DictionaryGroups] Create failed", { error: error.message });
+        return { success: false, error: error.message, errorCode: error.code || null };
+      }
+    });
+
+    ipcMain.handle("dictionary-group-rename", async (_event, id, name) => {
+      try {
+        const result = this.databaseManager.renameDictionaryGroup(id, name);
+        broadcastDictionaryGroups();
+        return { success: true, group: result.group, ...dictionaryGroupsSnapshot() };
+      } catch (error) {
+        debugLogger.debug("[DictionaryGroups] Rename failed", { error: error.message });
+        return { success: false, error: error.message, errorCode: error.code || null };
+      }
+    });
+
+    ipcMain.handle("dictionary-group-delete", async (_event, id) => {
+      try {
+        const result = this.databaseManager.deleteDictionaryGroup(id);
+        if (!result?.success) {
+          return { success: false, error: result?.error || "Failed to delete group" };
+        }
+        broadcastDictionaryGroups();
+        return {
+          success: true,
+          deletedId: result.deletedId,
+          deletedName: result.deletedName,
+          reparentedTo: result.reparentedTo,
+          reparentedCount: result.reparentedCount,
+          ungroupedCount: result.ungroupedCount,
+          snapshot: result.snapshot,
+          ...dictionaryGroupsSnapshot(),
+        };
+      } catch (error) {
+        debugLogger.debug("[DictionaryGroups] Delete failed", { error: error.message });
+        return { success: false, error: error.message };
+      }
+    });
+
+    ipcMain.handle("dictionary-groups-restore", async (_event, snapshot) => {
+      try {
+        const result = this.databaseManager.restoreDictionaryGroups(snapshot);
+        broadcastDictionaryGroups();
+        return { success: true, restored: result.restored, ...dictionaryGroupsSnapshot() };
+      } catch (error) {
+        debugLogger.debug("[DictionaryGroups] Restore failed", { error: error.message });
+        return { success: false, error: error.message };
+      }
+    });
+
+    // Moves either one dictionary item (`itemType` + `key`) or a whole group
+    // (`groupId` + `parentId`).
+    ipcMain.handle("dictionary-group-move", async (_event, payload) => {
+      try {
+        const isGroupMove =
+          payload?.moveGroupId != null ||
+          (payload?.groupId != null && payload?.itemType == null && payload?.key == null);
+        if (isGroupMove) {
+          const moveId = payload?.moveGroupId ?? payload?.groupId;
+          const result = this.databaseManager.moveDictionaryGroup(
+            moveId,
+            payload?.parentId ?? null
+          );
+          broadcastDictionaryGroups();
+          return {
+            success: true,
+            movedId: result.movedId,
+            parentId: result.parentId,
+            ...dictionaryGroupsSnapshot(),
+          };
+        }
+        const result = this.databaseManager.setDictionaryGroup({
+          itemType: payload?.itemType,
+          key: payload?.key,
+          groupId: payload?.groupId ?? null,
+        });
+        broadcastDictionaryGroups();
+        return {
+          success: true,
+          updated: result.updated,
+          ...dictionaryGroupsSnapshot(),
+        };
+      } catch (error) {
+        debugLogger.debug("[DictionaryGroups] Move failed", { error: error.message });
+        return { success: false, error: error.message, errorCode: error.code || null };
+      }
+    });
+
     ipcMain.handle("mcp-get-server-status", async () => {
       if (!this.mcpServerManager) {
         return {
