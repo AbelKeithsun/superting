@@ -35,6 +35,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Prompt wrapper no longer fights the minutes prompt.** The note-action system wrapper banned tables and participant lists while the built-in 会议纪要 prompt demands both; action instructions now explicitly override the wrapper defaults.
 - **Prompt editing is discoverable.** 语言模型 → 笔记格式化 gains a "管理动作提示词" entry opening the action manager (all 10 locales).
 
+### Home shows recent notes and meetings
+
+- **Unified home timeline.** The home page used to list only dictation transcriptions — meeting recordings (notes table) never appeared. Home is now a single reverse-chronological timeline mixing dictation entries with recent notes/meetings under the existing date groups. Note entries carry a type badge (会议/笔记/导入), title, duration and a content preview, and click straight through to the note; dictation entries keep all their actions. The list refreshes whenever home becomes visible (all 10 locales).
+
 ## [2.0.8] - 2026-09-15
 
 ### Speaker marking → contacts (cross-session reuse)
