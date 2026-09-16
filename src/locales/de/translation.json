@@ -2030,6 +2030,37 @@
       "newRecordingsOnly": "Qualitätsänderungen wirken sich nur auf neue Aufnahmen aus; bestehende Aufnahmen werden nicht neu kodiert."
     },
     "transcript": {
+    "inlineEdit": {
+      "title": "Dieses Segment bearbeiten",
+      "hint": "Fokus verlassen oder ⌘/Ctrl+Enter zum Speichern · Esc zum Verlassen"
+    },
+    "correction": {
+      "dialogTitle": "Zum Korrekturwörterbuch hinzufügen",
+      "dialogHint": "Das rechte Wort wird ins Wörterbuch aufgenommen und das Paar als Korrektur gespeichert, damit künftige Transkripte automatisch korrigiert werden.",
+      "fromPlaceholder": "Falsch (optional)",
+      "toPlaceholder": "Richtig",
+      "addRow": "Weitere Zeile",
+      "submit": "Senden",
+      "manualTitle": "Automatisches Lernen ist aus — diese Korrektur senden?",
+      "manualTitleBatch": "Automatisches Lernen ist aus — {{count}} Änderungen warten",
+      "noneTitle": "Kein Wörterbucheintrag aus dieser Änderung",
+      "savedTitle": "{{count}} Korrektur(en) zum Wörterbuch hinzugefügt",
+      "reasons": {
+        "unknown": "Grund unbekannt",
+        "empty": "Nichts zu vergleichen",
+        "no-change": "Keine tatsächliche Änderung",
+        "insertion-only": "Nur Wörter ergänzt — kein Ersetzungspaar",
+        "deletion-only": "Nur Wörter entfernt — kein Ersetzungspaar",
+        "mixed-insert-delete": "Nur Einfügungen und Löschungen — kein Ersetzungspaar",
+        "punctuation-only": "Nur Zeichensetzung geändert",
+        "rewrite": "Zu viel geändert — das wirkt wie eine Neufassung",
+        "too-short": "Das korrigierte Wort ist zu kurz (min. 2 CJK- / 3 lateinische Zeichen)",
+        "too-different": "Die Wörter unterscheiden sich zu stark für eine Korrektur",
+        "already-in-dictionary": "Diese Korrektur steht bereits im Wörterbuch",
+        "not-learnable": "Kein lernbares Falsch → Richtig-Paar gefunden",
+        "learned-candidate": "Als lernbare Korrektur erkannt"
+      }
+    },
       "liveEdit": {
         "learned": "Gelernt: {{from}} → {{to}}",
         "learnedMultiple": "{{count}} Korrekturen gelernt",

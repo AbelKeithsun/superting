@@ -8,8 +8,10 @@ export function parseTranscriptSegments(raw: string): TranscriptSegment[] {
       text: string;
       source: "mic" | "system";
       timestamp?: number;
+      endTime?: number;
       editedByUser?: boolean;
       originalText?: string;
+      learnedText?: string;
       speaker?: string;
       speakerName?: string;
       speakerIsPlaceholder?: boolean;
@@ -28,8 +30,10 @@ export function parseTranscriptSegments(raw: string): TranscriptSegment[] {
         text: s.text,
         source: s.source,
         timestamp: s.timestamp,
+        endTime: s.endTime,
         editedByUser: s.editedByUser,
         originalText: s.originalText,
+        learnedText: s.learnedText,
         speaker: s.speaker,
         speakerName: s.speakerName,
         speakerIsPlaceholder: s.speakerIsPlaceholder,

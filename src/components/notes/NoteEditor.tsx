@@ -29,6 +29,7 @@ import { RichTextEditor } from "../ui/RichTextEditor";
 import { MarkdownSourceEditor } from "../ui/MarkdownSourceEditor";
 import type { Editor } from "@tiptap/react";
 import { MeetingTranscriptChat, type TranscriptSeekTarget } from "./MeetingTranscriptChat";
+import CorrectionSubmitDialog from "./CorrectionSubmitDialog";
 import type { TranscriptSegment } from "../../stores/meetingRecordingStore";
 import { updateSegmentText } from "../../stores/meetingRecordingStore";
 import {
@@ -2227,6 +2228,168 @@ export default function NoteEditor({
     setReplaceText("");
   }, []);
 
+  // Text the learner should diff against: the last text it already saw for this
+  // segment, so repeated touch-ups keep producing learnable pairs instead of
+  // accumulating into one diff that reads as a rewrite.
+  const getCorrectionBaseline = useCallback(
+    (segment: TranscriptSegment) => segment.learnedText ?? segment.originalText ?? segment.text,
+    []
+  );
+
+  // Manual exit of the correction loop (auto-learn off, or nothing learnable).
+  const [correctionDrafts, setCorrectionDrafts] = useState<
+    Array<{ from: string; to: string }>
+  >([]);
+  const [correctionReason, setCorrectionReason] = useState<string | undefined>(undefined);
+  const [isCorrectionDialogOpen, setIsCorrectionDialogOpen] = useState(false);
+
+  const openCorrectionSubmit = useCallback(
+    (drafts: Array<{ from: string; to: string }>, reason?: string) => {
+      setCorrectionDrafts(drafts.length > 0 ? drafts : [{ from: "", to: "" }]);
+      setCorrectionReason(reason);
+      setIsCorrectionDialogOpen(true);
+    },
+    []
+  );
+
+  const correctionReasonLabel = useCallback(
+    (reason?: string) =>
+      t(`notes.transcript.correction.reasons.${reason || "unknown"}`, {
+        defaultValue: t("notes.transcript.correction.reasons.unknown"),
+      }),
+    [t]
+  );
+
+  // Single edit → learner. Always ends with a receipt: learned (quiet toast
+  // with undo, broadcast by the main process), disabled (manual submit), or
+  // "nothing learnable" + why (manual submit).
+  const reportSegmentCorrection = useCallback(
+    async (originalText: string, editedText: string) => {
+      if (!originalText || !editedText || originalText === editedText) return;
+      let result:
+        | {
+            success: boolean;
+            learned: string[];
+            pairs: Array<{ from: string; to: string }>;
+            reasons?: string[];
+            disabled?: boolean;
+          }
+        | undefined;
+      try {
+        result = await window.electronAPI?.learnMeetingCorrection?.({
+          originalText,
+          editedText,
+          source: "meeting-live-edit",
+        });
+      } catch {
+        result = undefined;
+      }
+      const pairs = result?.pairs ?? [];
+      const reason = result?.reasons?.[0];
+
+      if (result?.disabled) {
+        toast({
+          title: t("notes.transcript.correction.manualTitle"),
+          description: pairs.length
+            ? pairs.map((pair) => `${pair.from} → ${pair.to}`).join("、")
+            : correctionReasonLabel(reason),
+          duration: 9000,
+          action: (
+            <button
+              type="button"
+              onClick={() => openCorrectionSubmit(pairs, reason)}
+              className="rounded-sm px-2.5 py-1 text-[10px] font-medium whitespace-nowrap"
+            >
+              {t("notes.transcript.correction.submit")}
+            </button>
+          ),
+        });
+        return;
+      }
+      if (pairs.length > 0) return;
+      toast({
+        title: t("notes.transcript.correction.noneTitle"),
+        description: correctionReasonLabel(reason),
+        duration: 9000,
+        action: (
+          <button
+            type="button"
+            onClick={() => openCorrectionSubmit([{ from: "", to: editedText }], reason)}
+            className="rounded-sm px-2.5 py-1 text-[10px] font-medium whitespace-nowrap"
+          >
+            {t("notes.transcript.correction.submit")}
+          </button>
+        ),
+      });
+    },
+    [toast, t, correctionReasonLabel, openCorrectionSubmit]
+  );
+
+  // Batch variant for "编辑转写" → 保存: one round trip, one aggregated receipt.
+  const reportSegmentCorrections = useCallback(
+    async (edits: Array<{ originalText: string; editedText: string }>) => {
+      const usable = edits.filter(
+        (edit) => edit.originalText && edit.editedText && edit.originalText !== edit.editedText
+      );
+      if (usable.length === 0) return;
+      let result:
+        | {
+            success: boolean;
+            learned: string[];
+            pairs: Array<{ from: string; to: string }>;
+            reasons?: string[];
+            disabled?: boolean;
+          }
+        | undefined;
+      try {
+        result = await window.electronAPI?.learnMeetingCorrections?.({
+          edits: usable,
+          source: "meeting-live-edit",
+        });
+      } catch {
+        result = undefined;
+      }
+      const pairs = result?.pairs ?? [];
+      const reason = result?.reasons?.[0];
+
+      if (result?.disabled) {
+        toast({
+          title: t("notes.transcript.correction.manualTitleBatch", { count: usable.length }),
+          description: pairs.length
+            ? pairs.map((pair) => `${pair.from} → ${pair.to}`).join("、")
+            : correctionReasonLabel(reason),
+          duration: 9000,
+          action: (
+            <button
+              type="button"
+              onClick={() => openCorrectionSubmit(pairs, reason)}
+              className="rounded-sm px-2.5 py-1 text-[10px] font-medium whitespace-nowrap"
+            >
+              {t("notes.transcript.correction.submit")}
+            </button>
+          ),
+        });
+        return;
+      }
+      if (pairs.length > 0) return;
+      toast({
+        title: t("notes.transcript.correction.noneTitle"),
+        description: correctionReasonLabel(reason),
+        duration: 9000,
+        action: (
+          <button
+            type="button"
+            onClick={() => openCorrectionSubmit([{ from: "", to: "" }], reason)}
+            className="rounded-sm px-2.5 py-1 text-[10px] font-medium whitespace-nowrap"
+          >
+            {t("notes.transcript.correction.submit")}
+          </button>
+        ),
+      });
+    },
+    [toast, t, correctionReasonLabel, openCorrectionSubmit]
+  );
+
   // Live inline edit of a finalized segment during recording: write through
   // the store (survives the 30s persistence tick + stop flush) and hand the
   // (original → edited) pair to the learning pipeline.
@@ -2234,16 +2397,39 @@ export default function NoteEditor({
     (segmentId: string, text: string) => {
       const original = displaySegments.find((segment) => segment.id === segmentId);
       if (!original) return;
-      const originalText = original.originalText ?? original.text;
+      const originalText = getCorrectionBaseline(original);
       updateSegmentText(segmentId, text);
       if (!originalText || originalText === text) return;
-      window.electronAPI?.learnMeetingCorrection?.({
-        originalText,
-        editedText: text,
-        source: "meeting-live-edit",
-      });
+      void reportSegmentCorrection(originalText, text);
     },
-    [displaySegments]
+    [displaySegments, getCorrectionBaseline, reportSegmentCorrection]
+  );
+
+  // Inline edit of a finalized segment once recording stopped (or between two
+  // recording sessions of the same note): persist immediately and learn.
+  const handleSegmentTextEdit = useCallback(
+    (segmentId: string, text: string) => {
+      const segments = displaySegmentsRef.current;
+      const original = segments.find((segment) => segment.id === segmentId);
+      if (!original) return;
+      const nextText = text.trim() ? text : original.text;
+      if (nextText === original.text) return;
+      const originalText = getCorrectionBaseline(original);
+      const nextSegments = segments.map((segment) =>
+        segment.id === segmentId
+          ? {
+              ...segment,
+              text: nextText,
+              editedByUser: true,
+              originalText: segment.originalText ?? segment.text,
+              learnedText: nextText,
+            }
+          : segment
+      );
+      void persistDisplaySegments(nextSegments, true);
+      void reportSegmentCorrection(originalText, nextText);
+    },
+    [getCorrectionBaseline, persistDisplaySegments, reportSegmentCorrection]
   );
 
   // Quiet learning receipt: an in-note toast with undo instead of the
@@ -2424,15 +2610,32 @@ export default function NoteEditor({
 
   const handleSaveTranscriptEdit = useCallback(async () => {
     if (!isTranscriptEditing) return;
+    // Stamp learnedText on every changed segment *before* serializing, so the
+    // next edit diffs against what the learner just saw.
+    const edits: Array<{ originalText: string; editedText: string }> = [];
+    const segmentsToSave: TranscriptSegment[] = transcriptIsStructured
+      ? editableTranscriptSegments.map((segment) => {
+          const before = displaySegments.find((item) => item.id === segment.id);
+          if (!before || before.text === segment.text) return segment;
+          edits.push({
+            originalText: getCorrectionBaseline(before),
+            editedText: segment.text,
+          });
+          return { ...segment, editedByUser: true, learnedText: segment.text };
+        })
+      : editableTranscriptSegments;
     const transcript = transcriptIsStructured
-      ? serializeTranscriptSegments(editableTranscriptSegments)
+      ? serializeTranscriptSegments(segmentsToSave)
       : editableTranscriptText;
     setIsTranscriptSaving(true);
     try {
       await window.electronAPI?.updateNote(note.id, { transcript });
       if (transcriptIsStructured) {
-        setDiarizedSegments(editableTranscriptSegments);
+        setDiarizedSegments(segmentsToSave);
       }
+      // Feed every changed segment to the correction learner, so paragraph
+      // editing learns exactly like inline editing does.
+      void reportSegmentCorrections(edits);
       setIsTranscriptEditing(false);
       setEditableTranscriptSegments([]);
       setEditableTranscriptText("");
@@ -2447,6 +2650,9 @@ export default function NoteEditor({
     isTranscriptEditing,
     note.id,
     transcriptIsStructured,
+    displaySegments,
+    getCorrectionBaseline,
+    reportSegmentCorrections,
   ]);
 
   const handleAskSubmit = useCallback(
@@ -2537,6 +2743,17 @@ export default function NoteEditor({
       onDragOver={handleNoteDragOver}
       onDrop={handleNoteDrop}
     >
+      <CorrectionSubmitDialog
+        open={isCorrectionDialogOpen}
+        onOpenChange={setIsCorrectionDialogOpen}
+        drafts={correctionDrafts}
+        reason={correctionReason}
+        onSaved={(count) => {
+          toast({
+            title: t("notes.transcript.correction.savedTitle", { count }),
+          });
+        }}
+      />
       {quietLearnedPairs && quietLearnedPairs.length > 0 && (
         <div
           data-corrections-learned-toast="true"
@@ -3223,6 +3440,9 @@ export default function NoteEditor({
                 isEditing={isTranscriptEditing}
                 onSegmentsChange={setEditableTranscriptSegments}
                 onLiveSegmentEdit={isRecording ? handleLiveSegmentEdit : undefined}
+                onSegmentEditCommit={
+                  isRecording || isTranscriptEditing ? undefined : handleSegmentTextEdit
+                }
                 searchTerm={findText}
                 ignoreCase={ignoreCase}
                 activeSearchIndex={activeFindIndex}

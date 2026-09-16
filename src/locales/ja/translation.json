@@ -2029,6 +2029,37 @@
       "newRecordingsOnly": "品質設定は新しい録音にのみ適用され、既存の録音は再エンコードされません。"
     },
     "transcript": {
+    "inlineEdit": {
+      "title": "このセグメントを編集",
+      "hint": "フォーカス外または ⌘/Ctrl+Enter で送信 · Esc で終了"
+    },
+    "correction": {
+      "dialogTitle": "矯正辞書に追加",
+      "dialogHint": "右側の語を辞書に追加し、このペアを矯正として保存します。以降の文字起こしは自動で修正されます。",
+      "fromPlaceholder": "誤り（任意）",
+      "toPlaceholder": "正しい表記",
+      "addRow": "行を追加",
+      "submit": "送信",
+      "manualTitle": "自動学習はオフです —— この矯正を送信しますか？",
+      "manualTitleBatch": "自動学習はオフです —— {{count}} 件の変更が待機中",
+      "noneTitle": "この変更から辞書項目は生成されませんでした",
+      "savedTitle": "辞書に {{count}} 件の矯正を追加しました",
+      "reasons": {
+        "unknown": "理由不明",
+        "empty": "比較する内容がありません",
+        "no-change": "実際の変更はありません",
+        "insertion-only": "追加のみ —— 置換ペアがありません",
+        "deletion-only": "削除のみ —— 置換ペアがありません",
+        "mixed-insert-delete": "追加と削除のみ —— 置換ペアがありません",
+        "punctuation-only": "句読点のみ変更",
+        "rewrite": "変更が大きすぎます —— 書き直しのようです",
+        "too-short": "矯正後の語が短すぎます（CJK 2 文字 / ラテン 3 文字以上）",
+        "too-different": "差異が大きすぎて矯正とは言えません",
+        "already-in-dictionary": "この矯正はすでに辞書にあります",
+        "not-learnable": "学習可能な誤り→正しいペアが見つかりません",
+        "learned-candidate": "学習可能な矯正として認識"
+      }
+    },
       "liveEdit": {
         "learned": "学習しました：{{from}} → {{to}}",
         "learnedMultiple": "{{count}} 件の修正を学習しました",

@@ -75,6 +75,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
   learnReplacementCorrection: (payload) =>
     ipcRenderer.invoke("learn-replacement-correction", payload),
   learnMeetingCorrection: (payload) => ipcRenderer.invoke("learn-meeting-correction", payload),
+  learnMeetingCorrections: (payload) => ipcRenderer.invoke("learn-meeting-corrections", payload),
   undoMeetingCorrection: (payload) => ipcRenderer.invoke("undo-meeting-correction", payload),
   onCorrectionsLearned: (callback) => {
     const listener = (_event, words) => callback?.(words);

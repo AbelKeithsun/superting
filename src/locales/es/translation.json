@@ -2029,6 +2029,37 @@
       "newRecordingsOnly": "Los cambios de calidad solo afectan a grabaciones nuevas; las existentes no se recodifican."
     },
     "transcript": {
+    "inlineEdit": {
+      "title": "Editar este segmento",
+      "hint": "Al perder el foco o ⌘/Ctrl+Enter para enviar · Esc para salir"
+    },
+    "correction": {
+      "dialogTitle": "Añadir al diccionario de correcciones",
+      "dialogHint": "La palabra de la derecha se añade al diccionario y el par se guarda como corrección para que las futuras transcripciones se corrijan solas.",
+      "fromPlaceholder": "Incorrecto (opcional)",
+      "toPlaceholder": "Correcto",
+      "addRow": "Añadir otra",
+      "submit": "Enviar",
+      "manualTitle": "El aprendizaje automático está desactivado — ¿enviar esta corrección?",
+      "manualTitleBatch": "El aprendizaje automático está desactivado — {{count}} cambios en espera",
+      "noneTitle": "Esta edición no generó ninguna entrada",
+      "savedTitle": "Se añadieron {{count}} corrección(es) al diccionario",
+      "reasons": {
+        "unknown": "Motivo desconocido",
+        "empty": "Nada que comparar",
+        "no-change": "Sin cambios reales",
+        "insertion-only": "Solo se añadieron palabras — no hay par de reemplazo",
+        "deletion-only": "Solo se eliminaron palabras — no hay par de reemplazo",
+        "mixed-insert-delete": "Solo inserciones y eliminaciones — sin par de reemplazo",
+        "punctuation-only": "Solo cambió la puntuación",
+        "rewrite": "Cambió demasiado — parece una reescritura",
+        "too-short": "La palabra corregida es demasiado corta (mín. 2 caracteres CJK / 3 latinos)",
+        "too-different": "Las palabras difieren demasiado para ser una corrección",
+        "already-in-dictionary": "Esta corrección ya está en tu diccionario",
+        "not-learnable": "No se encontró un par incorrecto → correcto aprendible",
+        "learned-candidate": "Reconocido como corrección aprendible"
+      }
+    },
       "liveEdit": {
         "learned": "Aprendido: {{from}} → {{to}}",
         "learnedMultiple": "{{count}} correcciones aprendidas",
