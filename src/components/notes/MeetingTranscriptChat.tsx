@@ -695,11 +695,18 @@ export function MeetingTranscriptChat({
     return () => el.removeEventListener("scroll", updateStickyScroll);
   }, []);
 
+  // While any inline/live editor is open, never snap the view: the user is
+  // correcting an earlier segment (often still inside the 80px sticky zone
+  // near the bottom), and every incoming segment would otherwise yank the
+  // view to the latest line and break their editing rhythm. Following
+  // resumes once the editor closes AND the view is at the bottom again.
+  const isEditingSegment = liveEditingId != null || inlineEditingBlockId != null;
+
   useLayoutEffect(() => {
     const el = scrollRef.current;
-    if (!el || !shouldStickToBottomRef.current) return;
+    if (!el || isEditingSegment || !shouldStickToBottomRef.current) return;
     el.scrollTop = el.scrollHeight;
-  }, [segments, micPartial, systemPartial]);
+  }, [segments, micPartial, systemPartial, isEditingSegment]);
 
   const hasContent = segments.length > 0 || micPartial || systemPartial;
   const colorByKey = useMemo(() => {
