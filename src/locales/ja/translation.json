@@ -1782,7 +1782,9 @@
       "addAttendees": "参加者を追加",
       "addPlaceholder": "参加者を追加...",
       "typeEmail": "メールアドレスを入力して追加...",
-      "me": "（自分）"
+      "me": "（自分）",
+      "peopleSection": "People",
+      "voiceprintCount": "声紋 {{count}} 件"
     },
     "context": {
       "moveToFolder": "フォルダに移動",

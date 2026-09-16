@@ -1856,7 +1856,9 @@
       "addAttendees": "Ajouter des participants",
       "addPlaceholder": "Ajouter des participants...",
       "typeEmail": "Saisissez un e-mail pour ajouter...",
-      "me": "(moi)"
+      "me": "(moi)",
+      "peopleSection": "Personnes",
+      "voiceprintCount": "{{count}} empreintes vocales"
     },
     "upload": {
       "title": "Téléverser un fichier audio",

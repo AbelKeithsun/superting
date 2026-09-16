@@ -1815,7 +1815,9 @@
       "addAttendees": "Agregar asistentes",
       "addPlaceholder": "Agregar asistentes...",
       "typeEmail": "Escribe un correo para agregar...",
-      "me": "(yo)"
+      "me": "(yo)",
+      "peopleSection": "Personas",
+      "voiceprintCount": "{{count}} huellas de voz"
     },
     "upload": {
       "title": "Subir audio",

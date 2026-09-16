@@ -1815,7 +1815,9 @@
       "addAttendees": "新增與會者",
       "addPlaceholder": "新增與會者...",
       "typeEmail": "輸入電子郵件以新增...",
-      "me": "（我）"
+      "me": "（我）",
+      "peopleSection": "人名表",
+      "voiceprintCount": "{{count}} 條聲紋"
     },
     "upload": {
       "title": "上傳音訊",

@@ -1819,7 +1819,9 @@
       "addAttendees": "添加参会者",
       "addPlaceholder": "添加参会者...",
       "typeEmail": "输入邮箱以添加...",
-      "me": "（我）"
+      "me": "（我）",
+      "peopleSection": "人名表",
+      "voiceprintCount": "{{count}} 条声纹"
     },
     "upload": {
       "title": "上传音频",

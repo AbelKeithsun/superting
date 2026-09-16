@@ -1815,7 +1815,9 @@
       "addAttendees": "Добавить участников",
       "addPlaceholder": "Добавить участников...",
       "typeEmail": "Введите email для добавления...",
-      "me": "(я)"
+      "me": "(я)",
+      "peopleSection": "Люди",
+      "voiceprintCount": "{{count}} голосовых отпечатков"
     },
     "upload": {
       "title": "Загрузить аудио",

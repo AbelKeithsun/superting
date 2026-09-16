@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useTranslation } from "react-i18next";
-import { Users, X } from "lucide-react";
+import { Users, X, Mic } from "lucide-react";
 import { Popover, PopoverTrigger, PopoverContent } from "../ui/popover";
 import type { PersonRecord } from "../../types/electron";
 
@@ -90,9 +90,6 @@ export default function NoteParticipants({
   const { t } = useTranslation();
   const [localParticipants, setLocalParticipants] = useState(participants);
   const [search, setSearch] = useState("");
-  const [suggestions, setSuggestions] = useState<
-    Array<{ email: string; display_name: string | null }>
-  >([]);
   const [people, setPeople] = useState<PersonRecord[]>([]);
   const [gravatarHashes, setGravatarHashes] = useState<Record<string, string>>({});
   const [failedGravatars, setFailedGravatars] = useState<Set<string>>(new Set());
@@ -128,19 +125,6 @@ export default function NoteParticipants({
       });
     });
   }, [localParticipants, gravatarHashes]);
-
-  useEffect(() => {
-    if (!open) return;
-    const query = search.trim();
-    window.electronAPI.searchContacts(query).then((result) => {
-      if (result.success) {
-        const existing = new Set(
-          localParticipants.map((p) => (p.email || "").toLowerCase()).filter(Boolean)
-        );
-        setSuggestions(result.contacts.filter((c) => !existing.has(c.email.toLowerCase())));
-      }
-    });
-  }, [search, open, localParticipants]);
 
   const saveParticipants = useCallback(
     (updated: NoteParticipant[]) => {
@@ -191,7 +175,6 @@ export default function NoteParticipants({
       ];
       setLocalParticipants(updated);
       saveParticipants(updated);
-      window.electronAPI.upsertContact({ email: normalized, displayName: displayName || null });
       setSearch("");
 
       void linkPerson?.then((person) => {
@@ -242,6 +225,60 @@ export default function NoteParticipants({
     },
     [localParticipants, saveParticipants, people]
   );
+
+  // Pick from the people directory (人名表): one tap adds the person with
+  // their personId, so voiceprint priors and the speaker-count suggestion
+  // flow through exactly like a name/email add.
+  const addPersonParticipant = useCallback(
+    (person: PersonRecord) => {
+      if (localParticipants.some((p) => p.personId === person.id)) {
+        setSearch("");
+        return;
+      }
+      if (
+        person.email &&
+        localParticipants.some(
+          (p) => (p.email || "").toLowerCase() === person.email!.toLowerCase()
+        )
+      ) {
+        setSearch("");
+        return;
+      }
+      const updated: NoteParticipant[] = [
+        ...localParticipants,
+        {
+          personId: person.id,
+          email: person.email || null,
+          displayName: person.display_name,
+          responseStatus: null,
+          self: false,
+        },
+      ];
+      setLocalParticipants(updated);
+      saveParticipants(updated);
+      setSearch("");
+    },
+    [localParticipants, saveParticipants]
+  );
+
+  // The directory lists everyone not already a participant; typing filters
+  // by name, email, organization or phone.
+  const directoryPeople = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    const taken = new Set(
+      localParticipants.map((p) => (p.personId != null ? `id:${p.personId}` : `email:${(p.email || "").toLowerCase()}`))
+    );
+    return people
+      .filter((person) => {
+        if (taken.has(`id:${person.id}`)) return false;
+        if (person.email && taken.has(`email:${person.email.toLowerCase()}`)) return false;
+        if (!query) return true;
+        return [person.display_name, person.email, person.organization, person.phone]
+          .filter(Boolean)
+          .some((field) => field!.toLowerCase().includes(query));
+      })
+      .slice(0, 20);
+  }, [people, localParticipants, search]);
 
   const removeParticipant = useCallback(
     (key: string) => {
@@ -318,27 +355,48 @@ export default function NoteParticipants({
         </div>
 
         <div className="max-h-64 overflow-y-auto">
-          {search && suggestions.length > 0 && (
+          {directoryPeople.length > 0 && (
             <div className="p-1 border-b border-border/30">
-              {suggestions.slice(0, 5).map((contact) => (
+              <div className="px-2 py-1 text-[11px] font-medium text-muted-foreground">
+                {t("notes.participants.peopleSection", "People")}
+              </div>
+              {directoryPeople.map((person) => (
                 <button
-                  key={contact.email}
-                  onClick={() => addEmailParticipant(contact.email, contact.display_name)}
+                  key={person.id}
+                  onClick={() => addPersonParticipant(person)}
                   className="flex items-center gap-2 w-full px-2 py-1.5 rounded-md text-xs text-foreground/70 hover:bg-foreground/5 transition-colors cursor-pointer"
                 >
                   <ParticipantAvatar
-                    email={contact.email}
-                    displayName={contact.display_name}
-                    failed={false}
+                    email={person.email}
+                    displayName={person.display_name}
+                    failed={true}
                     onImageError={() => {}}
                   />
-                  <span className="truncate">{contact.display_name || contact.email}</span>
+                  <span className="flex-1 min-w-0 text-left">
+                    <span className="block truncate">{person.display_name}</span>
+                    {(person.organization || person.email) && (
+                      <span className="block truncate text-[10px] text-foreground/30">
+                        {[person.organization, person.email].filter(Boolean).join(" · ")}
+                      </span>
+                    )}
+                  </span>
+                  {(person.voiceprint_count ?? 0) > 0 && (
+                    <span
+                      className="shrink-0 inline-flex items-center gap-0.5 text-[10px] text-foreground/40"
+                      title={t("notes.participants.voiceprintCount", "{{count}} voiceprints", {
+                        count: person.voiceprint_count ?? 0,
+                      })}
+                    >
+                      <Mic size={10} />
+                      {person.voiceprint_count}
+                    </span>
+                  )}
                 </button>
               ))}
             </div>
           )}
 
-          {search.trim() && suggestions.length === 0 && !isEmailText(search) && (
+          {search.trim() && directoryPeople.length === 0 && !isEmailText(search) && (
             <div className="px-3 py-2 text-[11px] text-foreground/30">
               {t("contacts.pressEnterToadd", "Press Enter to add “{{name}}”", { name: search.trim() })}
             </div>
@@ -385,7 +443,7 @@ export default function NoteParticipants({
             </div>
           ))}
 
-          {localParticipants.length === 0 && !search && (
+          {localParticipants.length === 0 && directoryPeople.length === 0 && !search && (
             <div className="px-3 py-4 text-center text-[11px] text-foreground/30">
               {t("contacts.emptyHint", "Type a name or email to add participants")}
             </div>
