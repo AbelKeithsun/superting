@@ -9,6 +9,7 @@ import { useHotkey } from "../hooks/useHotkey";
 import { useToast } from "./ui/useToast";
 import { useUpdater } from "../hooks/useUpdater";
 import { useSettings } from "../hooks/useSettings";
+import type { NoteItem } from "../types/electron";
 import {
   useTranscriptions,
   initializeTranscriptions,
@@ -61,6 +62,7 @@ const clampWidth = (value: number, min: number, max: number) => Math.min(max, Ma
 export default function ControlPanel() {
   const { t } = useTranslation();
   const history = useTranscriptions();
+  const [recentNotes, setRecentNotes] = useState<NoteItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showSettings, setShowSettings] = useState(false);
   const [showPostMigration, setShowPostMigration] = useState(false);
@@ -260,6 +262,32 @@ export default function ControlPanel() {
       setActiveView("personal-notes");
     });
     return () => cleanup?.();
+  }, []);
+
+  // Recent notes/meetings for the home timeline — refetch whenever the home
+  // view becomes visible so fresh recordings show up.
+  useEffect(() => {
+    if (activeView !== "home") return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const notes = (await window.electronAPI?.getNotes?.(null, 20, null, "updatedAt")) ?? [];
+        if (!cancelled) setRecentNotes(notes);
+      } catch {
+        if (!cancelled) setRecentNotes([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [activeView]);
+
+  const handleOpenNoteFromHome = useCallback((note: NoteItem) => {
+    const folderId = note.folder_id ?? null;
+    setActiveFolderId(folderId);
+    initializeNotes(null, 50, folderId);
+    setActiveNoteId(note.id);
+    setActiveView("personal-notes");
   }, []);
 
   useEffect(() => {
@@ -799,6 +827,8 @@ export default function ControlPanel() {
             {activeView === "home" && (
               <HistoryView
                 history={history}
+                notes={recentNotes}
+                onOpenNote={handleOpenNoteFromHome}
                 isLoading={isLoading}
                 hotkey={hotkey}
                 showCloudMigrationBanner={false}

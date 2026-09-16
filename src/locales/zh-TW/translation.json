@@ -231,6 +231,12 @@
     }
   },
   "controlPanel": {
+    "timeline": {
+      "badgeMeeting": "會議",
+      "badgeNote": "筆記",
+      "badgeUpload": "匯入",
+      "openNote": "開啟筆記：{{title}}"
+    },
     "update": {
       "readyTitle": "更新已準備就緒",
       "readyDescription": "點擊「安裝更新」以重新啟動並套用最新版本。",
