@@ -1,11 +1,13 @@
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useEffect, useMemo } from "react";
 import { useTranslation } from "react-i18next";
-import { BookOpen, X, Info, ArrowRight, Search } from "lucide-react";
+import { BookOpen, X, Info, ArrowRight, Search, Folder } from "lucide-react";
 import { Input } from "./ui/input";
 import { Button } from "./ui/button";
 import { ConfirmDialog } from "./ui/dialog";
+import { useToast } from "./ui/useToast";
 import { cn } from "./lib/utils";
 import { useSettings } from "../hooks/useSettings";
+import type { DictionaryGroup } from "../hooks/useSettings";
 import { getAgentName } from "../utils/agentName";
 import {
   buildDictionaryDisplayItems,
@@ -13,23 +15,57 @@ import {
   type DictionaryDisplayItem,
 } from "../utils/dictionaryListItems";
 import { resolveDictionaryInputSubmission } from "../utils/dictionaryInput";
+import DictionaryGroupTree from "./dictionary/DictionaryGroupTree";
+import DictionaryGroupPicker from "./dictionary/DictionaryGroupPicker";
 import PeopleManagerPanel from "./notes/PeopleManagerPanel";
+
+const FOCUS_WORD_STORAGE_KEY = "superting.dictionary.focusWord";
 
 export default function DictionaryView() {
   const { t } = useTranslation();
+  const { toast } = useToast();
   const {
     customDictionary,
     customDictionaryAliases,
+    dictionaryGroups,
+    dictionaryGroupAssignments,
     setCustomDictionary,
     setCustomDictionaryAliases,
+    refreshDictionaryGroups,
+    createDictionaryGroup,
+    renameDictionaryGroup,
+    deleteDictionaryGroup,
+    moveDictionaryItemToGroup,
+    moveDictionaryGroupToParent,
+    restoreDictionaryGroups,
   } = useSettings();
   const agentName = getAgentName();
   const [activeTab, setActiveTab] = useState<"dictionary" | "people">("dictionary");
   const [dictionarySearch, setDictionarySearch] = useState("");
   const [aliasFrom, setAliasFrom] = useState("");
   const [aliasTo, setAliasTo] = useState("");
+  const [targetGroupId, setTargetGroupId] = useState<number | null>(null);
   const [confirmClear, setConfirmClear] = useState(false);
+  const [pendingDeleteGroup, setPendingDeleteGroup] = useState<DictionaryGroup | null>(null);
+  const [focusedItemId, setFocusedItemId] = useState<string | null>(null);
   const [showInfo, setShowInfo] = useState(false);
+
+  useEffect(() => {
+    void refreshDictionaryGroups();
+  }, [refreshDictionaryGroups]);
+
+  // External focus contract: the correction-learning pipeline drops a word
+  // here so "词典" opens with that entry revealed and its move picker open.
+  useEffect(() => {
+    try {
+      const word = localStorage.getItem(FOCUS_WORD_STORAGE_KEY);
+      if (!word) return;
+      localStorage.removeItem(FOCUS_WORD_STORAGE_KEY);
+      setFocusedItemId(`word:${word}`);
+    } catch {
+      /* localStorage unavailable */
+    }
+  }, []);
 
   const dictionaryItems = useMemo(
     () =>
@@ -47,6 +83,13 @@ export default function DictionaryView() {
   const hasSearchQuery = dictionarySearch.trim().length > 0;
   const activeTabDescription =
     activeTab === "dictionary" ? t("dictionary.dictionaryUsage") : t("dictionary.peopleUsage");
+  const targetGroupName = useMemo(() => {
+    if (targetGroupId == null) return t("dictionary.groups.ungrouped");
+    return (
+      dictionaryGroups.find((group) => group.id === targetGroupId)?.name ??
+      t("dictionary.groups.ungrouped")
+    );
+  }, [dictionaryGroups, targetGroupId, t]);
 
   const handleRemove = useCallback(
     (word: string) => {
@@ -57,12 +100,26 @@ export default function DictionaryView() {
   );
 
   const handleClearDictionary = useCallback(() => {
+    // The dictionary rewrite already ungroups every surviving item; dropping the
+    // folders as well keeps "clear all" predictable (deepest first so the
+    // re-parenting inside deleteDictionaryGroup stays a no-op).
+    const deepestFirst = [...dictionaryGroups].sort((a, b) => b.id - a.id);
     setCustomDictionary(customDictionary.filter((w) => w === agentName));
     setCustomDictionaryAliases([]);
     setDictionarySearch("");
-  }, [agentName, customDictionary, setCustomDictionary, setCustomDictionaryAliases]);
+    void (async () => {
+      for (const group of deepestFirst) await deleteDictionaryGroup(group.id);
+    })();
+  }, [
+    agentName,
+    customDictionary,
+    dictionaryGroups,
+    deleteDictionaryGroup,
+    setCustomDictionary,
+    setCustomDictionaryAliases,
+  ]);
 
-  const handleSubmitDictionaryInput = useCallback(() => {
+  const handleSubmitDictionaryInput = useCallback(async () => {
     const submission = resolveDictionaryInputSubmission({
       source: aliasFrom,
       correction: aliasTo,
@@ -73,15 +130,34 @@ export default function DictionaryView() {
     if (submission.type === "words") {
       setCustomDictionary([...customDictionary, ...submission.words]);
       setAliasFrom("");
+      if (targetGroupId != null) {
+        for (const word of submission.words) {
+          await moveDictionaryItemToGroup({ itemType: "word", key: word, groupId: targetGroupId });
+        }
+      }
       return;
     }
 
     if (submission.type === "alias") {
       if (submission.alias) {
         setCustomDictionaryAliases([...customDictionaryAliases, submission.alias]);
+        if (targetGroupId != null) {
+          await moveDictionaryItemToGroup({
+            itemType: "alias",
+            key: submission.alias.from,
+            groupId: targetGroupId,
+          });
+        }
       }
       if (submission.shouldAddTargetWord) {
         setCustomDictionary([...customDictionary, aliasTo.trim()]);
+        if (targetGroupId != null) {
+          await moveDictionaryItemToGroup({
+            itemType: "word",
+            key: aliasTo.trim(),
+            groupId: targetGroupId,
+          });
+        }
       }
       setAliasFrom("");
       setAliasTo("");
@@ -91,6 +167,8 @@ export default function DictionaryView() {
     aliasTo,
     customDictionary,
     customDictionaryAliases,
+    targetGroupId,
+    moveDictionaryItemToGroup,
     setCustomDictionary,
     setCustomDictionaryAliases,
   ]);
@@ -104,69 +182,66 @@ export default function DictionaryView() {
     [customDictionaryAliases, setCustomDictionaryAliases]
   );
 
-  const renderDictionaryRow = (item: DictionaryDisplayItem) => {
-    if (item.type === "word") {
-      const isAgentName = item.word === agentName;
+  const handleMoveItem = useCallback(
+    (item: DictionaryDisplayItem, groupId: number | null) => {
+      void moveDictionaryItemToGroup({
+        itemType: item.type === "word" ? "word" : "alias",
+        key: item.type === "word" ? item.word : item.from,
+        groupId,
+      });
+    },
+    [moveDictionaryItemToGroup]
+  );
 
-      return (
-        <div
-          key={item.id}
-          className="group flex min-h-11 items-center gap-3 px-4 py-2 transition-colors duration-150 hover:bg-muted/35"
-          title={isAgentName ? t("dictionary.autoManaged") : undefined}
-        >
-          <span className="inline-flex shrink-0 items-center rounded-sm border border-border/60 bg-background px-2 py-0.5 text-[11px] font-medium text-muted-foreground dark:border-white/10 dark:bg-white/[0.03]">
-            {t("dictionary.itemTypeWord")}
-          </span>
-          <div className="min-w-0 flex-1">
-            <div className="truncate text-sm font-semibold text-foreground">{item.word}</div>
-          </div>
-          {!isAgentName ? (
-            <button
-              onClick={() => handleRemove(item.word)}
-              aria-label={t("dictionary.removeWord", { word: item.word })}
-              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground opacity-100 transition-colors duration-150 hover:bg-destructive/10 hover:text-destructive sm:opacity-0 sm:group-hover:opacity-100"
-            >
-              <X size={13} strokeWidth={2} />
-            </button>
-          ) : (
-            <span className="h-7 w-7 shrink-0" />
-          )}
-        </div>
-      );
-    }
+  const handleDeleteGroup = useCallback(
+    async (group: DictionaryGroup) => {
+      const result = await deleteDictionaryGroup(group.id);
+      if (!result?.success) {
+        toast({
+          title: t("dictionary.groups.deleteFailed"),
+          description: result?.error,
+          variant: "destructive",
+        });
+        return;
+      }
+      const snapshot = result.snapshot;
+      toast({
+        title: t("dictionary.groups.deleted", { name: group.name }),
+        description: t("dictionary.groups.deletedDescription", {
+          children: result.reparentedCount ?? 0,
+          items: result.ungroupedCount ?? 0,
+        }),
+        duration: 8000,
+        action: snapshot ? (
+          <button
+            type="button"
+            onClick={async () => {
+              const restored = await restoreDictionaryGroups(snapshot);
+              if (restored?.success) {
+                toast({ title: t("dictionary.groups.restored", { name: group.name }) });
+              }
+            }}
+            className="rounded-sm bg-foreground/5 px-2 py-1 text-[11px] font-medium text-foreground/75 transition-colors hover:bg-foreground/10 hover:text-foreground"
+          >
+            {t("dictionary.groups.undo")}
+          </button>
+        ) : undefined,
+      });
+    },
+    [deleteDictionaryGroup, restoreDictionaryGroups, t, toast]
+  );
 
-    return (
-      <div
-        key={item.id}
-        className="group flex min-h-11 items-center gap-3 px-4 py-2 transition-colors duration-150 hover:bg-muted/35"
-      >
-        <span className="inline-flex shrink-0 items-center rounded-sm border border-primary/20 bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary dark:border-primary/25 dark:bg-primary/15 dark:text-primary">
-          {t("dictionary.itemTypeAlias")}
-        </span>
-        <div className="min-w-0 flex-1">
-          <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-sm">
-            <span className="min-w-0 max-w-full break-words text-muted-foreground">
-              {item.from}
-            </span>
-            <ArrowRight size={13} className="shrink-0 text-muted-foreground/70" />
-            <span className="min-w-0 max-w-full break-words font-semibold text-foreground">
-              {item.to}
-            </span>
-          </div>
-        </div>
-        <button
-          onClick={() => handleRemoveAlias(item.from)}
-          aria-label={t("dictionary.removeAlias", {
-            from: item.from,
-            to: item.to,
-          })}
-          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground opacity-100 transition-colors duration-150 hover:bg-destructive/10 hover:text-destructive sm:opacity-0 sm:group-hover:opacity-100"
-        >
-          <X size={13} strokeWidth={2} />
-        </button>
-      </div>
-    );
-  };
+  const pendingDeleteChildCount = pendingDeleteGroup
+    ? dictionaryGroups.filter((group) => group.parentId === pendingDeleteGroup.id).length
+    : 0;
+  const pendingDeleteItemCount = pendingDeleteGroup
+    ? Object.values(dictionaryGroupAssignments.words || {}).filter(
+        (id) => id === pendingDeleteGroup.id
+      ).length +
+      Object.values(dictionaryGroupAssignments.aliases || {}).filter(
+        (id) => id === pendingDeleteGroup.id
+      ).length
+    : 0;
 
   return (
     <div className="ow-workspace-page">
@@ -175,8 +250,27 @@ export default function DictionaryView() {
           open={confirmClear}
           onOpenChange={setConfirmClear}
           title={t("dictionary.clearTitle")}
-          description={t("dictionary.clearDescription")}
+          description={`${t("dictionary.clearDescription")} ${t("dictionary.groups.clearHint")}`}
           onConfirm={handleClearDictionary}
+          variant="destructive"
+        />
+        <ConfirmDialog
+          open={pendingDeleteGroup != null}
+          onOpenChange={(open) => {
+            if (!open) setPendingDeleteGroup(null);
+          }}
+          title={t("dictionary.groups.deleteConfirmTitle", {
+            name: pendingDeleteGroup?.name ?? "",
+          })}
+          description={t("dictionary.groups.deleteConfirmDescription", {
+            name: pendingDeleteGroup?.name ?? "",
+            children: pendingDeleteChildCount,
+            items: pendingDeleteItemCount,
+          })}
+          onConfirm={() => {
+            if (pendingDeleteGroup) void handleDeleteGroup(pendingDeleteGroup);
+            setPendingDeleteGroup(null);
+          }}
           variant="destructive"
         />
 
@@ -276,7 +370,7 @@ export default function DictionaryView() {
                     value={aliasFrom}
                     onChange={(e) => setAliasFrom(e.target.value)}
                     onKeyDown={(e) => {
-                      if (e.key === "Enter") handleSubmitDictionaryInput();
+                      if (e.key === "Enter") void handleSubmitDictionaryInput();
                     }}
                     className="h-8 text-xs"
                   />
@@ -286,19 +380,54 @@ export default function DictionaryView() {
                     value={aliasTo}
                     onChange={(e) => setAliasTo(e.target.value)}
                     onKeyDown={(e) => {
-                      if (e.key === "Enter") handleSubmitDictionaryInput();
+                      if (e.key === "Enter") void handleSubmitDictionaryInput();
                     }}
                     className="h-8 text-xs"
                   />
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={handleSubmitDictionaryInput}
+                    onClick={() => void handleSubmitDictionaryInput()}
                     disabled={!aliasFrom.trim()}
                     className="h-8 w-full px-3 text-xs md:w-auto"
                   >
                     {t("dictionary.aliasAdd")}
                   </Button>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-1.5 px-1">
+                  <span className="text-[11px] text-muted-foreground">
+                    {t("dictionary.groups.addTo")}
+                  </span>
+                  <DictionaryGroupPicker
+                    groups={dictionaryGroups}
+                    selectedGroupId={targetGroupId}
+                    onSelect={(groupId) => setTargetGroupId(groupId)}
+                    onCreateGroup={async (name, parentId) => {
+                      const result = await createDictionaryGroup(name, parentId);
+                      if (result?.success && result.groups) {
+                        const created = result.groups.find(
+                          (group) =>
+                            group.name === name &&
+                            (group.parentId ?? null) === (parentId ?? null)
+                        );
+                        if (created) setTargetGroupId(created.id);
+                      }
+                      return result;
+                    }}
+                    trigger={
+                      <button
+                        type="button"
+                        className={cn(
+                          "inline-flex h-6 items-center gap-1 rounded-md border border-border/70 bg-background/75 px-2 text-[11px] font-medium text-muted-foreground transition-colors hover:border-border hover:bg-muted/70 hover:text-foreground",
+                          targetGroupId != null && "text-foreground"
+                        )}
+                      >
+                        <Folder size={10} />
+                        {targetGroupName}
+                      </button>
+                    }
+                  />
                 </div>
 
                 <div className="flex items-start gap-1.5 px-1">
@@ -346,7 +475,7 @@ export default function DictionaryView() {
                       </div>
                     )}
                   </div>
-                ) : filteredDictionaryItems.length === 0 ? (
+                ) : hasSearchQuery && filteredDictionaryItems.length === 0 ? (
                   <div className="px-4 py-8 text-center">
                     <p className="text-sm font-semibold text-foreground">
                       {t("dictionary.emptySearchTitle")}
@@ -356,9 +485,23 @@ export default function DictionaryView() {
                     </p>
                   </div>
                 ) : (
-                  <div className={cn("divide-y divide-border/60 dark:divide-white/8")}>
-                    {filteredDictionaryItems.map(renderDictionaryRow)}
-                  </div>
+                  <DictionaryGroupTree
+                    groups={dictionaryGroups}
+                    assignments={dictionaryGroupAssignments}
+                    items={dictionaryItems}
+                    filteredItems={filteredDictionaryItems}
+                    query={dictionarySearch}
+                    agentName={agentName}
+                    focusedItemId={focusedItemId}
+                    onFocusHandled={() => setFocusedItemId(null)}
+                    onRemoveWord={handleRemove}
+                    onRemoveAlias={handleRemoveAlias}
+                    onMoveItem={handleMoveItem}
+                    onCreateGroup={(name, parentId) => createDictionaryGroup(name, parentId)}
+                    onRenameGroup={(id, name) => renameDictionaryGroup(id, name)}
+                    onDeleteGroup={(group) => setPendingDeleteGroup(group)}
+                    onMoveGroup={(id, parentId) => moveDictionaryGroupToParent(id, parentId)}
+                  />
                 )}
               </div>
             </div>

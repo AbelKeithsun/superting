@@ -24,6 +24,11 @@ import type {
   ThemeSettings,
   ChatAgentSettings,
   DictionaryAlias,
+  DictionaryGroup,
+  DictionaryGroupAssignments,
+  DictionaryGroupMutation,
+  DictionaryGroupSettings,
+  DictionaryGroupSnapshot,
 } from "../hooks/useSettings";
 
 let _ReasoningService: typeof import("../services/ReasoningService").default | null = null;
@@ -86,6 +91,30 @@ function readStringArray(key: string, fallback: string[]): string[] {
   try {
     const parsed = JSON.parse(stored);
     return Array.isArray(parsed) ? parsed : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function readJsonArray<T>(key: string, fallback: T[]): T[] {
+  if (!isBrowser) return fallback;
+  const stored = localStorage.getItem(key);
+  if (stored === null) return fallback;
+  try {
+    const parsed = JSON.parse(stored);
+    return Array.isArray(parsed) ? (parsed as T[]) : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function readJsonObject<T extends object>(key: string, fallback: T): T {
+  if (!isBrowser) return fallback;
+  const stored = localStorage.getItem(key);
+  if (stored === null) return fallback;
+  try {
+    const parsed = JSON.parse(stored);
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? (parsed as T) : fallback;
   } catch {
     return fallback;
   }
@@ -194,7 +223,14 @@ const BOOLEAN_SETTINGS = new Set([
   "showMeetingRecordingPill",
 ]);
 
-const ARRAY_SETTINGS = new Set(["customDictionary", "customDictionaryAliases"]);
+const ARRAY_SETTINGS = new Set([
+  "customDictionary",
+  "customDictionaryAliases",
+  "dictionaryGroups",
+]);
+
+// JSON objects mirrored to localStorage (parsed on the cross-window storage event).
+const JSON_OBJECT_SETTINGS = new Set(["dictionaryGroupAssignments"]);
 
 const NUMERIC_SETTINGS = new Set([
   "audioRetentionDays",
@@ -460,7 +496,8 @@ export interface SettingsState
     ApiKeySettings,
     PrivacySettings,
     ThemeSettings,
-    ChatAgentSettings {
+    ChatAgentSettings,
+    DictionaryGroupSettings {
   isSignedIn: boolean;
   audioCuesEnabled: boolean;
   pauseMediaOnDictation: boolean;
@@ -595,6 +632,28 @@ export interface SettingsState
   setCleanupCloudBaseUrl: (value: string) => void;
   setCustomDictionary: (words: string[]) => void;
   setCustomDictionaryAliases: (aliases: DictionaryAlias[]) => void;
+  setDictionaryGroups: (groups: DictionaryGroup[]) => void;
+  setDictionaryGroupAssignments: (assignments: DictionaryGroupAssignments) => void;
+  applyDictionaryGroupsSnapshot: (snapshot: {
+    groups?: DictionaryGroup[];
+    assignments?: DictionaryGroupAssignments;
+  }) => void;
+  refreshDictionaryGroups: () => Promise<void>;
+  createDictionaryGroup: (name: string, parentId?: number | null) => Promise<DictionaryGroupMutation>;
+  renameDictionaryGroup: (id: number, name: string) => Promise<DictionaryGroupMutation>;
+  deleteDictionaryGroup: (id: number) => Promise<DictionaryGroupMutation>;
+  moveDictionaryItemToGroup: (payload: {
+    itemType: "word" | "alias";
+    key: string;
+    groupId: number | null;
+  }) => Promise<DictionaryGroupMutation>;
+  moveDictionaryGroupToParent: (
+    moveGroupId: number,
+    parentId: number | null
+  ) => Promise<DictionaryGroupMutation>;
+  restoreDictionaryGroups: (
+    snapshot: DictionaryGroupSnapshot
+  ) => Promise<DictionaryGroupMutation>;
   setAssemblyAiStreaming: (value: boolean) => void;
   setAutoGenerateNoteTitle: (value: boolean) => void;
   setUseCleanupModel: (value: boolean) => void;
@@ -835,6 +894,13 @@ export const useSettingsStore = create<SettingsState>()((set, get) => ({
     "customDictionaryAliases",
     []
   ) as unknown as DictionaryAlias[],
+  // Group tree is mirrored in localStorage so the tree survives a slow/failed
+  // SQLite round-trip; SQLite stays the source of truth on startup.
+  dictionaryGroups: readJsonArray<DictionaryGroup>("dictionaryGroups", []),
+  dictionaryGroupAssignments: readJsonObject<DictionaryGroupAssignments>(
+    "dictionaryGroupAssignments",
+    { words: {}, aliases: {} }
+  ),
   assemblyAiStreaming: readBoolean("assemblyAiStreaming", true),
 
   autoGenerateNoteTitle: readBoolean("autoGenerateNoteTitle", true),
@@ -1175,6 +1241,106 @@ export const useSettingsStore = create<SettingsState>()((set, get) => ({
         "settings"
       );
     });
+  },
+
+  setDictionaryGroups: (groups: DictionaryGroup[]) => {
+    const normalized = Array.isArray(groups) ? groups : [];
+    if (isBrowser) localStorage.setItem("dictionaryGroups", JSON.stringify(normalized));
+    set({ dictionaryGroups: normalized });
+  },
+
+  setDictionaryGroupAssignments: (assignments: DictionaryGroupAssignments) => {
+    const normalized: DictionaryGroupAssignments = {
+      words: assignments?.words || {},
+      aliases: assignments?.aliases || {},
+    };
+    if (isBrowser) {
+      localStorage.setItem("dictionaryGroupAssignments", JSON.stringify(normalized));
+    }
+    set({ dictionaryGroupAssignments: normalized });
+  },
+
+  // Single entry point for every IPC response: all group mutations answer with
+  // a full snapshot, so the store never has to re-derive the tree.
+  applyDictionaryGroupsSnapshot: (snapshot) => {
+    const state = get();
+    if (Array.isArray(snapshot?.groups)) state.setDictionaryGroups(snapshot.groups);
+    if (snapshot?.assignments) state.setDictionaryGroupAssignments(snapshot.assignments);
+  },
+
+  refreshDictionaryGroups: async () => {
+    try {
+      const response = await window.electronAPI?.dictionaryGroupsList?.();
+      if (response?.success) {
+        get().applyDictionaryGroupsSnapshot(response);
+        return;
+      }
+      if (response?.error) {
+        logger.warn("Failed to load dictionary groups", { error: response.error }, "settings");
+      }
+    } catch (err) {
+      logger.warn(
+        "Failed to load dictionary groups",
+        { error: (err as Error).message },
+        "settings"
+      );
+    }
+  },
+
+  createDictionaryGroup: async (name, parentId = null) => {
+    const response =
+      (await window.electronAPI?.dictionaryGroupCreate?.(name, parentId ?? null)) || {
+        success: false,
+        error: "ipc-unavailable",
+      };
+    if (response.success) get().applyDictionaryGroupsSnapshot(response);
+    return response as DictionaryGroupMutation;
+  },
+
+  renameDictionaryGroup: async (id, name) => {
+    const response = (await window.electronAPI?.dictionaryGroupRename?.(id, name)) || {
+      success: false,
+      error: "ipc-unavailable",
+    };
+    if (response.success) get().applyDictionaryGroupsSnapshot(response);
+    return response as DictionaryGroupMutation;
+  },
+
+  deleteDictionaryGroup: async (id) => {
+    const response = (await window.electronAPI?.dictionaryGroupDelete?.(id)) || {
+      success: false,
+      error: "ipc-unavailable",
+    };
+    if (response.success) get().applyDictionaryGroupsSnapshot(response);
+    return response as DictionaryGroupMutation;
+  },
+
+  moveDictionaryItemToGroup: async ({ itemType, key, groupId }) => {
+    const response = (await window.electronAPI?.dictionaryGroupMove?.({
+      itemType,
+      key,
+      groupId: groupId ?? null,
+    })) || { success: false, error: "ipc-unavailable" };
+    if (response.success) get().applyDictionaryGroupsSnapshot(response);
+    return response as DictionaryGroupMutation;
+  },
+
+  moveDictionaryGroupToParent: async (moveGroupId, parentId) => {
+    const response = (await window.electronAPI?.dictionaryGroupMove?.({
+      moveGroupId,
+      parentId: parentId ?? null,
+    })) || { success: false, error: "ipc-unavailable" };
+    if (response.success) get().applyDictionaryGroupsSnapshot(response);
+    return response as DictionaryGroupMutation;
+  },
+
+  restoreDictionaryGroups: async (snapshot) => {
+    const response = (await window.electronAPI?.dictionaryGroupsRestore?.(snapshot)) || {
+      success: false,
+      error: "ipc-unavailable",
+    };
+    if (response.success) get().applyDictionaryGroupsSnapshot(response);
+    return response as DictionaryGroupMutation;
   },
 
   setUiLanguage: (language: string) => {
@@ -2006,6 +2172,42 @@ export async function initializeSettings(): Promise<void> {
       );
     }
 
+    // Sync the dictionary group tree from SQLite. The DB is authoritative; if
+    // it is empty while localStorage still holds a tree (fresh install upgrade
+    // or deleted DB), push the local tree back so the user keeps their folders.
+    try {
+      if (window.electronAPI.dictionaryGroupsList) {
+        const response = await window.electronAPI.dictionaryGroupsList();
+        if (response?.success) {
+          const localGroups = useSettingsStore.getState().dictionaryGroups;
+          const dbGroups = response.groups || [];
+          if (dbGroups.length === 0 && localGroups.length > 0) {
+            await window.electronAPI.dictionaryGroupsRestore?.({
+              groups: localGroups.map((group) => ({
+                id: group.id,
+                name: group.name,
+                parentId: group.parentId ?? null,
+                sortOrder: group.sortOrder ?? 0,
+              })),
+              assignments: useSettingsStore.getState().dictionaryGroupAssignments,
+            });
+            const restored = await window.electronAPI.dictionaryGroupsList();
+            if (restored?.success) {
+              useSettingsStore.getState().applyDictionaryGroupsSnapshot(restored);
+            }
+          } else {
+            useSettingsStore.getState().applyDictionaryGroupsSnapshot(response);
+          }
+        }
+      }
+    } catch (err) {
+      logger.warn(
+        "Failed to sync dictionary groups on startup",
+        { error: (err as Error).message },
+        "settings"
+      );
+    }
+
     // Sync meeting detection preferences to main process
     try {
       const currentState = useSettingsStore.getState();
@@ -2101,6 +2303,16 @@ export async function initializeSettings(): Promise<void> {
         value = Array.isArray(parsed) ? parsed : [];
       } catch {
         value = [];
+      }
+    } else if (JSON_OBJECT_SETTINGS.has(key)) {
+      try {
+        const parsed = JSON.parse(newValue);
+        value =
+          parsed && typeof parsed === "object" && !Array.isArray(parsed)
+            ? parsed
+            : (state as unknown as Record<string, unknown>)[key];
+      } catch {
+        value = (state as unknown as Record<string, unknown>)[key];
       }
     } else if (NUMERIC_SETTINGS.has(key)) {
       const parsed = Number(newValue);
