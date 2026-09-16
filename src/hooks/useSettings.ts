@@ -9,6 +9,43 @@ export interface DictionaryAlias {
   to: string;
 }
 
+/** One folder of the nestable dictionary organization tree. */
+export interface DictionaryGroup {
+  id: number;
+  name: string;
+  parentId: number | null;
+  sortOrder: number;
+  itemCount: number;
+}
+
+/** Which group each dictionary item belongs to (absent = ungrouped). */
+export interface DictionaryGroupAssignments {
+  words: Record<string, number>;
+  aliases: Record<string, number>;
+}
+
+export interface DictionaryGroupSnapshot {
+  groups: Array<{ id: number; name: string; parentId: number | null; sortOrder: number }>;
+  assignments: DictionaryGroupAssignments;
+}
+
+export interface DictionaryGroupMutation {
+  success: boolean;
+  error?: string;
+  errorCode?: string | null;
+  reparentedCount?: number;
+  ungroupedCount?: number;
+  groups?: DictionaryGroup[];
+  assignments?: DictionaryGroupAssignments;
+  snapshot?: DictionaryGroupSnapshot;
+  itemCount?: number;
+}
+
+export interface DictionaryGroupSettings {
+  dictionaryGroups: DictionaryGroup[];
+  dictionaryGroupAssignments: DictionaryGroupAssignments;
+}
+
 export interface TranscriptionSettings {
   uiLanguage: string;
   useLocalWhisper: boolean;
@@ -130,6 +167,16 @@ function useSettingsInternal() {
     return unsubscribe;
   }, [setCustomDictionaryAliases]);
 
+  // Dictionary groups: every main-process mutation broadcasts the full tree +
+  // membership, so listeners stay in sync without a refetch.
+  useEffect(() => {
+    if (typeof window === "undefined" || !window.electronAPI?.onDictionaryGroupsUpdated) return;
+    const unsubscribe = window.electronAPI.onDictionaryGroupsUpdated((snapshot) => {
+      if (snapshot) store.applyDictionaryGroupsSnapshot(snapshot);
+    });
+    return unsubscribe;
+  }, [store]);
+
   // Auto-learn corrections from user edits in external apps
   const [autoLearnCorrections, setAutoLearnCorrectionsRaw] = useLocalStorage(
     "autoLearnCorrections",
@@ -229,6 +276,15 @@ function useSettingsInternal() {
     cleanupRemoteUrl: store.cleanupRemoteUrl,
     customDictionary: store.customDictionary,
     customDictionaryAliases: store.customDictionaryAliases,
+    dictionaryGroups: store.dictionaryGroups,
+    dictionaryGroupAssignments: store.dictionaryGroupAssignments,
+    refreshDictionaryGroups: store.refreshDictionaryGroups,
+    createDictionaryGroup: store.createDictionaryGroup,
+    renameDictionaryGroup: store.renameDictionaryGroup,
+    deleteDictionaryGroup: store.deleteDictionaryGroup,
+    moveDictionaryItemToGroup: store.moveDictionaryItemToGroup,
+    moveDictionaryGroupToParent: store.moveDictionaryGroupToParent,
+    restoreDictionaryGroups: store.restoreDictionaryGroups,
     assemblyAiStreaming: store.assemblyAiStreaming,
     setAssemblyAiStreaming: store.setAssemblyAiStreaming,
     autoGenerateNoteTitle: store.autoGenerateNoteTitle,
