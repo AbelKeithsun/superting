@@ -147,14 +147,28 @@ function assignGlobalSpeakers(windowSegments, referenceSegments, nextSpeakerInde
   return { localToGlobal, nextSpeakerIndex: nextIndex };
 }
 
-function mergeWindowSegments(windowResults = []) {
+/**
+ * options.speakerAssignment: optional Map "<windowIndex>|<localSpeaker>" ->
+ * global speaker id, produced by voiceprint re-clustering. When present it
+ * replaces the temporal-overlap heuristic, which mints a new global speaker
+ * for anyone silent in a window's overlap zone (measured: 132 global
+ * speakers on a 41-minute 6-person meeting). Window clusters that have no
+ * assignment (their utterances were all too short to embed) inherit the
+ * label of the temporally nearest assigned segment.
+ */
+function mergeWindowSegments(windowResults = [], options = {}) {
+  const speakerAssignment =
+    options?.speakerAssignment instanceof Map ? options.speakerAssignment : null;
   const candidates = [];
   const referenceSegments = [];
   let nextSpeakerIndex = 0;
 
+  let position = 0;
   for (const result of [...windowResults].sort(
     (a, b) => finiteOr(a?.startSeconds, 0) - finiteOr(b?.startSeconds, 0)
   )) {
+    const windowIndex = Number.isFinite(Number(result?.index)) ? Number(result.index) : position;
+    position += 1;
     const offset = finiteOr(result?.startSeconds, 0);
     const profile = result?.profile || selectDiarizationProfile(result?.analysis);
     const score = finiteOr(result?.score, scoreDiarizationWindow(result?.analysis, profile));
@@ -172,6 +186,18 @@ function mergeWindowSegments(windowResults = []) {
       });
     }
 
+    if (speakerAssignment) {
+      for (const segment of windowSegments) {
+        candidates.push({
+          start: segment.start,
+          end: segment.end,
+          speaker: speakerAssignment.get(`${windowIndex}|${segment.localSpeaker}`) || null,
+          score: segment.score,
+        });
+      }
+      continue;
+    }
+
     const assignment = assignGlobalSpeakers(windowSegments, referenceSegments, nextSpeakerIndex);
     nextSpeakerIndex = assignment.nextSpeakerIndex;
 
@@ -187,8 +213,30 @@ function mergeWindowSegments(windowResults = []) {
     }
   }
 
+  if (speakerAssignment) {
+    // Unembeddable micro-clusters take the label of the nearest assigned
+    // segment; with no assigned segments at all there is nothing to inherit.
+    const assigned = candidates.filter((candidate) => candidate.speaker);
+    for (const candidate of candidates) {
+      if (candidate.speaker || assigned.length === 0) continue;
+      const mid = (candidate.start + candidate.end) / 2;
+      let best = null;
+      let bestDistance = Infinity;
+      for (const other of assigned) {
+        const distance = Math.abs((other.start + other.end) / 2 - mid);
+        if (distance < bestDistance) {
+          bestDistance = distance;
+          best = other;
+        }
+      }
+      candidate.speaker = best ? best.speaker : null;
+    }
+  }
+
   const selected = [];
-  for (const candidate of candidates.sort((a, b) => b.score - a.score || a.start - b.start)) {
+  for (const candidate of candidates
+    .filter((candidate) => candidate.speaker)
+    .sort((a, b) => b.score - a.score || a.start - b.start)) {
     if (selected.some((existing) => segmentsOverlap(existing, candidate))) continue;
     selected.push(candidate);
   }

@@ -35,7 +35,11 @@ test("locked expected speaker count constrains diarization to the full mixed-aud
   assert.equal(result.locked, true);
 });
 
-test("automatic rediarization mode ignores persisted expected speaker count as a hard constraint", () => {
+test("live-observed speaker count never feeds the clustering target", () => {
+  // Live identification over-mints speakers in far-field audio; feeding its
+  // count to batch clustering forced exactly that many clusters (measured:
+  // inflated to the 16-speaker cap on a 6-person meeting). The windowed
+  // voiceprint recluster owns the count instead.
   const result = resolveSpeakerExpectation({
     sessionConfig: { enabled: true, expectedCount: 2, expectedCountLocked: false },
     attendees: [],
@@ -44,7 +48,7 @@ test("automatic rediarization mode ignores persisted expected speaker count as a
 
   assert.equal(result.numSpeakers, -1);
   assert.equal(result.cap, MAX_SPEAKER_COUNT);
-  assert.equal(result.softTarget, 3);
+  assert.equal(result.softTarget, DEFAULT_EXPECTED_SPEAKER_COUNT);
   assert.equal(result.locked, false);
 });
 

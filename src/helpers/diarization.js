@@ -17,6 +17,11 @@ const { applyConfirmedSpeaker, isSpeakerLocked } = require("./speakerAssignmentP
 const sidecarPidFile = require("./sidecarPidFile");
 const { MAX_SPEAKER_COUNT } = require("../constants/speakerDetection.json");
 const {
+  windowClusterMergeThreshold: SPEAKER_GLOBAL_MERGE_THRESHOLD,
+  windowClusterFragmentSeconds: SPEAKER_GLOBAL_FRAGMENT_SECONDS,
+} = require("../constants/speakerThresholds.json");
+const { reclusterWindowSpeakers } = require("./speakerGlobalRecluster");
+const {
   DEFAULT_WINDOW_SECONDS,
   DIARIZATION_PROFILES,
   mergeWindowSegments,
@@ -512,8 +517,31 @@ class DiarizationManager {
         });
       }
 
+      let speakerAssignment = null;
+      let reclusterInfo = null;
+      if (shouldWindow && windowResults.length > 1 && options.reclusterByVoiceprint !== false) {
+        try {
+          reclusterInfo = await this._reclusterWindowsByVoiceprint(wavPath, windowResults, options);
+          speakerAssignment = reclusterInfo?.assignment || null;
+        } catch (error) {
+          debugLogger.debug("Window voiceprint recluster skipped", { error: error.message });
+        }
+      }
+      if (reclusterInfo) {
+        debugLogger.info("Window speakers reclustered by voiceprint", {
+          windowClusters: reclusterInfo.clusterCount,
+          globalSpeakers: reclusterInfo.groupCount,
+          targetCount: reclusterInfo.targetCount,
+        });
+        diagnostics.recluster = {
+          windowClusters: reclusterInfo.clusterCount,
+          globalSpeakers: reclusterInfo.groupCount,
+          targetCount: reclusterInfo.targetCount,
+        };
+      }
+
       const mergedSegments = shouldWindow
-        ? mergeWindowSegments(windowResults)
+        ? mergeWindowSegments(windowResults, { speakerAssignment })
         : windowResults[0]?.segments || [];
       return {
         segments: this.stabilizeSpeakerClusters(mergedSegments, options.stabilizeOptions || {}),
@@ -537,6 +565,66 @@ class DiarizationManager {
     try {
       fs.unlinkSync(filePath);
     } catch (_) {}
+  }
+
+  /**
+   * Voiceprint-based global speaker assignment across windows: embed the
+   * longest utterances of every window-local cluster (absolute times into
+   * the full wav), then group the clusters with the recluster module. When
+   * the expected speaker count is known (numSpeakers > 0) it becomes the
+   * merge target; otherwise the merge stops at the similarity threshold.
+   * Returns { assignment, groupCount, clusterCount, targetCount } or null.
+   */
+  async _reclusterWindowsByVoiceprint(wavPath, windowResults, options = {}) {
+    const speakerEmbeddings = require("./speakerEmbeddings");
+    if (!speakerEmbeddings.isAvailable()) return null;
+
+    const centroids = {};
+    for (const [position, result] of windowResults.entries()) {
+      const windowIndex = Number.isFinite(Number(result?.index)) ? Number(result.index) : position;
+      const offset = Number(result?.startSeconds) || 0;
+      const bySpeaker = new Map();
+      for (const segment of result?.segments || []) {
+        const start = offset + Number(segment.start);
+        const end = offset + Number(segment.end);
+        if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) continue;
+        const speaker = String(segment.speaker || "speaker_unknown");
+        if (!bySpeaker.has(speaker)) bySpeaker.set(speaker, []);
+        bySpeaker.get(speaker).push({ start, end });
+      }
+      for (const [localSpeaker, list] of bySpeaker) {
+        const longest = [...list]
+          .sort((a, b) => b.end - b.start - (a.end - a.start))
+          .slice(0, 3);
+        const embeddings = [];
+        for (const segment of longest) {
+          const embedding = await speakerEmbeddings.extractEmbedding(
+            wavPath,
+            segment.start,
+            segment.end
+          );
+          if (embedding) embeddings.push(embedding);
+        }
+        const centroid = embeddings.length
+          ? speakerEmbeddings.computeCentroid(embeddings)
+          : null;
+        if (centroid?.length) centroids[`${windowIndex}|${localSpeaker}`] = Array.from(centroid);
+      }
+    }
+    if (Object.keys(centroids).length < 2) return null;
+
+    const numSpeakers = Number(options.numSpeakers);
+    const targetCount =
+      Number.isFinite(numSpeakers) && numSpeakers > 0
+        ? Math.min(Math.round(numSpeakers), MAX_SPEAKER_COUNT)
+        : null;
+
+    const result = reclusterWindowSpeakers(windowResults, centroids, {
+      fragmentSeconds: SPEAKER_GLOBAL_FRAGMENT_SECONDS,
+      threshold: SPEAKER_GLOBAL_MERGE_THRESHOLD,
+      targetCount,
+    });
+    return result ? { ...result, targetCount } : null;
   }
 
   _analyzeAudioFile(filePath, options = {}) {
