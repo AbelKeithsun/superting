@@ -71,6 +71,20 @@ contextBridge.exposeInMainWorld("electronAPI", {
     ipcRenderer.on("dictionary-aliases-updated", listener);
     return () => ipcRenderer.removeListener("dictionary-aliases-updated", listener);
   },
+  // Dictionary groups (nestable organization layer over words + aliases).
+  dictionaryGroupsList: () => ipcRenderer.invoke("dictionary-groups-list"),
+  dictionaryGroupCreate: (name, parentId = null) =>
+    ipcRenderer.invoke("dictionary-group-create", name, parentId),
+  dictionaryGroupRename: (id, name) => ipcRenderer.invoke("dictionary-group-rename", id, name),
+  dictionaryGroupDelete: (id) => ipcRenderer.invoke("dictionary-group-delete", id),
+  dictionaryGroupMove: (payload) => ipcRenderer.invoke("dictionary-group-move", payload),
+  dictionaryGroupsRestore: (snapshot) =>
+    ipcRenderer.invoke("dictionary-groups-restore", snapshot),
+  onDictionaryGroupsUpdated: (callback) => {
+    const listener = (_event, snapshot) => callback?.(snapshot);
+    ipcRenderer.on("dictionary-groups-updated", listener);
+    return () => ipcRenderer.removeListener("dictionary-groups-updated", listener);
+  },
   setAutoLearnEnabled: (enabled) => ipcRenderer.send("auto-learn-changed", enabled),
   learnReplacementCorrection: (payload) =>
     ipcRenderer.invoke("learn-replacement-correction", payload),

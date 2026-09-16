@@ -39,6 +39,54 @@ export type VoiceprintSegmentRecord = {
 
 export type InferenceMode = "providers" | "local" | "self-hosted" | "enterprise";
 
+// Dictionary groups: a nestable folder layer over dictionary words and
+// correction aliases. `parentId === null` marks a top-level group; items with
+// no assignment belong to the implicit "ungrouped" bucket.
+export type DictionaryGroup = {
+  id: number;
+  name: string;
+  parentId: number | null;
+  sortOrder: number;
+  itemCount: number;
+};
+
+export type DictionaryGroupAssignments = {
+  words: Record<string, number>;
+  aliases: Record<string, number>;
+};
+
+export type DictionaryGroupsSnapshot = {
+  groups: DictionaryGroup[];
+  assignments: DictionaryGroupAssignments;
+};
+
+export type DictionaryGroupsSnapshotResponse = DictionaryGroupsSnapshot & {
+  success: boolean;
+  error?: string;
+};
+
+export type DictionaryGroupMutationResponse = DictionaryGroupsSnapshotResponse & {
+  group?: DictionaryGroup;
+  deletedId?: number;
+  deletedName?: string;
+  reparentedTo?: number | null;
+  reparentedCount?: number;
+  ungroupedCount?: number;
+  movedId?: number;
+  parentId?: number | null;
+  restored?: number;
+  updated?: number;
+  /** Machine-readable failure reason, e.g. "duplicate-group-name". */
+  errorCode?: string | null;
+  snapshot?: DictionaryGroupSnapshotPayload;
+};
+
+/** Restorable snapshot of the whole group tree + membership (undo support). */
+export type DictionaryGroupSnapshotPayload = {
+  groups: Array<{ id: number; name: string; parentId: number | null; sortOrder: number }>;
+  assignments: DictionaryGroupAssignments;
+};
+
 export type SelfHostedType = "openai-compatible" | "lan";
 
 export type TranscriptionStatus = "completed" | "failed" | "pending";
@@ -619,6 +667,31 @@ declare global {
       ) => Promise<{ success: boolean }>;
       onDictionaryAliasesUpdated?: (
         callback: (aliases: Array<{ from: string; to: string }>) => void
+      ) => () => void;
+      // Dictionary groups (nestable organization layer: ungrouped items live
+      // in the "ungrouped" bucket, i.e. their group id is null).
+      dictionaryGroupsList?: () => Promise<DictionaryGroupsSnapshotResponse>;
+      dictionaryGroupCreate?: (
+        name: string,
+        parentId?: number | null
+      ) => Promise<DictionaryGroupMutationResponse>;
+      dictionaryGroupRename?: (
+        id: number,
+        name: string
+      ) => Promise<DictionaryGroupMutationResponse>;
+      dictionaryGroupDelete?: (id: number) => Promise<DictionaryGroupMutationResponse>;
+      // Moves one item ({ itemType, key, groupId }) or one group
+      // ({ moveGroupId, parentId } / { groupId } without itemType+key).
+      dictionaryGroupMove?: (
+        payload:
+          | { itemType: "word" | "alias"; key: string; groupId: number | null }
+          | { moveGroupId: number; parentId: number | null }
+      ) => Promise<DictionaryGroupMutationResponse>;
+      dictionaryGroupsRestore?: (
+        snapshot: DictionaryGroupSnapshotPayload
+      ) => Promise<DictionaryGroupMutationResponse>;
+      onDictionaryGroupsUpdated?: (
+        callback: (snapshot: DictionaryGroupsSnapshot) => void
       ) => () => void;
       setAutoLearnEnabled?: (enabled: boolean) => void;
       learnReplacementCorrection?: (payload: {
