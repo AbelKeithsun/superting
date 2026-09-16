@@ -1952,6 +1952,14 @@
       "title": "增強錯誤"
     },
     "speaker": {
+      "voiceprintReplacedToast": "已用本場會議的聲音更新 {{name}} 的一條聲紋",
+      "voiceprintKeptToast": "已保留 {{name}} 原有的 {{count}} 條聲紋，這次未新增",
+      "voiceprintLimitTitle": "{{name}} 已有 {{max}} 條聲紋，選擇要取代的一條",
+      "voiceprintLimitHint": "每人最多保留 {{max}} 條聲紋。選一條用本場會議的聲音取代，或取消以保留現有聲紋（這次標記仍會保留）。",
+      "voiceprintReplaceSlot": "取代這一條",
+      "voiceprintKeepExisting": "取消，保留現有聲紋",
+      "voiceprintSlotIndex": "第 {{index}} 條",
+      "voiceprintSlotClips": "{{count}} 段試聽",
       "you": "你",
       "them": "對方",
       "label": "發言者 {{n}}",
@@ -2537,6 +2545,10 @@
     "audioDescription": "偵測到持續麥克風活動時提示"
   },
   "contacts": {
+    "voiceprintCountWithMax": "聲紋 {{count}}/{{max}}",
+    "voiceprintTemplateIndex": "聲紋 {{index}}",
+    "voiceprintClipCount": "{{count}} 段試聽",
+    "deleteVoiceprintTemplate": "刪除這條聲紋",
     "title": "聯絡人",
     "titleDescription": "跨會議的聯絡人檔案。在任意筆記中用姓名即可新增與會人，信箱、電話、單位可之後補充。",
     "searchPlaceholder": "搜尋聯絡人...",

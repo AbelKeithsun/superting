@@ -4,5 +4,6 @@
   "batchConfirmedThreshold": 0.6,
   "batchSuggestedThreshold": 0.5,
   "clusterMergeThreshold": 0.8,
-  "clusterMergeMaxFragmentSeconds": 20
+  "clusterMergeMaxFragmentSeconds": 20,
+  "maxVoiceprintsPerPerson": 5
 }

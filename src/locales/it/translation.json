@@ -1952,6 +1952,14 @@
       "title": "Errore di miglioramento"
     },
     "speaker": {
+      "voiceprintReplacedToast": "Aggiornata un'impronta vocale di {{name}} con l'audio di questa riunione",
+      "voiceprintKeptToast": "Mantenute le {{count}} impronte vocali esistenti di {{name}} — nulla aggiunto",
+      "voiceprintLimitTitle": "{{name}} ha già {{max}} impronte vocali — scegli quale sostituire",
+      "voiceprintLimitHint": "Ogni persona conserva al massimo {{max}} impronte vocali. Scegli quale aggiornare con l'audio di questa riunione, oppure annulla per mantenere le attuali (la marcatura resta salvata).",
+      "voiceprintReplaceSlot": "Sostituisci questa",
+      "voiceprintKeepExisting": "Annulla, mantieni le attuali",
+      "voiceprintSlotIndex": "impronta {{index}}",
+      "voiceprintSlotClips": "{{count}} clip",
       "you": "Tu",
       "them": "Loro",
       "label": "Partecipante {{n}}",
@@ -2537,6 +2545,10 @@
     "audioDescription": "Notifica quando viene rilevata un'attività microfono prolungata"
   },
   "contacts": {
+    "voiceprintCountWithMax": "{{count}}/{{max}} impronte vocali",
+    "voiceprintTemplateIndex": "Impronta {{index}}",
+    "voiceprintClipCount": "{{count}} clip",
+    "deleteVoiceprintTemplate": "Elimina questa impronta",
     "title": "Persone",
     "titleDescription": "Profili di contatto tra riunioni. Aggiungi persone per nome in qualsiasi nota; email, telefono e organizzazione possono essere completati in seguito.",
     "searchPlaceholder": "Cerca persone...",

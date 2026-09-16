@@ -1994,6 +1994,14 @@
       "title": "Enhancement error"
     },
     "speaker": {
+      "voiceprintReplacedToast": "Updated one voiceprint of {{name}} with this meeting's audio",
+      "voiceprintKeptToast": "Kept the existing {{count}} voiceprints of {{name}} — nothing added",
+      "voiceprintLimitTitle": "{{name}} already has {{max}} voiceprints — pick one to replace",
+      "voiceprintLimitHint": "Each person keeps at most {{max}} voiceprints. Choose one to refresh with this meeting's audio, or cancel to keep the current set (your mark is still saved).",
+      "voiceprintReplaceSlot": "Replace this one",
+      "voiceprintKeepExisting": "Cancel, keep existing",
+      "voiceprintSlotIndex": "voiceprint {{index}}",
+      "voiceprintSlotClips": "{{count}} clips",
       "you": "You",
       "them": "Them",
       "label": "Speaker {{n}}",
@@ -2534,6 +2542,10 @@
     "audioDescription": "Prompt when sustained microphone activity is detected"
   },
   "contacts": {
+    "voiceprintCountWithMax": "{{count}}/{{max}} voiceprints",
+    "voiceprintTemplateIndex": "Voiceprint {{index}}",
+    "voiceprintClipCount": "{{count}} clips",
+    "deleteVoiceprintTemplate": "Delete this voiceprint",
     "title": "People",
     "titleDescription": "Cross-meeting contact profiles. Add people by name in any note; email, phone, and organization can be filled in later.",
     "searchPlaceholder": "Search people...",

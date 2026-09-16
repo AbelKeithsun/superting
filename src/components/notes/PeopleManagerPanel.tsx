@@ -1,7 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Loader2, Merge, Play, ChevronDown, ChevronRight, Trash2, X } from "lucide-react";
-import type { PersonRecord, VoiceprintSegmentRecord } from "../../types/electron";
+import type {
+  PersonRecord,
+  VoiceprintSegmentRecord,
+  VoiceprintSummary,
+} from "../../types/electron";
 
 /**
  * Cross-meeting contact (people) management: edit name/email/phone/org/notes,
@@ -33,6 +37,12 @@ export default function PeopleManagerPanel() {
   const [segmentsByPerson, setSegmentsByPerson] = useState<
     Record<number, VoiceprintSegmentRecord[]>
   >({});
+  // One person can hold up to maxVoiceprints templates; the panel lists each
+  // template with the clips it contributed, so calibration happens per sample.
+  const [voiceprintsByPerson, setVoiceprintsByPerson] = useState<
+    Record<number, VoiceprintSummary[]>
+  >({});
+  const [maxVoiceprints, setMaxVoiceprints] = useState(5);
   const [playbackUrls, setPlaybackUrls] = useState<Record<number, string>>({});
   const [playbackLoading, setPlaybackLoading] = useState<Record<number, boolean>>({});
   const [playbackErrors, setPlaybackErrors] = useState<Record<number, string>>({});
@@ -100,6 +110,20 @@ export default function PeopleManagerPanel() {
       if (personId != null) delete next[personId];
       return next;
     });
+    setVoiceprintsByPerson((prev) => {
+      const next = { ...prev };
+      if (personId != null) delete next[personId];
+      return next;
+    });
+    void refresh(query);
+  };
+
+  const deleteSingleVoiceprint = async (personId: number, voiceprintId: number) => {
+    await window.electronAPI?.voiceprintDelete?.(voiceprintId);
+    const result = await window.electronAPI?.voiceprintList?.(personId);
+    setVoiceprintsByPerson((prev) => ({ ...prev, [personId]: result?.voiceprints ?? [] }));
+    const segments = await window.electronAPI?.voiceprintSegmentList?.(personId);
+    setSegmentsByPerson((prev) => ({ ...prev, [personId]: segments?.segments ?? [] }));
     void refresh(query);
   };
 
@@ -119,8 +143,13 @@ export default function PeopleManagerPanel() {
     if (segmentsByPerson[personId]) return;
     setAuditionLoading(true);
     try {
-      const result = await window.electronAPI?.voiceprintSegmentList?.(personId);
+      const [result, templates] = await Promise.all([
+        window.electronAPI?.voiceprintSegmentList?.(personId),
+        window.electronAPI?.voiceprintList?.(personId),
+      ]);
       setSegmentsByPerson((prev) => ({ ...prev, [personId]: result?.segments ?? [] }));
+      setVoiceprintsByPerson((prev) => ({ ...prev, [personId]: templates?.voiceprints ?? [] }));
+      if (templates?.maxVoiceprints) setMaxVoiceprints(templates.maxVoiceprints);
     } finally {
       setAuditionLoading(false);
     }
@@ -155,6 +184,13 @@ export default function PeopleManagerPanel() {
     () => people.filter((p) => p.id !== mergeSourceId),
     [people, mergeSourceId]
   );
+
+  const formatTemplateDate = (value?: string): string => {
+    if (!value) return "";
+    const parsed = new Date(value.includes("T") ? value : `${value.replace(" ", "T")}Z`);
+    if (Number.isNaN(parsed.getTime())) return value;
+    return parsed.toLocaleDateString();
+  };
 
   const formatRange = (segment: VoiceprintSegmentRecord): string => {
     const start = Number(segment.start_seconds);
@@ -196,6 +232,7 @@ export default function PeopleManagerPanel() {
             const hasVoiceprints = (person.voiceprint_count ?? 0) > 0;
             const isAuditioning = auditionPersonId === person.id;
             const segments = segmentsByPerson[person.id] ?? [];
+            const templates = voiceprintsByPerson[person.id] ?? [];
             return (
               <div
                 key={person.id}
@@ -285,9 +322,10 @@ export default function PeopleManagerPanel() {
                           person.email,
                           person.phone,
                           person.organization,
-                          t("contacts.voiceprints", {
-                            defaultValue: "{{count}} voiceprint(s)",
+                          t("contacts.voiceprintCountWithMax", {
+                            defaultValue: "{{count}}/{{max}} voiceprints",
                             count: person.voiceprint_count ?? 0,
+                            max: maxVoiceprints,
                           }),
                         ]
                           .filter(Boolean)
@@ -357,13 +395,13 @@ export default function PeopleManagerPanel() {
                     </button>
 
                     {isAuditioning && (
-                      <div className="mt-2 space-y-1.5">
+                      <div className="mt-2 space-y-2">
                         {auditionLoading ? (
                           <div className="flex items-center gap-2 px-1 py-1 text-[11px] text-muted-foreground">
                             <Loader2 className="h-3 w-3 animate-spin" />
                             {t("contacts.loading", "Loading...")}
                           </div>
-                        ) : segments.length === 0 ? (
+                        ) : templates.length === 0 ? (
                           <p className="px-1 py-1 text-[11px] text-muted-foreground">
                             {t(
                               "contacts.voiceprintSegmentsEmpty",
@@ -371,50 +409,96 @@ export default function PeopleManagerPanel() {
                             )}
                           </p>
                         ) : (
-                          segments.map((segment) => {
-                            const url = playbackUrls[segment.id];
-                            const isClipLoading = !!playbackLoading[segment.id];
-                            const clipError = playbackErrors[segment.id];
+                          templates.map((template, index) => {
+                            const templateSegments = segments.filter(
+                              (segment) => segment.voiceprint_id === template.id
+                            );
                             return (
                               <div
-                                key={segment.id}
-                                className="flex flex-col gap-1.5 rounded-md border border-border/60 bg-background/40 p-2"
+                                key={template.id}
+                                data-voiceprint-template={template.id}
+                                className="rounded-md border border-border/60 bg-background/40 p-2"
                               >
                                 <div className="flex items-center gap-2">
-                                  <button
-                                    type="button"
-                                    onClick={() => void loadClip(segment.id)}
-                                    disabled={isClipLoading}
-                                    className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-border/70 text-muted-foreground hover:bg-foreground/5 hover:text-foreground disabled:opacity-50"
-                                    aria-label={t("contacts.playVoiceprintClip", "Play voiceprint clip")}
-                                  >
-                                    {isClipLoading ? (
-                                      <Loader2 className="h-3 w-3 animate-spin" />
-                                    ) : (
-                                      <Play size={11} />
-                                    )}
-                                  </button>
+                                  <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium tabular-nums text-muted-foreground">
+                                    {t("contacts.voiceprintTemplateIndex", {
+                                      defaultValue: "声纹 {{index}}",
+                                      index: templates.length - index,
+                                    })}
+                                  </span>
                                   <div className="min-w-0 flex-1">
                                     <div className="truncate text-[11px] font-medium text-foreground">
-                                      {segment.note_title ||
+                                      {template.note_title ||
                                         t("contacts.unnamedNote", "Untitled note")}
                                     </div>
-                                    {formatRange(segment) && (
-                                      <div className="text-[10px] tabular-nums text-muted-foreground">
-                                        {formatRange(segment)}
-                                      </div>
-                                    )}
+                                    <div className="text-[10px] text-muted-foreground">
+                                      {[
+                                        formatTemplateDate(template.created_at),
+                                        t("contacts.voiceprintClipCount", {
+                                          defaultValue: "{{count}} 段试听",
+                                          count: templateSegments.length,
+                                        }),
+                                      ]
+                                        .filter(Boolean)
+                                        .join(" · ")}
+                                    </div>
                                   </div>
+                                  <button
+                                    type="button"
+                                    title={t("contacts.deleteVoiceprintTemplate", "删除这条声纹")}
+                                    aria-label={t("contacts.deleteVoiceprintTemplate", "删除这条声纹")}
+                                    onClick={() =>
+                                      void deleteSingleVoiceprint(person.id, template.id)
+                                    }
+                                    className="shrink-0 rounded px-1.5 py-1 text-muted-foreground hover:bg-foreground/5 hover:text-destructive"
+                                  >
+                                    <Trash2 size={12} />
+                                  </button>
                                 </div>
-                                {url && (
-                                  <audio controls preload="none" className="h-8 w-full">
-                                    <source src={url} type="audio/wav" />
-                                  </audio>
-                                )}
-                                {clipError && (
-                                  <p className="px-0.5 text-[10px] text-destructive/80">
-                                    {clipError}
-                                  </p>
+
+                                {templateSegments.length > 0 && (
+                                  <div className="mt-1.5 space-y-1.5">
+                                    {templateSegments.map((segment) => {
+                                      const url = playbackUrls[segment.id];
+                                      const isClipLoading = !!playbackLoading[segment.id];
+                                      const clipError = playbackErrors[segment.id];
+                                      return (
+                                        <div key={segment.id} className="flex flex-col gap-1.5">
+                                          <div className="flex items-center gap-2">
+                                            <button
+                                              type="button"
+                                              onClick={() => void loadClip(segment.id)}
+                                              disabled={isClipLoading}
+                                              className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-border/70 text-muted-foreground hover:bg-foreground/5 hover:text-foreground disabled:opacity-50"
+                                              aria-label={t(
+                                                "contacts.playVoiceprintClip",
+                                                "Play voiceprint clip"
+                                              )}
+                                            >
+                                              {isClipLoading ? (
+                                                <Loader2 className="h-3 w-3 animate-spin" />
+                                              ) : (
+                                                <Play size={11} />
+                                              )}
+                                            </button>
+                                            <div className="min-w-0 flex-1 text-[10px] tabular-nums text-muted-foreground">
+                                              {formatRange(segment)}
+                                            </div>
+                                          </div>
+                                          {url && (
+                                            <audio controls preload="none" className="h-8 w-full">
+                                              <source src={url} type="audio/wav" />
+                                            </audio>
+                                          )}
+                                          {clipError && (
+                                            <p className="px-0.5 text-[10px] text-destructive/80">
+                                              {clipError}
+                                            </p>
+                                          )}
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
                                 )}
                               </div>
                             );

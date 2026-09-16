@@ -1953,6 +1953,14 @@
       "title": "Verbesserungsfehler"
     },
     "speaker": {
+      "voiceprintReplacedToast": "Eine Voiceprint von {{name}} mit dem Audio dieses Meetings aktualisiert",
+      "voiceprintKeptToast": "Die vorhandenen {{count}} Voiceprints von {{name}} bleiben erhalten — nichts hinzugefügt",
+      "voiceprintLimitTitle": "{{name}} hat bereits {{max}} Voiceprints — eines zum Ersetzen wählen",
+      "voiceprintLimitHint": "Pro Person werden höchstens {{max}} Voiceprints gespeichert. Wähle eines, das mit dem Audio dieses Meetings aktualisiert wird, oder brich ab (die Markierung bleibt gespeichert).",
+      "voiceprintReplaceSlot": "Dieses ersetzen",
+      "voiceprintKeepExisting": "Abbrechen, vorhandene behalten",
+      "voiceprintSlotIndex": "Voiceprint {{index}}",
+      "voiceprintSlotClips": "{{count}} Clips",
       "you": "Du",
       "them": "Gegenüber",
       "label": "Sprecher {{n}}",
@@ -2538,6 +2546,10 @@
     "audioDescription": "Benachrichtigung bei anhaltender Mikrofonaktivität"
   },
   "contacts": {
+    "voiceprintCountWithMax": "{{count}}/{{max}} Voiceprints",
+    "voiceprintTemplateIndex": "Voiceprint {{index}}",
+    "voiceprintClipCount": "{{count}} Clips",
+    "deleteVoiceprintTemplate": "Dieses Voiceprint löschen",
     "title": "Personen",
     "titleDescription": "Besprechungsübergreifende Kontaktprofile. Personen können in jeder Notiz nur mit Namen hinzugefügt werden; E-Mail, Telefon und Organisation lassen sich später ergänzen.",
     "searchPlaceholder": "Personen suchen...",
