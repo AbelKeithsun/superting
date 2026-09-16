@@ -27,6 +27,10 @@ import {
   type TranscriptSpeakerStatus,
 } from "../utils/transcriptSpeakerState";
 import { stripRealtimeSpeakerMetadata } from "../utils/liveTranscriptStream";
+import {
+  getTranscriptTimelineOffsetSeconds,
+  toTranscriptTimelineSeconds,
+} from "../utils/meetingTranscriptTimeline";
 
 export interface TranscriptSegment {
   id: string;
@@ -359,20 +363,24 @@ export const primeMeetingWorklet = () => {
 // Match on source + timestamp (± tolerance); fall back to text only when no
 // timestamps are available. Among timestamp candidates, prefer an exact-text
 // match (the unedited twin) over the edited version.
-const RETRACT_TIMESTAMP_TOLERANCE_MS = 2000;
+// Segments hold timeline seconds, the incoming retract holds the provider's
+// epoch milliseconds — both go through the same conversion first.
+const RETRACT_TIMESTAMP_TOLERANCE_SECONDS = 2;
 
 const removeRetractedSegment = (
   segments: TranscriptSegment[],
-  data: { text: string; source: "mic" | "system"; timestamp?: number }
+  data: { text: string; source: "mic" | "system"; timestamp?: number },
+  timelineTimestamp?: number
 ): TranscriptSegment[] => {
-  const hasTimestamp = typeof data.timestamp === "number";
+  const hasTimestamp = typeof timelineTimestamp === "number";
   const candidates: Array<{ segment: TranscriptSegment; index: number }> = [];
   segments.forEach((segment, index) => {
     if (segment.source !== data.source) return;
     const timestampMatches =
       hasTimestamp &&
       typeof segment.timestamp === "number" &&
-      Math.abs(segment.timestamp - (data.timestamp as number)) <= RETRACT_TIMESTAMP_TOLERANCE_MS;
+      Math.abs(segment.timestamp - (timelineTimestamp as number)) <=
+        RETRACT_TIMESTAMP_TOLERANCE_SECONDS;
     if (hasTimestamp ? timestampMatches : segment.text === data.text) {
       candidates.push({ segment, index });
     }
@@ -541,6 +549,9 @@ let isRecordingFlag = false;
 let isStartingFlag = false;
 let isPrepared = false;
 let segmentsRefValue: TranscriptSegment[] = [];
+// Seconds the running session is shifted by so a resumed recording continues
+// the note timeline instead of restarting at 0.
+let timelineOffsetSecondsValue = 0;
 let preparePromise: Promise<void> | null = null;
 let ipcCleanups: Array<() => void> = [];
 let speakerIdentifications: SpeakerIdentification[] = [];
@@ -808,6 +819,9 @@ export async function startRecording(args: StartRecordingArgs): Promise<void> {
   }
 
   segmentsRefValue = seed;
+  // Resumed sessions carry the previous sessions' end as their time origin, so
+  // their live (epoch-millisecond) timestamps land after the existing lines.
+  timelineOffsetSecondsValue = getTranscriptTimelineOffsetSeconds(seed);
   speakerIdentifications = [];
   nextPlaceholderSpeakerIndex = maxSpeakerIndex + 1;
   recentSystemSpeaker = null;
@@ -971,7 +985,15 @@ export async function startRecording(args: StartRecordingArgs): Promise<void> {
       }) => {
         if (data.type === "retract") {
           const current = useMeetingRecordingStore.getState().segments;
-          const next = removeRetractedSegment(current, data);
+          const next = removeRetractedSegment(
+            current,
+            data,
+            toTranscriptTimelineSeconds(
+              data.timestamp,
+              useMeetingRecordingStore.getState().recordingStartedAt,
+              timelineOffsetSecondsValue
+            )
+          );
           if (next === current) return;
           segmentsRefValue = next;
           useMeetingRecordingStore.setState({
@@ -995,7 +1017,11 @@ export async function startRecording(args: StartRecordingArgs): Promise<void> {
             id: `seg-${++segmentCounter}`,
             text: data.text,
             source: data.source,
-            timestamp: data.timestamp,
+            timestamp: toTranscriptTimelineSeconds(
+              data.timestamp,
+              useMeetingRecordingStore.getState().recordingStartedAt,
+              timelineOffsetSecondsValue
+            ),
           })
         );
 
