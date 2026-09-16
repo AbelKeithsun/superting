@@ -39,6 +39,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Unified home timeline.** The home page used to list only dictation transcriptions — meeting recordings (notes table) never appeared. Home is now a single reverse-chronological timeline mixing dictation entries with recent notes/meetings under the existing date groups. Note entries carry a type badge (会议/笔记/导入), title, duration and a content preview, and click straight through to the note; dictation entries keep all their actions. The list refreshes whenever home becomes visible (all 10 locales).
 
+### Pre-meeting speaker priors
+
+- **Pin the speaker count before a meeting starts.** A new 说话人数 pill sits next to the attendees pill in the note header: set 1–16 speakers or stay on auto. A manual pin is a locked target for diarization; auto follows attendee lists and observed speakers. Works before, during and after recording.
+- **Enumerating attendees suggests the count.** Add 2+ participants and the count follows the list until you pin a number yourself (a manual choice always wins).
+- **Attendees prime speaker recognition.** Enumerated participants resolve to speaker identities (by email/name) and get a first, slightly relaxed matching pass in live identification and batch relabelling (threshold 0.05 lower, margin still enforced). Walk-in speakers are still recognised or created — the prior is a weight, never a restriction. Priors refresh mid-recording when the attendee list changes.
+
 ## [2.0.8] - 2026-09-15
 
 ### Speaker marking → contacts (cross-session reuse)
