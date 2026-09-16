@@ -352,10 +352,10 @@ function TranscriptAudioPlayer({
     : t("notes.editor.audioPlayerPlay");
   const rateLabel = t("notes.editor.audioPlayerRate", { rate: `${rate}x` });
   const iconButtonClass =
-    "inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-slate-100 hover:text-slate-900 disabled:opacity-45 disabled:pointer-events-none";
+    "inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-45 disabled:pointer-events-none";
 
   return (
-    <div className="border-b border-border/50 bg-white px-8 py-2">
+    <div className="border-b border-border/50 bg-card px-8 py-2">
       <div className="mx-auto flex max-w-5xl items-center gap-3 text-xs text-muted-foreground">
         <audio
           ref={audioRef}
@@ -461,7 +461,7 @@ function TranscriptAudioPlayer({
             <button
               type="button"
               onClick={toggleRate}
-              className="inline-flex h-7 min-w-9 items-center justify-center rounded-md px-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-slate-100 hover:text-slate-900"
+              className="inline-flex h-7 min-w-9 items-center justify-center rounded-md px-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
               title={rateLabel}
               aria-label={rateLabel}
             >
@@ -3603,13 +3603,13 @@ export default function NoteEditor({
                   ref={plainTranscriptTextareaRef}
                   value={editableTranscriptText}
                   onChange={(event) => setEditableTranscriptText(event.target.value)}
-                  className="mx-5 mt-5 mb-24 h-[calc(100%-7rem)] w-[calc(100%-2.5rem)] resize-none rounded-xl border border-slate-200 bg-white px-5 py-4 text-sm leading-relaxed text-slate-900 shadow-sm outline-none placeholder:text-slate-400 focus:border-ring/50 focus:ring-2 focus:ring-ring/10"
+                  className="mx-5 mt-5 mb-24 h-[calc(100%-7rem)] w-[calc(100%-2.5rem)] resize-none rounded-xl border border-border/60 bg-card px-5 py-4 text-sm leading-relaxed text-foreground shadow-sm outline-none placeholder:text-muted-foreground/60 focus:border-ring/50 focus:ring-2 focus:ring-ring/10"
                 />
               ) : (
                 <RichTextEditor
                   value={effectiveTranscript}
                   disabled
-                  className="mx-5 mt-5 mb-24 h-[calc(100%-7rem)] w-[calc(100%-2.5rem)] rounded-xl border border-slate-200 bg-white shadow-sm"
+                  className="mx-5 mt-5 mb-24 h-[calc(100%-7rem)] w-[calc(100%-2.5rem)] rounded-xl border border-border/60 bg-card shadow-sm"
                   findQuery={findText}
                   findActiveIndex={activeFindIndex}
                   findIgnoreCase={ignoreCase}
@@ -3640,7 +3640,7 @@ export default function NoteEditor({
                 <RichTextEditor
                   value={enhancement.content}
                   readOnly
-                  className="mx-5 mt-5 mb-24 h-[calc(100%-7rem)] w-[calc(100%-2.5rem)] rounded-xl border border-slate-200 bg-white shadow-sm"
+                  className="mx-5 mt-5 mb-24 h-[calc(100%-7rem)] w-[calc(100%-2.5rem)] rounded-xl border border-border/60 bg-card shadow-sm"
                   findQuery={findText}
                   findActiveIndex={activeFindIndex}
                   findIgnoreCase={ignoreCase}
@@ -3654,7 +3654,7 @@ export default function NoteEditor({
                   toolbarMode={editorMode}
                   onEditorModeChange={setEditorMode}
                   onImportFile={() => openImportFilePicker("note")}
-                  className="mx-5 mt-5 mb-24 h-[calc(100%-7rem)] w-[calc(100%-2.5rem)] rounded-xl border border-slate-200 bg-white shadow-sm"
+                  className="mx-5 mt-5 mb-24 h-[calc(100%-7rem)] w-[calc(100%-2.5rem)] rounded-xl border border-border/60 bg-card shadow-sm"
                   findQuery={findText}
                   findActiveIndex={activeFindIndex}
                   findIgnoreCase={ignoreCase}
@@ -3670,7 +3670,7 @@ export default function NoteEditor({
                   toolbarMode={editorMode}
                   onEditorModeChange={setEditorMode}
                   onImportFile={() => openImportFilePicker("note")}
-                  className="mx-5 mt-5 mb-24 h-[calc(100%-7rem)] w-[calc(100%-2.5rem)] rounded-xl border border-slate-200 bg-white shadow-sm"
+                  className="mx-5 mt-5 mb-24 h-[calc(100%-7rem)] w-[calc(100%-2.5rem)] rounded-xl border border-border/60 bg-card shadow-sm"
                   findQuery={findText}
                   findActiveIndex={activeFindIndex}
                   findIgnoreCase={ignoreCase}
@@ -3687,7 +3687,7 @@ export default function NoteEditor({
                     readOnly
                     editorRef={editorRef}
                     placeholder={t("notes.editor.startWriting")}
-                    className="mx-5 mt-5 mb-24 h-[calc(100%-7rem)] w-[calc(100%-2.5rem)] rounded-xl border border-slate-200 bg-white shadow-sm transition-colors"
+                    className="mx-5 mt-5 mb-24 h-[calc(100%-7rem)] w-[calc(100%-2.5rem)] rounded-xl border border-border/60 bg-card shadow-sm transition-colors"
                     findQuery={findText}
                     findActiveIndex={activeFindIndex}
                     findIgnoreCase={ignoreCase}
@@ -3703,7 +3703,7 @@ export default function NoteEditor({
                     onImportFile={() => openImportFilePicker("note")}
                     placeholder={t("notes.editor.startWriting")}
                     disabled={actionProcessingState === "processing"}
-                    className="mx-5 mt-5 mb-24 h-[calc(100%-7rem)] w-[calc(100%-2.5rem)] rounded-xl border border-slate-200 bg-white shadow-sm transition-colors focus-within:border-ring/50 focus-within:ring-2 focus-within:ring-ring/10"
+                    className="mx-5 mt-5 mb-24 h-[calc(100%-7rem)] w-[calc(100%-2.5rem)] rounded-xl border border-border/60 bg-card shadow-sm transition-colors focus-within:border-ring/50 focus-within:ring-2 focus-within:ring-ring/10"
                     findQuery={findText}
                     findActiveIndex={activeFindIndex}
                     findIgnoreCase={ignoreCase}
@@ -3722,7 +3722,7 @@ export default function NoteEditor({
                     editorRef={editorRef}
                     placeholder={t("notes.editor.startWriting")}
                     disabled={actionProcessingState === "processing"}
-                    className="mx-5 mt-5 mb-24 h-[calc(100%-7rem)] w-[calc(100%-2.5rem)] rounded-xl border border-slate-200 bg-white shadow-sm transition-colors focus-within:border-ring/50 focus-within:ring-2 focus-within:ring-ring/10"
+                    className="mx-5 mt-5 mb-24 h-[calc(100%-7rem)] w-[calc(100%-2.5rem)] rounded-xl border border-border/60 bg-card shadow-sm transition-colors focus-within:border-ring/50 focus-within:ring-2 focus-within:ring-ring/10"
                     findQuery={findText}
                     findActiveIndex={activeFindIndex}
                     findIgnoreCase={ignoreCase}
