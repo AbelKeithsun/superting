@@ -2070,6 +2070,37 @@
       "newRecordingsOnly": "Les changements de qualité ne s'appliquent qu'aux nouveaux enregistrements ; les existants ne sont pas réencodés."
     },
     "transcript": {
+    "inlineEdit": {
+      "title": "Modifier ce segment",
+      "hint": "Perte de focus ou ⌘/Ctrl+Entrée pour valider · Échap pour quitter"
+    },
+    "correction": {
+      "dialogTitle": "Ajouter au dictionnaire de corrections",
+      "dialogHint": "Le mot de droite est ajouté au dictionnaire et la paire est enregistrée comme correction pour que les prochaines transcriptions soient corrigées automatiquement.",
+      "fromPlaceholder": "Incorrect (facultatif)",
+      "toPlaceholder": "Correct",
+      "addRow": "Ajouter une ligne",
+      "submit": "Envoyer",
+      "manualTitle": "L'apprentissage automatique est désactivé — envoyer cette correction ?",
+      "manualTitleBatch": "L'apprentissage automatique est désactivé — {{count}} modifications en attente",
+      "noneTitle": "Aucune entrée de dictionnaire pour cette modification",
+      "savedTitle": "{{count}} correction(s) ajoutée(s) au dictionnaire",
+      "reasons": {
+        "unknown": "Raison inconnue",
+        "empty": "Rien à comparer",
+        "no-change": "Aucune modification réelle",
+        "insertion-only": "Seulement des ajouts — aucune paire de remplacement",
+        "deletion-only": "Seulement des suppressions — aucune paire de remplacement",
+        "mixed-insert-delete": "Uniquement des ajouts et suppressions — aucune paire",
+        "punctuation-only": "Seule la ponctuation a changé",
+        "rewrite": "Trop de changements — cela ressemble à une réécriture",
+        "too-short": "Le mot corrigé est trop court (min. 2 caractères CJK / 3 latins)",
+        "too-different": "Les mots diffèrent trop pour être une correction",
+        "already-in-dictionary": "Cette correction est déjà dans votre dictionnaire",
+        "not-learnable": "Aucune paire incorrect → correct exploitable",
+        "learned-candidate": "Reconnu comme correction exploitable"
+      }
+    },
       "liveEdit": {
         "learned": "Appris : {{from}} → {{to}}",
         "learnedMultiple": "{{count}} corrections apprises",

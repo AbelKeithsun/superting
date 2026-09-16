@@ -40,6 +40,11 @@ export interface TranscriptSegment {
   // merging can still correlate the edited segment with raw engine output.
   editedByUser?: boolean;
   originalText?: string;
+  // Last text the correction learner already saw for this segment. Edits are
+  // diffed against it (falling back to originalText/text) so repeated
+  // touch-ups keep yielding learnable pairs instead of accumulating into one
+  // diff that looks like a rewrite.
+  learnedText?: string;
   speaker?: string;
   speakerName?: string;
   speakerIsPlaceholder?: boolean;

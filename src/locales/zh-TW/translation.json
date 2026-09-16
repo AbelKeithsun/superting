@@ -2029,6 +2029,37 @@
       "newRecordingsOnly": "音質設定僅對新錄音生效，歷史錄音不會重新編碼。"
     },
     "transcript": {
+    "inlineEdit": {
+      "title": "編輯這段文字",
+      "hint": "失焦或 ⌘/Ctrl+Enter 提交 · Esc 退出"
+    },
+    "correction": {
+      "dialogTitle": "新增到糾錯詞典",
+      "dialogHint": "右側的詞會加入詞典，這一對會作為糾錯保存，之後的轉寫會自動更正。",
+      "fromPlaceholder": "錯誤寫法（可選）",
+      "toPlaceholder": "正確寫法",
+      "addRow": "再加一條",
+      "submit": "提交",
+      "manualTitle": "自動學習已關閉 —— 要提交這條糾錯嗎？",
+      "manualTitleBatch": "自動學習已關閉 —— {{count}} 處修改待提交",
+      "noneTitle": "這次修改未產生詞典條目",
+      "savedTitle": "已向詞典新增 {{count}} 條糾錯",
+      "reasons": {
+        "unknown": "原因不明",
+        "empty": "沒有內容可比對",
+        "no-change": "沒有實際修改",
+        "insertion-only": "只新增了內容，沒有可配對的取代",
+        "deletion-only": "只刪除了內容，沒有可配對的取代",
+        "mixed-insert-delete": "只有增刪、沒有取代，無法產生糾錯對",
+        "punctuation-only": "只修改了標點",
+        "rewrite": "改動過大，比較像重寫而非糾錯",
+        "too-short": "糾正後的詞太短（中文至少 2 字、西文至少 3 字元）",
+        "too-different": "前後差異過大，不像同一個詞的糾錯",
+        "already-in-dictionary": "這個糾錯已在詞典中",
+        "not-learnable": "未形成可學習的錯→對配對",
+        "learned-candidate": "已識別為可學習的糾錯"
+      }
+    },
       "liveEdit": {
         "learned": "已學習：{{from}} → {{to}}",
         "learnedMultiple": "已學習 {{count}} 條糾正",

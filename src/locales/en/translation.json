@@ -2071,6 +2071,37 @@
       "newRecordingsOnly": "Quality changes affect new recordings only; existing recordings are not re-encoded."
     },
     "transcript": {
+    "inlineEdit": {
+      "title": "Edit this segment",
+      "hint": "Blur or ⌘/Ctrl+Enter to submit · Esc to exit"
+    },
+    "correction": {
+      "dialogTitle": "Add to correction dictionary",
+      "dialogHint": "The right-hand word is added to your dictionary, and the pair is stored as a correction so future transcripts are fixed automatically.",
+      "fromPlaceholder": "Wrong (optional)",
+      "toPlaceholder": "Correct",
+      "addRow": "Add another",
+      "submit": "Submit",
+      "manualTitle": "Auto-learn is off — submit this correction?",
+      "manualTitleBatch": "Auto-learn is off — {{count}} edits are waiting",
+      "noneTitle": "No dictionary entry from this edit",
+      "savedTitle": "Added {{count}} correction(s) to the dictionary",
+      "reasons": {
+        "unknown": "Reason unknown",
+        "empty": "Nothing to compare",
+        "no-change": "No actual change",
+        "insertion-only": "Only words were added — there is no replacement pair",
+        "deletion-only": "Only words were removed — there is no replacement pair",
+        "mixed-insert-delete": "Only insertions and deletions — no replacement pair",
+        "punctuation-only": "Only punctuation changed",
+        "rewrite": "Too much changed — this looks like a rewrite",
+        "too-short": "The corrected word is too short (min 2 CJK / 3 latin characters)",
+        "too-different": "The two words differ too much to be a correction",
+        "already-in-dictionary": "This correction is already in your dictionary",
+        "not-learnable": "No learnable wrong → right pair found",
+        "learned-candidate": "Recognised as a learnable correction"
+      }
+    },
       "liveEdit": {
         "learned": "Learned: {{from}} → {{to}}",
         "learnedMultiple": "Learned {{count}} corrections",

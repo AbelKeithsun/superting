@@ -2029,6 +2029,37 @@
       "newRecordingsOnly": "Le modifiche di qualità valgono solo per le nuove registrazioni; quelle esistenti non vengono ricodificate."
     },
     "transcript": {
+    "inlineEdit": {
+      "title": "Modifica questo segmento",
+      "hint": "Perdi il focus o ⌘/Ctrl+Invio per inviare · Esc per uscire"
+    },
+    "correction": {
+      "dialogTitle": "Aggiungi al dizionario delle correzioni",
+      "dialogHint": "La parola a destra viene aggiunta al dizionario e la coppia viene salvata come correzione, così le prossime trascrizioni saranno corrette automaticamente.",
+      "fromPlaceholder": "Errato (facoltativo)",
+      "toPlaceholder": "Corretto",
+      "addRow": "Aggiungi riga",
+      "submit": "Invia",
+      "manualTitle": "L'apprendimento automatico è disattivato — inviare questa correzione?",
+      "manualTitleBatch": "L'apprendimento automatico è disattivato — {{count}} modifiche in attesa",
+      "noneTitle": "Nessuna voce di dizionario da questa modifica",
+      "savedTitle": "{{count}} correzione/i aggiunte al dizionario",
+      "reasons": {
+        "unknown": "Motivo sconosciuto",
+        "empty": "Niente da confrontare",
+        "no-change": "Nessuna modifica reale",
+        "insertion-only": "Solo parole aggiunte — nessuna coppia di sostituzione",
+        "deletion-only": "Solo parole rimosse — nessuna coppia di sostituzione",
+        "mixed-insert-delete": "Solo aggiunte e rimozioni — nessuna coppia",
+        "punctuation-only": "Solo la punteggiatura è cambiata",
+        "rewrite": "Troppe modifiche — sembra una riscrittura",
+        "too-short": "La parola corretta è troppo corta (min. 2 CJK / 3 caratteri latini)",
+        "too-different": "Le parole differiscono troppo per essere una correzione",
+        "already-in-dictionary": "Questa correzione è già nel dizionario",
+        "not-learnable": "Nessuna coppia errato → corretto apprendibile",
+        "learned-candidate": "Riconosciuta come correzione apprendibile"
+      }
+    },
       "liveEdit": {
         "learned": "Appreso: {{from}} → {{to}}",
         "learnedMultiple": "{{count}} correzioni apprese",

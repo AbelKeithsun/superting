@@ -635,6 +635,20 @@ declare global {
         success: boolean;
         learned: string[];
         pairs: Array<{ from: string; to: string }>;
+        /** Reasons why an edit produced no learnable pair (see correctionLearner). */
+        reasons?: string[];
+        /** Auto-learn is off: pairs are candidates for a manual submit. */
+        disabled?: boolean;
+      }>;
+      learnMeetingCorrections?: (payload: {
+        edits: Array<{ originalText: string; editedText: string }>;
+        source: "meeting-live-edit";
+      }) => Promise<{
+        success: boolean;
+        learned: string[];
+        pairs: Array<{ from: string; to: string }>;
+        reasons?: string[];
+        disabled?: boolean;
       }>;
       undoMeetingCorrection?: (payload: {
         pairs: Array<{ from: string; to: string }>;

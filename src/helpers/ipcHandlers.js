@@ -1639,40 +1639,87 @@ class IPCHandlers {
       return { success: true, learned: dictAdditions };
     };
 
-    ipcMain.handle("learn-meeting-correction", async (_event, payload) => {
-      try {
-        if (!this._autoLearnEnabled) {
-          debugLogger.debug("[AutoLearn] Meeting learning disabled, skipping");
-          return { success: true, learned: [], pairs: [] };
-        }
-        if (!payload || payload.source !== "meeting-live-edit") {
-          return { success: false, learned: [], pairs: [] };
-        }
-
-        const { extractCorrectionPairs } = require("../utils/correctionLearner");
-        const currentDict = this._getDictionarySafe();
-        const pairs = extractCorrectionPairs({
-          originalText: payload.originalText,
-          editedText: payload.editedText,
+    // Shared meeting-edit learning: analyze every (base → edited) pair, then
+    // either persist automatically or hand the candidates back so the renderer
+    // can offer a manual "提交到纠错词典" action. Always answers with the pairs
+    // and a machine-readable reason so no edit ends without feedback.
+    const runMeetingCorrectionLearning = (edits) => {
+      const { analyzeCorrection } = require("../utils/correctionLearner");
+      const currentDict = this._getDictionarySafe();
+      const pairs = [];
+      const reasons = [];
+      for (const edit of edits) {
+        const analysis = analyzeCorrection({
+          originalText: edit?.originalText,
+          editedText: edit?.editedText,
           existingDictionary: currentDict,
         });
-        if (!pairs.length) {
-          debugLogger.debug("[AutoLearn] Meeting edit produced no pairs", {
-            originalText: String(payload.originalText || "").slice(0, 80),
-          });
-          return { success: true, learned: [], pairs: [] };
+        if (analysis.pairs.length > 0) {
+          for (const pair of analysis.pairs) {
+            if (!pairs.some((p) => p.from === pair.from && p.to === pair.to)) pairs.push(pair);
+          }
+        } else {
+          reasons.push(analysis.reason);
         }
+      }
 
-        const saved = saveMeetingCorrectionPairs(currentDict, pairs);
-        if (!saved.success) return saved;
+      if (!this._autoLearnEnabled) {
+        debugLogger.debug("[AutoLearn] Meeting learning disabled; offering manual submit", {
+          pairs: pairs.length,
+        });
+        return { success: true, disabled: true, learned: [], pairs, reasons };
+      }
+      if (pairs.length === 0) {
+        debugLogger.debug("[AutoLearn] Meeting edit produced no pairs", { reasons });
+        return { success: true, disabled: false, learned: [], pairs: [], reasons };
+      }
 
+      const saved = saveMeetingCorrectionPairs(currentDict, pairs);
+      if (!saved.success) return { ...saved, disabled: false, pairs, reasons };
+      return { ...saved, disabled: false, pairs, reasons };
+    };
+
+    ipcMain.handle("learn-meeting-correction", async (_event, payload) => {
+      try {
+        if (!payload || payload.source !== "meeting-live-edit") {
+          return { success: false, learned: [], pairs: [], reasons: [] };
+        }
+        const result = runMeetingCorrectionLearning([
+          { originalText: payload.originalText, editedText: payload.editedText },
+        ]);
         // Quiet receipt: in-note toast + undo handled by the renderer.
-        this.broadcastToWindows("corrections-learned-quiet", { pairs, source: payload.source });
-        debugLogger.debug("[AutoLearn] Meeting correction pairs saved", { pairs });
-        return { ...saved, pairs };
+        if (!result.disabled && result.pairs.length > 0 && result.success) {
+          this.broadcastToWindows("corrections-learned-quiet", {
+            pairs: result.pairs,
+            source: payload.source,
+          });
+        }
+        return result;
       } catch (error) {
         debugLogger.debug("[AutoLearn] Meeting correction failed", { error: error.message });
-        return { success: false, learned: [], pairs: [], error: error.message };
+        return { success: false, learned: [], pairs: [], reasons: [], error: error.message };
+      }
+    });
+
+    // Batch variant used when "编辑转写" is saved: learns every changed segment
+    // in one round trip and emits a single aggregated receipt.
+    ipcMain.handle("learn-meeting-corrections", async (_event, payload) => {
+      try {
+        const edits = Array.isArray(payload?.edits) ? payload.edits : [];
+        if (!payload || payload.source !== "meeting-live-edit" || edits.length === 0) {
+          return { success: false, learned: [], pairs: [], reasons: [] };
+        }
+        const result = runMeetingCorrectionLearning(edits);
+        if (!result.disabled && result.pairs.length > 0 && result.success) {
+          this.broadcastToWindows("corrections-learned-quiet", {
+            pairs: result.pairs,
+            source: payload.source,
+          });
+        }
+        return result;
+      } catch (error) {
+        debugLogger.debug("[AutoLearn] Meeting batch correction failed", { error: error.message });
+        return { success: false, learned: [], pairs: [], reasons: [], error: error.message };
       }
     });
 

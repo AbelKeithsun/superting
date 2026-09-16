@@ -614,6 +614,11 @@ interface MeetingTranscriptChatProps {
   onSeekToSegment?: (target: TranscriptSeekTarget) => void;
   /** Commit an inline edit of a finalized live segment (recording view). */
   onLiveSegmentEdit?: (segmentId: string, text: string) => void;
+  /**
+   * Commit an inline edit of one finalized segment in the read-only transcript
+   * view (after recording, or between two recording sessions of the note).
+   */
+  onSegmentEditCommit?: (segmentId: string, text: string) => void;
   emptyMessage?: string;
 }
 
@@ -644,6 +649,7 @@ export function MeetingTranscriptChat({
   onAttachSpeakerEmail,
   onSeekToSegment,
   onLiveSegmentEdit,
+  onSegmentEditCommit,
   emptyMessage,
 }: MeetingTranscriptChatProps) {
   const { t } = useTranslation();
@@ -654,6 +660,11 @@ export function MeetingTranscriptChat({
   const [liveEditingId, setLiveEditingId] = useState<string | null>(null);
   const [liveDraft, setLiveDraft] = useState("");
   const liveEditorRef = useRef<HTMLTextAreaElement | null>(null);
+  // Inline editing of finalized segments in the read-only transcript view: one
+  // speaker block at a time, expanded into per-segment textareas so an edit
+  // always commits against a single segment id.
+  const [inlineEditingBlockId, setInlineEditingBlockId] = useState<string | null>(null);
+  const [inlineDrafts, setInlineDrafts] = useState<Record<string, string>>({});
 
   useEffect(() => {
     activeSegmentIdRef.current = activeSegmentId ?? null;
@@ -739,6 +750,34 @@ export function MeetingTranscriptChat({
     [segments, speakerMappings, t, timelineDurationSeconds]
   );
   const renderedSearchItems = isEditing ? segments : speakerBlocks;
+
+  // Read-only view + a commit handler = inline editing is available. While
+  // recording, the live editor above owns the interaction instead.
+  const canEditInlineSegments = !isEditing && !isRecording && !!onSegmentEditCommit;
+
+  const startInlineBlockEdit = (blockId: string, blockSegments: TranscriptSegment[]) => {
+    if (!canEditInlineSegments) return;
+    setInlineEditingBlockId(blockId);
+    setInlineDrafts(
+      Object.fromEntries(blockSegments.map((segment) => [segment.id, segment.text]))
+    );
+  };
+
+  const commitInlineDraft = (segmentId: string) => {
+    const draft = inlineDrafts[segmentId];
+    if (draft === undefined) return;
+    if (draft.trim()) onSegmentEditCommit?.(segmentId, draft);
+    setInlineDrafts((prev) => {
+      const next = { ...prev };
+      delete next[segmentId];
+      return next;
+    });
+  };
+
+  const finishInlineBlockEdit = () => {
+    setInlineEditingBlockId(null);
+    setInlineDrafts({});
+  };
 
   const segmentSearchMeta = useMemo(() => {
     let running = 0;
@@ -1092,12 +1131,75 @@ export function MeetingTranscriptChat({
                       />
                       {activeSearchPreview && <ActiveFindPreview preview={activeSearchPreview} />}
                     </div>
+                  ) : inlineEditingBlockId === blockId && canEditInlineSegments ? (
+                    <div className="mt-1 space-y-2">
+                      {blockSegments.map((blockSegment) => {
+                        const draft = inlineDrafts[blockSegment.id] ?? blockSegment.text;
+                        return (
+                          <textarea
+                            key={blockSegment.id}
+                            value={draft}
+                            autoFocus={blockSegment.id === blockSegments[0].id}
+                            rows={Math.max(1, Math.min(6, draft.split("\n").length))}
+                            data-inline-segment-editor={blockSegment.id}
+                            onChange={(event) =>
+                              setInlineDrafts((prev) => ({
+                                ...prev,
+                                [blockSegment.id]: event.target.value,
+                              }))
+                            }
+                            onBlur={() => commitInlineDraft(blockSegment.id)}
+                            onClick={(event) => event.stopPropagation()}
+                            onKeyDown={(event) => {
+                              if (event.key === "Escape") {
+                                event.preventDefault();
+                                finishInlineBlockEdit();
+                              } else if (
+                                event.key === "Enter" &&
+                                (event.metaKey || event.ctrlKey)
+                              ) {
+                                event.preventDefault();
+                                commitInlineDraft(blockSegment.id);
+                                finishInlineBlockEdit();
+                              }
+                            }}
+                            className={cn(
+                              "w-full min-w-56 resize-y px-3 py-2 outline-none transition-colors",
+                              "rounded-md border text-sm leading-6 shadow-sm",
+                              "focus-visible:ring-1 focus-visible:ring-ring/70",
+                              "bg-white text-slate-950 border-slate-200 placeholder:text-slate-400"
+                            )}
+                          />
+                        );
+                      })}
+                      <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
+                        <span>{t("notes.transcript.inlineEdit.hint")}</span>
+                        <button
+                          type="button"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            finishInlineBlockEdit();
+                          }}
+                          className="rounded-md bg-foreground/5 px-2 py-0.5 font-medium transition-colors hover:bg-foreground/10"
+                        >
+                          {t("common.done")}
+                        </button>
+                      </div>
+                    </div>
                   ) : (
                     <div
                       className={cn(
-                        "mt-0.5 whitespace-pre-wrap text-[13px] leading-6 text-slate-950 transition-colors",
+                        "group/segment relative mt-0.5 whitespace-pre-wrap text-[13px] leading-6 text-slate-950 transition-colors",
                         isActiveSegment && "bg-indigo-50/50"
                       )}
+                      onDoubleClick={
+                        canEditInlineSegments
+                          ? (event) => {
+                              event.stopPropagation();
+                              startInlineBlockEdit(blockId, blockSegments);
+                            }
+                          : undefined
+                      }
                     >
                       <HighlightedText
                         text={itemText}
@@ -1106,6 +1208,21 @@ export function MeetingTranscriptChat({
                         matchStartIndex={searchMeta.start}
                         activeMatchIndex={activeSearchIndex}
                       />
+                      {canEditInlineSegments && (
+                        <button
+                          type="button"
+                          data-inline-edit-button={blockId}
+                          aria-label={t("notes.transcript.inlineEdit.title")}
+                          title={t("notes.transcript.inlineEdit.title")}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            startInlineBlockEdit(blockId, blockSegments);
+                          }}
+                          className="absolute -top-1 right-0 hidden h-6 w-6 items-center justify-center rounded-md border border-border/60 bg-background/95 text-muted-foreground shadow-sm transition-colors hover:text-foreground group-hover/segment:flex"
+                        >
+                          <Pencil size={11} />
+                        </button>
+                      )}
                     </div>
                   )}
                 </div>
