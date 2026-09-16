@@ -59,11 +59,13 @@ const {
   clusterMergeThreshold: SPEAKER_CLUSTER_MERGE_THRESHOLD,
   clusterMergeMaxFragmentSeconds: SPEAKER_CLUSTER_MERGE_MAX_FRAGMENT_SECONDS,
   maxVoiceprintsPerPerson: MAX_VOICEPRINTS_PER_PERSON,
+  participantPriorRelax: PARTICIPANT_PRIOR_RELAX,
 } = require("../constants/speakerThresholds.json");
 const { mergeSimilarSpeakerClusters } = require("./speakerClusterMerge");
 const {
   similarityToProfile,
   findBestProfileMatch,
+  findPreferredProfileMatch,
 } = require("./speakerTemplateMatching");
 
 // Voiceprint audition clips: long enough to be recognisable, never long enough
@@ -503,6 +505,9 @@ class IPCHandlers {
     require("./markdownMirror").setDatabaseManager(this.databaseManager);
     this.speakerDiarizationEnabled = true;
     this.activeMeetingSpeakerConfig = null;
+    // Mirror of the note currently being meeting-recorded, so the
+    // db-update-note handler can refresh participant speaker priors mid-call.
+    this.activeMeetingNoteId = null;
     this.whisperVadSettings = {
       dictationSileroEnabled: true,
       noteRecordingSileroEnabled: true,
@@ -708,6 +713,22 @@ class IPCHandlers {
       return this._parseNonSelfParticipants(note?.participants);
     } catch (_) {
       return [];
+    }
+  }
+
+  /**
+   * Participant speaker prior: identities linked to the enumerated attendees
+   * of a note get a first, slightly relaxed pass during matching. Returns null
+   * when the note has no resolvable participants (no prior).
+   */
+  _resolveParticipantPriorProfileIds(noteId) {
+    const participants = this._getNoteNonSelfParticipants(noteId);
+    if (participants.length === 0) return null;
+    try {
+      const ids = this.databaseManager.findSpeakerProfileIdsByParticipants(participants);
+      return ids.length > 0 ? new Set(ids) : null;
+    } catch (_) {
+      return null;
     }
   }
 
@@ -2074,7 +2095,16 @@ class IPCHandlers {
         setImmediate(() => this.broadcastToWindows("note-updated", result.note));
         this._asyncVectorUpsert(result.note);
         this._asyncMirrorWrite(result.note);
-        if (updates.participants) this._tryAutoLabelOneOnOne(id);
+        if (updates.participants) {
+          this._tryAutoLabelOneOnOne(id);
+          // Enumerated attendees are a live speaker-matching prior — refresh
+          // the identifier when the meeting being recorded gains/loses people.
+          if (id === this.activeMeetingNoteId) {
+            liveSpeakerIdentifier.setPreferredProfileIds(
+              this._resolveParticipantPriorProfileIds(id)
+            );
+          }
+        }
       }
       return result;
     });
@@ -6931,6 +6961,9 @@ class IPCHandlers {
       );
 
       if (started) {
+        liveSpeakerIdentifier.setPreferredProfileIds(
+          this._resolveParticipantPriorProfileIds(meetingNoteId)
+        );
         meetingLiveSpeakerActive = true;
         meetingReclusterTimer = setInterval(async () => {
           if (!meetingLiveSpeakerActive || !win || win.isDestroyed()) return;
@@ -7208,6 +7241,7 @@ class IPCHandlers {
       meetingOneOnOneAttendee = null;
       meetingOneOnOneProfileBound = false;
       meetingNoteId = null;
+      this.activeMeetingNoteId = null;
       meetingShouldRetainAudio = true;
       meetingSessionAudioQuality = "high";
       meetingSessionAudioMix = "stereo";
@@ -7417,6 +7451,7 @@ class IPCHandlers {
         meetingOneOnOneAttendee = resolveOneOnOneAttendeeForNote(options.noteId);
         meetingOneOnOneProfileBound = false;
         meetingNoteId = options.noteId ?? null;
+        this.activeMeetingNoteId = meetingNoteId;
         meetingShouldRetainAudio =
           options.dataRetentionEnabled !== false && (options.audioRetentionDays ?? 30) !== 0;
 
@@ -10192,6 +10227,10 @@ class IPCHandlers {
         if (speakerEmbeddingsMap) {
           try {
             const profiles = this.databaseManager.getSpeakerProfiles(true);
+            // Enumerated attendees act as a soft prior: their identities get a
+            // first pass at a slightly relaxed confirmed threshold, then the
+            // full library decides as usual.
+            const participantPriorIds = this._resolveParticipantPriorProfileIds(trackedNoteId);
 
             if (profiles.length > 0) {
               for (const [mappedId, embArr] of Object.entries(speakerEmbeddingsMap)) {
@@ -10204,14 +10243,44 @@ class IPCHandlers {
 
                 const emb = new Float32Array(embArr);
                 // Best template per identity, so a person's several samples do
-                // not dilute each other.
-                const { profile: bestProfile, similarity: bestSim } = findBestProfileMatch(
-                  emb,
-                  profiles,
-                  speakerEmb.cosineSimilarity
-                );
+                // not dilute each other. Baseline is the full library; when it
+                // does not reach the confirmed band, enumerated attendees get a
+                // second chance at a relaxed threshold (soft prior — the user
+                // told us these people are in the meeting).
+                const full = findBestProfileMatch(emb, profiles, speakerEmb.cosineSimilarity);
+                let bestProfile = full.profile;
+                let bestSim = full.similarity;
+                let usedPrior = false;
+                if (
+                  participantPriorIds &&
+                  !(bestProfile && bestSim > BATCH_SPEAKER_CONFIRMED_THRESHOLD)
+                ) {
+                  const priorMatch = findPreferredProfileMatch(
+                    emb,
+                    profiles,
+                    speakerEmb.cosineSimilarity,
+                    {
+                      preferredIds: participantPriorIds,
+                      threshold: BATCH_SPEAKER_CONFIRMED_THRESHOLD,
+                      // A small margin keeps two similar-voiced attendees from
+                      // being auto-confirmed on a coin flip; a single
+                      // preferred identity always clears it (+Infinity).
+                      margin: 0.02,
+                      relax: PARTICIPANT_PRIOR_RELAX,
+                    }
+                  );
+                  if (priorMatch.usedPrior) {
+                    usedPrior = true;
+                    bestProfile = priorMatch.profile;
+                    bestSim = priorMatch.similarity;
+                  }
+                }
 
-                if (bestProfile && bestSim > BATCH_SPEAKER_CONFIRMED_THRESHOLD) {
+                const confirmedFloor = usedPrior
+                  ? BATCH_SPEAKER_CONFIRMED_THRESHOLD - PARTICIPANT_PRIOR_RELAX
+                  : BATCH_SPEAKER_CONFIRMED_THRESHOLD;
+
+                if (bestProfile && bestSim > confirmedFloor) {
                   for (const seg of enrichedSegments) {
                     if (seg.speaker === mappedId) {
                       applyConfirmedSpeaker(seg, {

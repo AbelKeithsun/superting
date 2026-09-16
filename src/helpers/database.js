@@ -3180,6 +3180,47 @@ class DatabaseManager {
   }
 
   /**
+   * Resolve enumerated note participants to speaker_profile ids. Profiles link
+   * to people by email (case-insensitive) or display name — the same keys
+   * participants carry. Matching is done in JS: speaker_profiles is a small
+   * table and names need case-insensitive comparison.
+   *
+   * @param {Array<{email?: string|null, displayName?: string|null, display_name?: string|null}>} participants
+   * @returns {number[]} speaker_profile ids
+   */
+  findSpeakerProfileIdsByParticipants(participants) {
+    if (!this.db || !Array.isArray(participants) || participants.length === 0) return [];
+    const emails = new Set();
+    const names = new Set();
+    for (const p of participants) {
+      const email = (p?.email || "").trim().toLowerCase();
+      const name = (p?.displayName || p?.display_name || "").trim().toLowerCase();
+      if (email) emails.add(email);
+      if (name) names.add(name);
+    }
+    if (emails.size === 0 && names.size === 0) return [];
+    try {
+      const profiles = this.db
+        .prepare("SELECT id, display_name, email FROM speaker_profiles")
+        .all();
+      return profiles
+        .filter((profile) => {
+          const email = (profile.email || "").trim().toLowerCase();
+          const name = (profile.display_name || "").trim().toLowerCase();
+          return (email && emails.has(email)) || (name && names.has(name));
+        })
+        .map((profile) => profile.id);
+    } catch (error) {
+      debugLogger.error(
+        "Error resolving participant speaker profiles",
+        { error: error.message },
+        "database"
+      );
+      return [];
+    }
+  }
+
+  /**
    * Map speaker_profile.id → every voiceprint embedding that belongs to the
    * same identity: linked through source_profile_id, or (for legacy rows)
    * through the person's email / display name.

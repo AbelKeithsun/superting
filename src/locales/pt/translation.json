@@ -1960,6 +1960,16 @@
     "enhance": {
       "title": "Erro de aprimoramento"
     },
+    "speakerCount": {
+      "label": "Número esperado de falantes",
+      "auto": "Falantes: auto",
+      "count": "{{count}} falantes",
+      "autoShort": "Auto",
+      "hint": "Definir o número de falantes ajuda a diarização.",
+      "decrease": "Diminuir falantes",
+      "increase": "Aumentar falantes",
+      "resetAuto": "Voltar a auto"
+    },
     "speaker": {
       "voiceprintReplacedToast": "Uma impressão vocal de {{name}} foi atualizada com o áudio desta reunião",
       "voiceprintKeptToast": "As {{count}} impressões vocais existentes de {{name}} foram mantidas — nada adicionado",

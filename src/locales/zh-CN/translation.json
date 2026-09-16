@@ -1964,6 +1964,16 @@
     "enhance": {
       "title": "增强错误"
     },
+    "speakerCount": {
+      "label": "说话人数",
+      "auto": "说话人：自动",
+      "count": "{{count}} 人",
+      "autoShort": "自动",
+      "hint": "指定人数可帮助分离与识别说话人。",
+      "decrease": "减少人数",
+      "increase": "增加人数",
+      "resetAuto": "恢复自动"
+    },
     "speaker": {
       "voiceprintReplacedToast": "已用本场会议的声音更新 {{name}} 的一条声纹",
       "voiceprintKeptToast": "已保留 {{name}} 原有的 {{count}} 条声纹，本次未新增",

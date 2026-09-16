@@ -32,7 +32,10 @@ import { MeetingTranscriptChat, type TranscriptSeekTarget } from "./MeetingTrans
 import CorrectionSubmitDialog from "./CorrectionSubmitDialog";
 import VoiceprintSlotDialog from "./VoiceprintSlotDialog";
 import type { TranscriptSegment } from "../../stores/meetingRecordingStore";
-import { updateSegmentText } from "../../stores/meetingRecordingStore";
+import {
+  updateSegmentText,
+  suggestSessionExpectedCount,
+} from "../../stores/meetingRecordingStore";
 import {
   Dialog,
   DialogContent,
@@ -108,6 +111,7 @@ import {
   type TranscriptSpeakerFilterOption,
 } from "../../utils/speakerAssignment";
 import NoteParticipants, { type NoteParticipant } from "./NoteParticipants";
+import NoteSpeakerCount from "./NoteSpeakerCount";
 import NoteTagsEditor from "./NoteTagsEditor";
 import { countMatches } from "../../utils/transcriptFindReplace";
 
@@ -2721,6 +2725,19 @@ export default function NoteEditor({
     setRecordedDateInput(formatDateTimeLocalValue(recordedDateSource));
     setIsRecordedDateOpen(true);
   }, [recordedDateSource]);
+  // Enumerating attendees auto-suggests the speaker count while the user has
+  // not pinned one themselves (联动可覆盖: a manual pill choice always wins;
+  // NoteParticipants gates on the ±1 follow-along heuristic).
+  const handleAutoSuggestSpeakerCount = useCallback(
+    (count: number) => {
+      window.electronAPI?.updateNote?.(note.id, { expected_speaker_count: count });
+      if (isRecording) {
+        suggestSessionExpectedCount(count);
+      }
+    },
+    [note.id, isRecording]
+  );
+
   const handleSaveRecordedDate = useCallback(async () => {
     const nextRecordedAt = parseDateTimeLocalValue(recordedDateInput);
     if (!nextRecordedAt) {
@@ -2935,7 +2952,17 @@ export default function NoteEditor({
                   </PopoverContent>
                 </Popover>
               )}
-              <NoteParticipants noteId={note.id} participants={parsedParticipants} />
+              <NoteParticipants
+                noteId={note.id}
+                participants={parsedParticipants}
+                expectedSpeakerCount={note.expected_speaker_count ?? null}
+                onAutoSuggestCount={handleAutoSuggestSpeakerCount}
+              />
+              <NoteSpeakerCount
+                noteId={note.id}
+                value={note.expected_speaker_count ?? null}
+                isRecording={isRecording}
+              />
               {folders && onMoveToFolder && (
                 <DropdownMenu
                   onOpenChange={(open) => {
