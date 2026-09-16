@@ -1205,6 +1205,7 @@
         "xclipDesc": "Outil de presse-papiers pour le collage KDE Wayland (xclip ou xsel)"
       },
       "updates": {
+            "openDownloadPage": "Ouvrir la page de téléchargement",
         "badges": {
           "dev": "Dev",
           "latest": "À jour",

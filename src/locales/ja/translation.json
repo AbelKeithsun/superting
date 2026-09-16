@@ -1205,6 +1205,7 @@
         "xclipDesc": "KDE Waylandの貼り付け用クリップボードツール（xclipまたはxsel）"
       },
       "updates": {
+            "openDownloadPage": "ダウンロードページを開く",
         "badges": {
           "dev": "開発版",
           "latest": "最新",

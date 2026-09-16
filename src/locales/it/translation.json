@@ -1205,6 +1205,7 @@
         "xclipDesc": "Strumento appunti per incollare in KDE Wayland (xclip o xsel)"
       },
       "updates": {
+            "openDownloadPage": "Apri la pagina di download",
         "badges": {
           "dev": "Dev",
           "latest": "Aggiornato",

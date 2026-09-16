@@ -1205,6 +1205,7 @@
         "xclipDesc": "KDE Wayland 貼上用的剪貼簿工具（xclip 或 xsel）"
       },
       "updates": {
+            "openDownloadPage": "前往下載",
         "badges": {
           "dev": "Dev",
           "latest": "最新",

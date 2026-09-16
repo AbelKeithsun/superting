@@ -765,6 +765,7 @@ export default function SettingsPage({
     isDownloading: downloadingUpdate,
     isInstalling: installInitiated,
     checkForUpdates,
+    openUpdatePage,
     downloadUpdate,
     installUpdate: installUpdateAction,
     getAppVersion,
@@ -2677,15 +2678,47 @@ EOF`,
                       onClick={async () => {
                         try {
                           const result = await checkForUpdates();
-                          if (result && !result.updateAvailable) {
+                          if (!result) return;
+                          if (result.updateAvailable) {
                             toast({
-                              title: t("settingsPage.general.updates.dialogs.noUpdates.title"),
-                              description: t(
-                                "settingsPage.general.updates.dialogs.noUpdates.description"
+                              title: t(
+                                "settingsPage.general.updates.dialogs.updateAvailable.title"
                               ),
+                              description: t(
+                                "settingsPage.general.updates.dialogs.updateAvailable.description",
+                                { version: result.latestVersion || result.version || "" }
+                              ),
+                              variant: "success",
+                              duration: 6000,
                             });
+                            return;
                           }
-                        } catch {}
+                          if (result.error) {
+                            toast({
+                              title: t(
+                                "settingsPage.general.updates.dialogs.checkFailed.title"
+                              ),
+                              description: t(
+                                "settingsPage.general.updates.dialogs.checkFailed.description"
+                              ),
+                              variant: "destructive",
+                            });
+                            return;
+                          }
+                          toast({
+                            title: t("settingsPage.general.updates.dialogs.noUpdates.title"),
+                            description: t(
+                              "settingsPage.general.updates.dialogs.noUpdates.description"
+                            ),
+                          });
+                        } catch {
+                          showAlertDialog({
+                            title: t("settingsPage.general.updates.dialogs.checkFailed.title"),
+                            description: t(
+                              "settingsPage.general.updates.dialogs.checkFailed.description"
+                            ),
+                          });
+                        }
                       }}
                       disabled={checkingForUpdates || updateStatus.isDevelopment}
                       variant="outline"
@@ -2701,7 +2734,21 @@ EOF`,
                         : t("settingsPage.general.updates.checkForUpdates")}
                     </Button>
 
-                    {isUpdateAvailable && !updateStatus.updateDownloaded && (
+                    {isUpdateAvailable && !updateStatus.updateDownloaded && updateStatus.manual && (
+                      <Button
+                        onClick={() => void openUpdatePage()}
+                        variant="success"
+                        className="w-full"
+                        size="sm"
+                      >
+                        <Download size={13} className="mr-1.5" />
+                        {t("settingsPage.general.updates.openDownloadPage")}
+                      </Button>
+                    )}
+
+                    {isUpdateAvailable &&
+                      !updateStatus.updateDownloaded &&
+                      !updateStatus.manual && (
                       <div className="space-y-2">
                         <Button
                           onClick={async () => {
@@ -2749,7 +2796,7 @@ EOF`,
                       </div>
                     )}
 
-                    {updateStatus.updateDownloaded && (
+                    {updateStatus.updateDownloaded && !updateStatus.manual && (
                       <Button
                         onClick={() => {
                           showConfirmDialog({
