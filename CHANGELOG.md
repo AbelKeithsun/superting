@@ -5,6 +5,36 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.10] - 2026-09-16
+
+### Inline transcript editing + correction learning in every state
+
+- **Edit a transcript segment even after recording stopped.** The read-only transcript view now supports inline editing: double-click a block (or use the hover pencil) and each segment of a merged speaker block gets its own editor; a single click still seeks the audio. This covers "recording stopped" and "stopped, then started again on the same note" — while recording, the existing live editor stays in charge.
+- **Paragraph editing learns too.** Saving in 编辑转写 now feeds every changed segment to the correction learner instead of silently writing the transcript.
+- **No edit ends without an answer.** `correctionLearner` reports a machine-readable reason when an edit yields no learnable pair (`insertion-only`, `deletion-only`, `mixed-insert-delete`, `rewrite`, `too-short`, `too-different`, `already-in-dictionary`, …). The note explains the reason and offers a "提交" dialog that writes the correction to the dictionary; the same dialog appears when auto-learn is switched off. Edits are diffed against the text the learner last saw, so repeated touch-ups keep producing learnable pairs.
+- Transcript (de)serialization now keeps `endTime` (voiceprint clip windows) and the new `learnedText` baseline.
+
+### Up to 5 voiceprints per person, with slot replacement
+
+- **Fixed: "重新提取声纹" never added an entry.** A partial unique index on `source_profile_id` plus an upsert made every re-extraction overwrite the single row. Voiceprints are now append-only templates (5 per person).
+- **Closed-loop cap handling.** Marking a speaker adds a template while the person is below the cap; at 5 the mark is still committed and a dialog lists every existing template (source meeting, date, clip count) so the user picks which one to refresh — or cancels, and the app says the existing set was kept.
+- **词典 → 联系人** shows `声纹 N/5` and lists each template separately with its own audition clips and a per-template delete.
+
+### Matching
+
+- **An identity now scores as its best-matching template.** `getSpeakerProfiles` carries every template of a person, and a shared helper takes the max over templates while keeping best/second-best margins *between* identities (templates of one person never compete). Applied to live identification, retroactive backfill and batch relabelling.
+- `scripts/calibrate-speaker-templates.js` re-tunes the thresholds from the user's own speaker marks (baseline centroid vs max-over-templates, TPR and foreign-pair rate per threshold).
+
+### Dictionary groups
+
+- **Nested dictionary groups.** Dictionary entries and corrections can be organised into arbitrarily nested groups: create groups and subgroups, rename inline, move entries or whole subtrees (self/descendant targets are disabled), delete a group with child regrouping and undo, and a fixed "未分组" bucket. Automatic learning stays compatible (`getDictionary`/`setDictionary` keep their `string[]` contract, group ids survive rewrites), search falls back to a flat result list, and all 10 locales are translated.
+
+### Note actions actually produce minutes again
+
+- **Fixed: "生成会议纪要" could overwrite the note with the raw transcript.** Reasoning models (e.g. deepseek-flash) on the Responses API burn hidden thinking tokens before any visible output; with the flat 4096-token budget the response came back `incomplete` with zero content, and the provider silently returned the original input as the "result". Note actions now scale the output budget with the input length (8k–24.5k), request low reasoning effort when thinking is disabled, and — instead of echoing the input — fail loudly with an actionable error when the model returns nothing usable.
+- **Prompt wrapper no longer fights the minutes prompt.** The note-action system wrapper banned tables and participant lists while the built-in 会议纪要 prompt demands both; action instructions now explicitly override the wrapper defaults.
+- **Prompt editing is discoverable.** 语言模型 → 笔记格式化 gains a "管理动作提示词" entry opening the action manager (all 10 locales).
+
 ## [2.0.8] - 2026-09-15
 
 ### Speaker marking → contacts (cross-session reuse)
