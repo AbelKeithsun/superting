@@ -97,6 +97,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
 import { formatBytes } from "../utils/formatBytes";
 import { useSettingsStore } from "../stores/settingsStore";
 import { canManageSystemAudioInApp } from "../utils/systemAudioAccess";
+import ActionManagerDialog from "./notes/ActionManagerDialog";
 
 
 export type SettingsSectionType =
@@ -351,6 +352,7 @@ function NoteFormattingSettings() {
   const { t } = useTranslation();
   const autoGenerateNoteTitle = useSettingsStore((s) => s.autoGenerateNoteTitle);
   const setAutoGenerateNoteTitle = useSettingsStore((s) => s.setAutoGenerateNoteTitle);
+  const [showActionManager, setShowActionManager] = useState(false);
 
   return (
     <div className="space-y-4">
@@ -362,9 +364,18 @@ function NoteFormattingSettings() {
           >
             <Toggle checked={autoGenerateNoteTitle} onChange={setAutoGenerateNoteTitle} />
           </SettingsRow>
+          <SettingsRow
+            label={t("settingsPage.noteFormatting.actionPrompts")}
+            description={t("settingsPage.noteFormatting.actionPromptsDescription")}
+          >
+            <Button variant="outline" size="sm" onClick={() => setShowActionManager(true)}>
+              {t("settingsPage.noteFormatting.actionPromptsButton")}
+            </Button>
+          </SettingsRow>
         </SettingsPanelRow>
       </SettingsPanel>
       <InferenceConfigEditor scope="noteFormatting" />
+      <ActionManagerDialog open={showActionManager} onOpenChange={setShowActionManager} />
     </div>
   );
 }

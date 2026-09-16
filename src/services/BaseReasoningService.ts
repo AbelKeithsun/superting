@@ -11,6 +11,13 @@ export interface ReasoningConfig {
   customApiKey?: string;
   provider?: string;
   disableThinking?: boolean;
+  /**
+   * When true, an empty/unparseable model response throws a descriptive
+   * error instead of silently returning the input text. Note actions set
+   * this — passing the input through would overwrite the note with its own
+   * raw content. Dictation cleanup keeps the passthrough default.
+   */
+  failOnEmptyResponse?: boolean;
 }
 
 export abstract class BaseReasoningService {
