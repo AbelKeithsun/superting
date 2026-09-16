@@ -1455,6 +1455,23 @@ export default function NoteEditor({
     [recordingStartedAt, transcriptAudioDurationSeconds, visibleTranscriptSegments]
   );
 
+  // A speaker group is "already named" when the marked name is the one it
+  // currently renders; re-marking the same person must not re-open the contact
+  // resolution dialog (the identity is already established).
+  const isSpeakerAlreadyNamed = useCallback(
+    (speakerId: string, displayName: string) => {
+      const normalized = displayName.trim().toLowerCase();
+      if (!normalized) return false;
+      if ((speakerMappings[speakerId] ?? "").trim().toLowerCase() === normalized) return true;
+      return displaySegments.some(
+        (segment) =>
+          segment.speaker === speakerId &&
+          (segment.speakerName ?? "").trim().toLowerCase() === normalized
+      );
+    },
+    [displaySegments, speakerMappings]
+  );
+
   // A manual mark carries no speaker embedding, so nothing would reach the
   // contact's voiceprint (联系人 showed a name with no auditionable sample).
   // Extract one from the note's own audio in the background once the mark is
