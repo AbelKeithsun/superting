@@ -3,14 +3,27 @@ import { useTranslation } from "react-i18next";
 import { Button } from "./ui/button";
 import { Loader2, Sparkles, Cloud, X, Mic, Trash2, Upload, BookOpen, Settings2 } from "lucide-react";
 import TranscriptionItem from "./ui/TranscriptionItem";
+import NoteTimelineItem, { getNoteTimelineTimestamp } from "./ui/NoteTimelineItem";
 import type { TranscriptionItem as TranscriptionItemType } from "../types/electron";
+import type { NoteItem } from "../types/electron";
 import { formatHotkeyLabel } from "../utils/hotkeys";
-import { formatDateGroup } from "../utils/dateFormatting";
+import { formatDateGroup, normalizeDbDate } from "../utils/dateFormatting";
 import { cn } from "./lib/utils";
 import { useSettingsStore } from "../stores/settingsStore";
 
+type TimelineEntry =
+  | { kind: "transcription"; timestamp: string; transcription: TranscriptionItemType }
+  | { kind: "note"; timestamp: string; note: NoteItem };
+
+function timelineTimeValue(timestamp: string): number {
+  const value = normalizeDbDate(timestamp).getTime();
+  return Number.isNaN(value) ? 0 : value;
+}
+
 interface HistoryViewProps {
   history: TranscriptionItemType[];
+  notes: NoteItem[];
+  onOpenNote: (note: NoteItem) => void;
   isLoading: boolean;
   hotkey: string;
   showCloudMigrationBanner: boolean;
@@ -30,6 +43,8 @@ interface HistoryViewProps {
 
 export default function HistoryView({
   history,
+  notes,
+  onOpenNote,
   isLoading,
   hotkey,
   showCloudMigrationBanner,
@@ -49,25 +64,39 @@ export default function HistoryView({
   const { t } = useTranslation();
   const dataRetentionEnabled = useSettingsStore((s) => s.dataRetentionEnabled);
 
-  const groupedHistory = useMemo(() => {
-    if (history.length === 0) return [];
+  const groupedTimeline = useMemo(() => {
+    const entries: TimelineEntry[] = [
+      ...history.map((item) => ({
+        kind: "transcription" as const,
+        timestamp: item.timestamp,
+        transcription: item,
+      })),
+      ...notes.map((note) => ({
+        kind: "note" as const,
+        timestamp: getNoteTimelineTimestamp(note),
+        note,
+      })),
+    ];
+    if (entries.length === 0) return [];
 
-    const groups: { label: string; items: TranscriptionItemType[] }[] = [];
+    entries.sort((a, b) => timelineTimeValue(b.timestamp) - timelineTimeValue(a.timestamp));
+
+    const groups: { label: string; items: TimelineEntry[] }[] = [];
     let currentLabel: string | null = null;
 
-    for (const item of history) {
-      const label = formatDateGroup(item.timestamp, t);
+    for (const entry of entries) {
+      const label = formatDateGroup(normalizeDbDate(entry.timestamp), t);
 
       if (label !== currentLabel) {
-        groups.push({ label, items: [item] });
+        groups.push({ label, items: [entry] });
         currentLabel = label;
       } else {
-        groups[groups.length - 1].items.push(item);
+        groups[groups.length - 1].items.push(entry);
       }
     }
 
     return groups;
-  }, [history, t]);
+  }, [history, notes, t]);
 
   return (
     <div className="ow-workspace-page">
@@ -177,7 +206,7 @@ export default function HistoryView({
                   <span className="text-sm text-muted-foreground">{t("controlPanel.loading")}</span>
                 </div>
               </div>
-            ) : history.length === 0 ? (
+            ) : groupedTimeline.length === 0 ? (
               <div className="grid min-h-[420px] items-center gap-4 px-4 py-8 lg:grid-cols-[minmax(0,1.15fr)_minmax(260px,0.85fr)]">
                 <div className="ow-surface-focus overflow-hidden">
                   <div className="border-b border-border/60 px-5 py-4 dark:border-white/8">
@@ -253,13 +282,13 @@ export default function HistoryView({
               </div>
             ) : (
               <div className="group px-4 pb-4">
-                {groupedHistory.map((group, index) => (
+                {groupedTimeline.map((group, index) => (
                   <div key={group.label} className={index > 0 ? "mt-6" : ""}>
                     <div className="sticky -top-4 z-10 -mx-4 flex items-center justify-between bg-background/95 px-5 pt-4 pb-2 backdrop-blur-sm">
                       <span className="rounded-sm bg-muted/60 px-2 py-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground dark:bg-white/[0.06]">
                         {group.label}
                       </span>
-                      {index === 0 && (
+                      {index === 0 && history.length > 0 && (
                         <button
                           onClick={clearAllTranscriptions}
                           className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] text-muted-foreground/60 opacity-0 group-hover:opacity-100 hover:!text-destructive hover:!bg-destructive/8 dark:hover:!bg-destructive/10 active:scale-[0.98] focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring/30 transition-all duration-200"
@@ -270,17 +299,25 @@ export default function HistoryView({
                       )}
                     </div>
                     <div className="relative z-0 space-y-2">
-                      {group.items.map((item) => (
-                        <TranscriptionItem
-                          key={item.id}
-                          item={item}
-                          onCopy={copyToClipboard}
-                          onDelete={deleteTranscription}
-                          onShowAudioInFolder={onShowAudioInFolder}
-                          onRetryTranscription={onRetryTranscription}
-                          onOpenSettings={() => onOpenSettings("transcription")}
-                        />
-                      ))}
+                      {group.items.map((entry) =>
+                        entry.kind === "note" ? (
+                          <NoteTimelineItem
+                            key={`note-${entry.note.id}`}
+                            note={entry.note}
+                            onOpen={onOpenNote}
+                          />
+                        ) : (
+                          <TranscriptionItem
+                            key={`transcription-${entry.transcription.id}`}
+                            item={entry.transcription}
+                            onCopy={copyToClipboard}
+                            onDelete={deleteTranscription}
+                            onShowAudioInFolder={onShowAudioInFolder}
+                            onRetryTranscription={onRetryTranscription}
+                            onOpenSettings={() => onOpenSettings("transcription")}
+                          />
+                        )
+                      )}
                     </div>
                   </div>
                 ))}

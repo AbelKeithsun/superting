@@ -231,6 +231,12 @@
     }
   },
   "controlPanel": {
+    "timeline": {
+      "badgeMeeting": "会議",
+      "badgeNote": "ノート",
+      "badgeUpload": "インポート",
+      "openNote": "ノートを開く：{{title}}"
+    },
     "update": {
       "readyTitle": "アップデートの準備完了",
       "readyDescription": "「アップデートをインストール」をクリックして最新バージョンで再起動します。",

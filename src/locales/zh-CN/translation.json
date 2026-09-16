@@ -231,6 +231,12 @@
     }
   },
   "controlPanel": {
+    "timeline": {
+      "badgeMeeting": "会议",
+      "badgeNote": "笔记",
+      "badgeUpload": "导入",
+      "openNote": "打开笔记：{{title}}"
+    },
     "update": {
       "readyTitle": "更新已准备就绪",
       "readyDescription": "点击“安装更新”以重启并安装最新版本。",

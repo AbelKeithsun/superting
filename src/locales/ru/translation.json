@@ -231,6 +231,12 @@
     }
   },
   "controlPanel": {
+    "timeline": {
+      "badgeMeeting": "Встреча",
+      "badgeNote": "Заметка",
+      "badgeUpload": "Импорт",
+      "openNote": "Открыть заметку: {{title}}"
+    },
     "update": {
       "readyTitle": "Обновление готово к установке",
       "readyDescription": "Нажмите «Установить обновление», чтобы перезапустить приложение с новой версией.",

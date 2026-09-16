@@ -231,6 +231,12 @@
     }
   },
   "controlPanel": {
+    "timeline": {
+      "badgeMeeting": "Besprechung",
+      "badgeNote": "Notiz",
+      "badgeUpload": "Import",
+      "openNote": "Notiz öffnen: {{title}}"
+    },
     "update": {
       "readyTitle": "Update bereit zur Installation",
       "readyDescription": "Klicken Sie auf 'Update installieren', um mit der neuesten Version neu zu starten.",

@@ -231,6 +231,12 @@
     }
   },
   "controlPanel": {
+    "timeline": {
+      "badgeMeeting": "Reunión",
+      "badgeNote": "Nota",
+      "badgeUpload": "Importación",
+      "openNote": "Abrir nota: {{title}}"
+    },
     "update": {
       "readyTitle": "Actualización lista para instalar",
       "readyDescription": "Haz clic en 'Instalar actualización' para reiniciar con la última versión.",
