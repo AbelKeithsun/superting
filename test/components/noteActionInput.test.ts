@@ -47,6 +47,23 @@ test("includes all structured transcript segments from appended recordings", () 
   assert.match(result?.content ?? "", /第二段几十秒补充内容/);
 });
 
+test("includes transcript timestamps so minutes can divide chapters by time", () => {
+  const result = buildNoteActionInput({
+    noteContent: "",
+    rawTranscript: JSON.stringify([
+      { source: "system", text: "开场与目标", timestamp: 12 },
+      { source: "mic", text: "我补充一点", timestamp: 3671 },
+      { source: "system", text: "没有时间戳的句子" },
+    ]),
+    speakerLabels: { you: "You", them: "Them" },
+  });
+
+  assert.match(result?.content ?? "", /\[00:12\] Them: 开场与目标/);
+  assert.match(result?.content ?? "", /\[1:01:11\] You: 我补充一点/);
+  // Segments without a timestamp keep the plain speaker label.
+  assert.match(result?.content ?? "", /\nThem: 没有时间戳的句子/);
+});
+
 test("action content hash changes when transcript changes even if note content is empty", () => {
   const first = buildNoteActionInput({
     noteContent: "",
