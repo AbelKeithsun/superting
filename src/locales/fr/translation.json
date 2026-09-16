@@ -2001,6 +2001,16 @@
     "enhance": {
       "title": "Erreur d'amélioration"
     },
+    "speakerCount": {
+      "label": "Nombre de locuteurs attendu",
+      "auto": "Locuteurs : auto",
+      "count": "{{count}} locuteurs",
+      "autoShort": "Auto",
+      "hint": "Fixer le nombre de locuteurs aide la diarisation.",
+      "decrease": "Réduire le nombre",
+      "increase": "Augmenter le nombre",
+      "resetAuto": "Revenir à auto"
+    },
     "speaker": {
       "voiceprintReplacedToast": "Une empreinte vocale de {{name}} a été mise à jour avec l'audio de cette réunion",
       "voiceprintKeptToast": "Les {{count}} empreintes vocales de {{name}} sont conservées — rien ajouté",

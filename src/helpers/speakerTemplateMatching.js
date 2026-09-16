@@ -78,4 +78,48 @@ function findBestProfileMatch(probeEmbedding, profiles, cosineSimilarity) {
   };
 }
 
-module.exports = { toFloat32Embedding, similarityToProfile, findBestProfileMatch };
+module.exports = { toFloat32Embedding, similarityToProfile, findBestProfileMatch, findPreferredProfileMatch };
+
+/**
+ * Two-stage matching with participant priors (soft weighting).
+ *
+ * When the user enumerated attendees on a note, identities linked to those
+ * attendees get a first pass with a slightly relaxed threshold (`relax`).
+ * If no preferred identity qualifies, matching falls back to the full library
+ * with the normal threshold — a walk-in participant can still be recognised
+ * or created. Preferred identities never *force* a match: they still must
+ * clear the (relaxed) threshold and the margin.
+ *
+ * @param {object} opts
+ * @param {Set|Array|null} opts.preferredIds - speaker_profile ids to try first
+ * @param {number} opts.threshold - normal acceptance threshold
+ * @param {number} opts.margin - required best/second-best margin
+ * @param {number} opts.relax - threshold relaxation for preferred identities
+ * @returns {{ profile: object|null, similarity: number, margin: number, usedPrior: boolean }}
+ */
+function findPreferredProfileMatch(probeEmbedding, profiles, cosineSimilarity, opts = {}) {
+  const { threshold, margin, relax = 0 } = opts;
+  const preferred = new Set(
+    opts.preferredIds instanceof Set ? [...opts.preferredIds] : opts.preferredIds || []
+  );
+
+  if (preferred.size > 0) {
+    const preferredProfiles = (profiles || []).filter((p) => p && preferred.has(p.id));
+    if (preferredProfiles.length > 0) {
+      const first = findBestProfileMatch(probeEmbedding, preferredProfiles, cosineSimilarity);
+      if (
+        first.profile &&
+        first.similarity >= threshold - relax &&
+        first.margin >= margin
+      ) {
+        return { profile: first.profile, similarity: first.similarity, margin: first.margin, usedPrior: true };
+      }
+    }
+  }
+
+  const full = findBestProfileMatch(probeEmbedding, profiles, cosineSimilarity);
+  if (full.profile && full.similarity >= threshold && full.margin >= margin) {
+    return { profile: full.profile, similarity: full.similarity, margin: full.margin, usedPrior: false };
+  }
+  return { profile: null, similarity: full.similarity, margin: full.margin, usedPrior: false };
+}

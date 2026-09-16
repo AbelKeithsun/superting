@@ -2002,6 +2002,16 @@
     "enhance": {
       "title": "Enhancement error"
     },
+    "speakerCount": {
+      "label": "Expected speaker count",
+      "auto": "Speakers: auto",
+      "count": "{{count}} speakers",
+      "autoShort": "Auto",
+      "hint": "Pin the speaker count to help diarization.",
+      "decrease": "Decrease speaker count",
+      "increase": "Increase speaker count",
+      "resetAuto": "Reset to auto"
+    },
     "speaker": {
       "voiceprintReplacedToast": "Updated one voiceprint of {{name}} with this meeting's audio",
       "voiceprintKeptToast": "Kept the existing {{count}} voiceprints of {{name}} — nothing added",

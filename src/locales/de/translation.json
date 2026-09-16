@@ -1961,6 +1961,16 @@
     "enhance": {
       "title": "Verbesserungsfehler"
     },
+    "speakerCount": {
+      "label": "Erwartete Sprecherzahl",
+      "auto": "Sprecher: auto",
+      "count": "{{count}} Sprecher",
+      "autoShort": "Auto",
+      "hint": "Sprecherzahl festlegen hilft der Diarisierung.",
+      "decrease": "Sprecherzahl verringern",
+      "increase": "Sprecherzahl erhöhen",
+      "resetAuto": "Zurück auf Auto"
+    },
     "speaker": {
       "voiceprintReplacedToast": "Eine Voiceprint von {{name}} mit dem Audio dieses Meetings aktualisiert",
       "voiceprintKeptToast": "Die vorhandenen {{count}} Voiceprints von {{name}} bleiben erhalten — nichts hinzugefügt",

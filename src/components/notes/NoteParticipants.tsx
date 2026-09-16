@@ -75,9 +75,18 @@ function ParticipantAvatar({
 interface NoteParticipantsProps {
   noteId: number;
   participants: NoteParticipant[];
+  /** Current pinned speaker count (null = auto). */
+  expectedSpeakerCount?: number | null;
+  /** Called when enumerating attendees should suggest the speaker count. */
+  onAutoSuggestCount?: (count: number) => void;
 }
 
-export default function NoteParticipants({ noteId, participants }: NoteParticipantsProps) {
+export default function NoteParticipants({
+  noteId,
+  participants,
+  expectedSpeakerCount = null,
+  onAutoSuggestCount,
+}: NoteParticipantsProps) {
   const { t } = useTranslation();
   const [localParticipants, setLocalParticipants] = useState(participants);
   const [search, setSearch] = useState("");
@@ -138,8 +147,18 @@ export default function NoteParticipants({ noteId, participants }: NoteParticipa
       window.electronAPI.updateNote(noteId, {
         participants: JSON.stringify(updated),
       });
+      // Enumerated attendees double as a speaker-count prior: suggest the
+      // count while it is "auto", and keep following the attendee list while
+      // the previous value is within ±1 (i.e. it came from a suggestion).
+      // A manually pinned count diverges further and is never overwritten.
+      if (
+        updated.length >= 2 &&
+        (expectedSpeakerCount == null || Math.abs(expectedSpeakerCount - updated.length) <= 1)
+      ) {
+        onAutoSuggestCount?.(updated.length);
+      }
     },
-    [noteId]
+    [noteId, expectedSpeakerCount, onAutoSuggestCount]
   );
 
   const addEmailParticipant = useCallback(

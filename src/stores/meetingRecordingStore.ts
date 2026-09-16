@@ -615,6 +615,35 @@ export function setSessionExpectedCount(count: number): void {
   }
 }
 
+/** Back to "auto": the session count follows attendees/observation again. */
+export function resetSessionExpectedCount(): void {
+  useMeetingRecordingStore.setState({
+    sessionExpectedCount: DEFAULT_EXPECTED_SPEAKER_COUNT,
+    userTouchedStepper: false,
+  });
+  const state = useMeetingRecordingStore.getState();
+  pushConfig(state.sessionDiarizationEnabled, state.sessionExpectedCount, false);
+  const noteId = state.recordingNoteId;
+  if (noteId != null) {
+    window.electronAPI?.updateNote?.(noteId, { expected_speaker_count: null });
+  }
+}
+
+/**
+ * Auto-suggestion from enumerated participants: applied only while the user
+ * has not pinned a count themselves, and pushed as an *unlocked* target.
+ */
+export function suggestSessionExpectedCount(count: number): void {
+  if (useMeetingRecordingStore.getState().userTouchedStepper) return;
+  const clamped = Math.max(1, Math.min(MAX_SPEAKER_COUNT, count));
+  useMeetingRecordingStore.setState({ sessionExpectedCount: clamped });
+  pushConfig(useMeetingRecordingStore.getState().sessionDiarizationEnabled, clamped, false);
+  const noteId = useMeetingRecordingStore.getState().recordingNoteId;
+  if (noteId != null) {
+    window.electronAPI?.updateNote?.(noteId, { expected_speaker_count: clamped });
+  }
+}
+
 function setSystemPartialSpeakerIdentity(speakerId: string | null, speakerName: string | null) {
   systemPartialSpeakerIdValue = speakerId;
   useMeetingRecordingStore.setState({

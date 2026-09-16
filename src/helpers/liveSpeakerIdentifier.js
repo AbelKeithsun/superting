@@ -7,6 +7,7 @@ const { MAX_SPEAKER_COUNT } = require("../constants/speakerDetection.json");
 const {
   liveMatchThreshold: MATCH_THRESHOLD,
   liveMatchMargin: MATCH_MARGIN,
+  participantPriorRelax: PARTICIPANT_PRIOR_RELAX,
 } = require("../constants/speakerThresholds.json");
 
 function clampMaxSpeakers(value) {
@@ -154,10 +155,27 @@ class LiveSpeakerIdentifier {
     this._diarizationManager = null;
     this.maxSpeakers = MAX_SPEAKER_COUNT;
     this.enabled = true;
+    // Speaker identities linked to the enumerated participants of the meeting
+    // being recorded — soft prior: they get a first pass with a relaxed
+    // threshold, then matching falls back to the full library.
+    this.preferredProfileIds = null;
   }
 
   setDiarizationManager(manager) {
     this._diarizationManager = manager;
+  }
+
+  /**
+   * @param {Iterable<number>|null} ids - preferred speaker_profile ids, or
+   *   null/empty to clear the participant prior.
+   */
+  setPreferredProfileIds(ids) {
+    if (!ids) {
+      this.preferredProfileIds = null;
+      return;
+    }
+    const set = ids instanceof Set ? ids : new Set(ids);
+    this.preferredProfileIds = set.size > 0 ? set : null;
   }
 
   isAvailable() {
@@ -231,6 +249,7 @@ class LiveSpeakerIdentifier {
     this._resetMeetingState();
     this.onSpeakerIdentified = null;
     this.getSpeakerProfiles = null;
+    this.preferredProfileIds = null;
     return transientState;
   }
 
@@ -663,28 +682,51 @@ class LiveSpeakerIdentifier {
     // Score every identity by its best voiceprint template: a person may hold
     // several samples, and they must not compete with each other for the
     // best/second-best margin.
-    const { findBestProfileMatch } = require("./speakerTemplateMatching");
+    const { findBestProfileMatch, findPreferredProfileMatch } = require("./speakerTemplateMatching");
+    const preparedProfiles = profiles.map((entry) => {
+      if (!entry?.embedding) return entry;
+      const own =
+        entry.embedding instanceof Float32Array
+          ? entry.embedding
+          : Array.isArray(entry.embedding)
+            ? new Float32Array(entry.embedding)
+            : getBufferFloat32View(entry.embedding);
+      const templates = Array.isArray(entry.embeddings)
+        ? entry.embeddings.map((buffer) =>
+            buffer instanceof Float32Array
+              ? buffer
+              : Array.isArray(buffer)
+                ? new Float32Array(buffer)
+                : getBufferFloat32View(buffer)
+          )
+        : [];
+      return { ...entry, embedding: own, embeddings: [own, ...templates].filter((v) => v?.length) };
+    });
+
+    if (this.preferredProfileIds) {
+      const preferred = findPreferredProfileMatch(
+        embedding,
+        preparedProfiles,
+        speakerEmbeddings.cosineSimilarity,
+        {
+          preferredIds: this.preferredProfileIds,
+          threshold: MATCH_THRESHOLD,
+          margin: MATCH_MARGIN,
+          relax: PARTICIPANT_PRIOR_RELAX,
+        }
+      );
+      if (preferred.usedPrior) {
+        debugLogger.debug("Live speaker matched via participant prior", {
+          profileId: preferred.profile.id,
+          similarity: preferred.similarity,
+        });
+      }
+      return preferred.profile;
+    }
+
     const { profile, similarity, margin } = findBestProfileMatch(
       embedding,
-      profiles.map((entry) => {
-        if (!entry?.embedding) return entry;
-        const own =
-          entry.embedding instanceof Float32Array
-            ? entry.embedding
-            : Array.isArray(entry.embedding)
-              ? new Float32Array(entry.embedding)
-              : getBufferFloat32View(entry.embedding);
-        const templates = Array.isArray(entry.embeddings)
-          ? entry.embeddings.map((buffer) =>
-              buffer instanceof Float32Array
-                ? buffer
-                : Array.isArray(buffer)
-                  ? new Float32Array(buffer)
-                  : getBufferFloat32View(buffer)
-            )
-          : [];
-        return { ...entry, embedding: own, embeddings: [own, ...templates].filter((v) => v?.length) };
-      }),
+      preparedProfiles,
       speakerEmbeddings.cosineSimilarity
     );
 

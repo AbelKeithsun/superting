@@ -1960,6 +1960,16 @@
     "enhance": {
       "title": "強化エラー"
     },
+    "speakerCount": {
+      "label": "想定話者数",
+      "auto": "話者：自動",
+      "count": "{{count}} 人",
+      "autoShort": "自動",
+      "hint": "話者数を指定すると話者分離の精度が上がります。",
+      "decrease": "人数を減らす",
+      "increase": "人数を増やす",
+      "resetAuto": "自動に戻す"
+    },
     "speaker": {
       "voiceprintReplacedToast": "この会議の音声で {{name}} の声紋を 1 件更新しました",
       "voiceprintKeptToast": "{{name}} の既存の声紋 {{count}} 件を保持しました —— 追加はしませんでした",
