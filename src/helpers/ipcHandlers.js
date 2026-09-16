@@ -185,13 +185,16 @@ function resolveSpeakerExpectation({
     Array.isArray(attendees) && attendees.length >= 2
       ? Math.min(attendees.length, MAX_AUTOMATIC_SPEAKER_TARGET)
       : null;
-  const observedTarget =
-    observedSpeakerIds?.size >= 2 ? Math.min(observedSpeakerIds.size, MAX_SPEAKER_COUNT) : null;
 
+  // The live-observed speaker count is deliberately NOT used as a soft
+  // target: live identification over-mints speakers in far-field audio
+  // (measured: it inflates to the 16-speaker cap), and feeding that number
+  // to batch clustering forces exactly that many clusters. The windowed
+  // voiceprint recluster now owns the count in the unknown case.
   return {
     numSpeakers: -1,
     cap: MAX_SPEAKER_COUNT,
-    softTarget: attendeeTarget ?? observedTarget ?? DEFAULT_EXPECTED_SPEAKER_COUNT,
+    softTarget: attendeeTarget ?? DEFAULT_EXPECTED_SPEAKER_COUNT,
     locked: false,
   };
 }

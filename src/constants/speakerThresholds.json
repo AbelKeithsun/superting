@@ -6,5 +6,7 @@
   "clusterMergeThreshold": 0.8,
   "clusterMergeMaxFragmentSeconds": 20,
   "maxVoiceprintsPerPerson": 5,
-  "participantPriorRelax": 0.05
+  "participantPriorRelax": 0.05,
+  "windowClusterMergeThreshold": 0.75,
+  "windowClusterFragmentSeconds": 3
 }
