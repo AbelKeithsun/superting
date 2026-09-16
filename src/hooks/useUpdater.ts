@@ -4,6 +4,8 @@ interface UpdateStatus {
   updateAvailable: boolean;
   updateDownloaded: boolean;
   isDevelopment: boolean;
+  /** Manual mode: the app links to the release page instead of self-installing. */
+  manual?: boolean;
 }
 
 interface UpdateInfo {
@@ -11,6 +13,8 @@ interface UpdateInfo {
   releaseDate?: string;
   releaseNotes?: string;
   files?: any[];
+  releaseUrl?: string;
+  downloadUrl?: string;
 }
 
 interface UpdateState {
@@ -28,6 +32,7 @@ let globalState: UpdateState = {
     updateAvailable: false,
     updateDownloaded: false,
     isDevelopment: false,
+    manual: false,
   },
   info: null,
   downloadProgress: 0,
@@ -166,7 +171,25 @@ export function useUpdater() {
     updateGlobalState({ isChecking: true, error: null });
     try {
       const result = await window.electronAPI.checkForUpdates();
-      updateGlobalState({ isChecking: false });
+      // Reflect the check into the shared state so the badge and the
+      // "new version" affordance react without a reload.
+      updateGlobalState({
+        isChecking: false,
+        status: {
+          ...globalState.status,
+          updateAvailable: !!result?.updateAvailable,
+          manual: result?.manual ?? globalState.status.manual,
+        },
+        info: result?.updateAvailable
+          ? {
+              version: result.latestVersion || result.version,
+              releaseDate: result.releaseDate,
+              releaseNotes: result.releaseNotes,
+              releaseUrl: result.releaseUrl,
+              downloadUrl: result.downloadUrl,
+            }
+          : null,
+      });
       return result;
     } catch (error) {
       updateGlobalState({
@@ -227,6 +250,12 @@ export function useUpdater() {
     }
   }, [state.status.updateDownloaded]);
 
+  const openUpdatePage = useCallback(async () => {
+    const url = globalState.info?.releaseUrl;
+    if (!url) return { success: false, error: "No release page available" };
+    return window.electronAPI.openExternal(url);
+  }, []);
+
   const getAppVersion = useCallback(async () => {
     try {
       const result = await window.electronAPI.getAppVersion();
@@ -252,6 +281,7 @@ export function useUpdater() {
     isInstalling: state.isInstalling,
     error: state.error,
     checkForUpdates,
+    openUpdatePage,
     downloadUpdate,
     installUpdate,
     getAppVersion,

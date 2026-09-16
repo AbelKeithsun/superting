@@ -1192,6 +1192,7 @@
         "xclipDesc": "Ferramenta de área de transferência para colar no KDE Wayland (xclip ou xsel)"
       },
       "updates": {
+            "openDownloadPage": "Abrir página de download",
         "badges": {
           "dev": "Dev",
           "latest": "Mais recente",

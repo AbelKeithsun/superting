@@ -1207,6 +1207,7 @@
         "xclipDesc": "Clipboard tool for KDE Wayland paste (xclip or xsel)"
       },
       "updates": {
+            "openDownloadPage": "Open download page",
         "badges": {
           "dev": "Dev",
           "latest": "Latest",

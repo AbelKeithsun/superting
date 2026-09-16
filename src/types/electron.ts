@@ -357,12 +357,21 @@ export interface UpdateCheckResult {
   files?: any[];
   releaseNotes?: string;
   message?: string;
+  /** Manual checks link to the GitHub release instead of self-installing. */
+  manual?: boolean;
+  currentVersion?: string;
+  latestVersion?: string;
+  releaseUrl?: string;
+  downloadUrl?: string;
+  error?: string;
 }
 
 export interface UpdateStatusResult {
   updateAvailable: boolean;
   updateDownloaded: boolean;
   isDevelopment: boolean;
+  disabled?: boolean;
+  manual?: boolean;
 }
 
 export interface UpdateInfoResult {
@@ -370,11 +379,15 @@ export interface UpdateInfoResult {
   releaseDate?: string;
   releaseNotes?: string | null;
   files?: any[];
+  releaseUrl?: string;
+  downloadUrl?: string;
 }
 
 export interface UpdateResult {
   success: boolean;
   message: string;
+  manual?: boolean;
+  releaseUrl?: string;
 }
 
 export interface AppVersionResult {

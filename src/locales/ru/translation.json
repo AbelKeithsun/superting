@@ -1205,6 +1205,7 @@
         "xclipDesc": "Инструмент буфера обмена для вставки в KDE Wayland (xclip или xsel)"
       },
       "updates": {
+            "openDownloadPage": "Открыть страницу загрузки",
         "badges": {
           "dev": "Dev",
           "latest": "Последняя",

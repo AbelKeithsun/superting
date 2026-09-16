@@ -1206,6 +1206,7 @@
         "xclipDesc": "Zwischenablage-Tool für KDE-Wayland-Einfügen (xclip oder xsel)"
       },
       "updates": {
+            "openDownloadPage": "Downloadseite öffnen",
         "badges": {
           "dev": "Dev",
           "latest": "Aktuell",

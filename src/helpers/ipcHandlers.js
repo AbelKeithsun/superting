@@ -5575,6 +5575,26 @@ class IPCHandlers {
       return this.updateManager.getUpdateStatus();
     });
 
+    // Manual update check against the project's GitHub releases. The renderer
+    // has always called this channel; it was never registered, so the button
+    // only ever produced a "no handler" rejection.
+    ipcMain.handle("check-for-updates", async () => {
+      try {
+        return await this.updateManager.checkForUpdates();
+      } catch (error) {
+        debugLogger.warn("Update check failed", { error: error?.message });
+        return { updateAvailable: false, error: error?.message || String(error) };
+      }
+    });
+
+    ipcMain.handle("download-update", async () => {
+      return this.updateManager.downloadUpdate();
+    });
+
+    ipcMain.handle("install-update", async () => {
+      return this.updateManager.installUpdate();
+    });
+
     ipcMain.handle("get-update-info", async () => {
       return this.updateManager.getUpdateInfo();
     });
