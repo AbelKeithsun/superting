@@ -45,6 +45,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Enumerating attendees suggests the count.** Add 2+ participants and the count follows the list until you pin a number yourself (a manual choice always wins).
 - **Attendees prime speaker recognition.** Enumerated participants resolve to speaker identities (by email/name) and get a first, slightly relaxed matching pass in live identification and batch relabelling (threshold 0.05 lower, margin still enforced). Walk-in speakers are still recognised or created — the prior is a weight, never a restriction. Priors refresh mid-recording when the attendee list changes.
 
+### Accurate speaker counts in long meetings
+
+- **Fixed: long meetings over-split speakers up to the 16 cap.** Windowed diarization assigned cross-window speaker labels by temporal overlap — anyone silent in the 30s overlap zone was minted as a new speaker (measured: 132 global speakers on a 41-minute meeting, trimmed to 16 by the cap). Windows are now re-clustered by voiceprint: every window cluster contributes its longest utterances to a centroid embedding, micro-fragments (<3s) are absorbed into the closest anchor, and average-linkage merging groups clusters down to the pinned count when set, otherwise to the similarity threshold. The same meeting re-clusters to 5 speakers; a pinned 6 returns exactly 6. The overlap heuristic remains as fallback when embeddings are unavailable.
+- **Live-observed counts no longer force the batch clustering size.** Live identification over-mints speakers in far-field audio, and feeding that count to clustering forced exactly that many clusters.
+
+### Add attendees from the people directory; contacts fused into people
+
+- **The add-attendee popover enumerates 人名表.** Open it to see everyone in the people directory (organisation/email and a voiceprint badge for people with templates); typing filters by name, email, organisation or phone. Selecting a person attaches them with their personId, so voiceprint priors and the speaker-count suggestion flow through (all 10 locales).
+- **Contacts and people are one table now.** people is the single identity table; the legacy contacts API reads/writes people (creating or name-upgrading records, never clobbering a user-set name), and legacy contacts rows keep migrating into people on startup.
+
 ## [2.0.8] - 2026-09-15
 
 ### Speaker marking → contacts (cross-session reuse)
