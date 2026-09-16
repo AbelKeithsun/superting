@@ -10,6 +10,19 @@ interface NoteActionInputOptions {
 interface StoredTranscriptSegment {
   source?: "mic" | "system";
   text?: string;
+  timestamp?: number;
+}
+
+// Local copy of the transcript clock format: this module stays dependency-free
+// so the Node test runner can load it directly.
+function formatSegmentClock(seconds: number | undefined): string {
+  if (typeof seconds !== "number" || !Number.isFinite(seconds)) return "";
+  const total = Math.max(0, Math.floor(seconds));
+  const hours = Math.floor(total / 3600);
+  const minutes = Math.floor((total % 3600) / 60);
+  const rest = total % 60;
+  const pad = (value: number) => String(value).padStart(2, "0");
+  return hours > 0 ? `${hours}:${pad(minutes)}:${pad(rest)}` : `${pad(minutes)}:${pad(rest)}`;
 }
 
 function parseStoredTranscriptSegments(raw: string): StoredTranscriptSegment[] {
@@ -48,10 +61,15 @@ export function buildNoteActionInput({
     if (segments.length > 0) {
       formattedTranscript = segments
         .filter((segment) => typeof segment.text === "string" && segment.text.trim())
-        .map(
-          (segment) =>
-            `${segment.source === "mic" ? speakerLabels.you : speakerLabels.them}: ${segment.text}`
-        )
+        .map((segment) => {
+          const speaker = segment.source === "mic" ? speakerLabels.you : speakerLabels.them;
+          // Stored segments carry timeline-relative seconds; the built-in
+          // minutes prompt asks for chapter timestamps ("if the transcript
+          // contains timestamps, keep them"), so pass them through. Without
+          // this the model can only answer that no timestamps were provided.
+          const time = formatSegmentClock(segment.timestamp);
+          return `${time ? `[${time}] ` : ""}${speaker}: ${segment.text}`;
+        })
         .join("\n");
     }
     if (!formattedTranscript) {
