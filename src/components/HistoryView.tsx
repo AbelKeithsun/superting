@@ -23,6 +23,7 @@ function timelineTimeValue(timestamp: string): number {
 interface HistoryViewProps {
   history: TranscriptionItemType[];
   notes: NoteItem[];
+  folderNames?: Map<number, string>;
   onOpenNote: (note: NoteItem) => void;
   isLoading: boolean;
   hotkey: string;
@@ -44,6 +45,7 @@ interface HistoryViewProps {
 export default function HistoryView({
   history,
   notes,
+  folderNames,
   onOpenNote,
   isLoading,
   hotkey,
@@ -304,6 +306,11 @@ export default function HistoryView({
                           <NoteTimelineItem
                             key={`note-${entry.note.id}`}
                             note={entry.note}
+                            folderName={
+                              entry.note.folder_id != null
+                                ? folderNames?.get(entry.note.folder_id)
+                                : undefined
+                            }
                             onOpen={onOpenNote}
                           />
                         ) : (

@@ -63,6 +63,7 @@ export default function ControlPanel() {
   const { t } = useTranslation();
   const history = useTranscriptions();
   const [recentNotes, setRecentNotes] = useState<NoteItem[]>([]);
+  const [homeFolderNames, setHomeFolderNames] = useState<Map<number, string>>(new Map());
   const [isLoading, setIsLoading] = useState(true);
   const [showSettings, setShowSettings] = useState(false);
   const [showPostMigration, setShowPostMigration] = useState(false);
@@ -265,16 +266,25 @@ export default function ControlPanel() {
   }, []);
 
   // Recent notes/meetings for the home timeline — refetch whenever the home
-  // view becomes visible so fresh recordings show up.
+  // view becomes visible so fresh recordings show up. Folder names are loaded
+  // alongside so each note can show which folder (topic) it belongs to.
   useEffect(() => {
     if (activeView !== "home") return;
     let cancelled = false;
     (async () => {
       try {
-        const notes = (await window.electronAPI?.getNotes?.(null, 20, null, "updatedAt")) ?? [];
-        if (!cancelled) setRecentNotes(notes);
+        const [notes, folders] = await Promise.all([
+          window.electronAPI?.getNotes?.(null, 20, null, "updatedAt") ?? Promise.resolve([]),
+          window.electronAPI?.getFolders?.() ?? Promise.resolve([]),
+        ]);
+        if (cancelled) return;
+        setRecentNotes(notes ?? []);
+        setHomeFolderNames(new Map((folders ?? []).map((folder) => [folder.id, folder.name])));
       } catch {
-        if (!cancelled) setRecentNotes([]);
+        if (!cancelled) {
+          setRecentNotes([]);
+          setHomeFolderNames(new Map());
+        }
       }
     })();
     return () => {
@@ -828,6 +838,7 @@ export default function ControlPanel() {
               <HistoryView
                 history={history}
                 notes={recentNotes}
+                folderNames={homeFolderNames}
                 onOpenNote={handleOpenNoteFromHome}
                 isLoading={isLoading}
                 hotkey={hotkey}

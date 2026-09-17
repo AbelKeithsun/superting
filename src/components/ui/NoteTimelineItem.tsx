@@ -1,5 +1,5 @@
 import { useTranslation } from "react-i18next";
-import { ChevronRight, NotebookPen, Upload, Users } from "lucide-react";
+import { ChevronRight, FolderOpen, NotebookPen, Upload, Users } from "lucide-react";
 import type { NoteItem } from "../../types/electron";
 import { cn } from "../lib/utils";
 import { normalizeDbDate } from "../../utils/dateFormatting";
@@ -60,10 +60,12 @@ const TYPE_META = {
 
 interface NoteTimelineItemProps {
   note: NoteItem;
+  /** Resolved folder name for this note, shown as a topic chip. */
+  folderName?: string | null;
   onOpen: (note: NoteItem) => void;
 }
 
-export default function NoteTimelineItem({ note, onOpen }: NoteTimelineItemProps) {
+export default function NoteTimelineItem({ note, folderName, onOpen }: NoteTimelineItemProps) {
   const { t, i18n } = useTranslation();
 
   const timestampDate = normalizeDbDate(getNoteTimelineTimestamp(note));
@@ -105,6 +107,15 @@ export default function NoteTimelineItem({ note, onOpen }: NoteTimelineItemProps
             <span className="shrink-0 text-[10px] font-medium px-1 py-px rounded bg-accent/10 text-accent/80">
               {t(meta.badgeKey)}
             </span>
+            {folderName && (
+              <span
+                title={folderName}
+                className="shrink-0 inline-flex max-w-28 items-center gap-1 rounded bg-muted/70 px-1.5 py-px text-[10px] font-medium text-muted-foreground dark:bg-white/[0.06]"
+              >
+                <FolderOpen size={10} className="shrink-0 text-muted-foreground/70" />
+                <span className="truncate">{folderName}</span>
+              </span>
+            )}
             <span className="text-sm text-foreground/90 font-medium truncate">{title}</span>
             {duration && (
               <span className="shrink-0 text-[11px] text-muted-foreground/70 tabular-nums">
