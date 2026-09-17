@@ -666,6 +666,8 @@ export function MeetingTranscriptChat({
   const [inlineEditingBlockId, setInlineEditingBlockId] = useState<string | null>(null);
   const [inlineDrafts, setInlineDrafts] = useState<Record<string, string>>({});
 
+  const hasContent = segments.length > 0 || micPartial || systemPartial;
+
   useEffect(() => {
     activeSegmentIdRef.current = activeSegmentId ?? null;
   }, [activeSegmentId]);
@@ -682,6 +684,12 @@ export function MeetingTranscriptChat({
     target?.scrollIntoView({ block: "center", behavior: "smooth" });
   }, [activeSegmentScrollKey]);
 
+  // The scroll container is conditionally rendered: it does not exist while
+  // the transcript is empty (the early return below), and recording start/stop
+  // swaps it for a different node. Re-running on those transitions re-attaches
+  // the listener — with a mount-once effect the sticky flag would stay at its
+  // initial `true` forever, and every new segment would yank the view back to
+  // the bottom even after the user scrolled up to read earlier text.
   useEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
@@ -693,7 +701,7 @@ export function MeetingTranscriptChat({
     updateStickyScroll();
     el.addEventListener("scroll", updateStickyScroll);
     return () => el.removeEventListener("scroll", updateStickyScroll);
-  }, []);
+  }, [hasContent, isRecording]);
 
   // While any inline/live editor is open, never snap the view: the user is
   // correcting an earlier segment (often still inside the 80px sticky zone
@@ -708,7 +716,6 @@ export function MeetingTranscriptChat({
     el.scrollTop = el.scrollHeight;
   }, [segments, micPartial, systemPartial, isEditingSegment]);
 
-  const hasContent = segments.length > 0 || micPartial || systemPartial;
   const colorByKey = useMemo(() => {
     const map = new Map<string, number>();
     let nextIdx = 0;
