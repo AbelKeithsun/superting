@@ -211,6 +211,11 @@ function TranscriptAudioPlayer({
   const [rate, setRate] = useState(1);
   const pendingSeekSecondsRef = useRef<number | null>(null);
   const pendingSeekRetryCountRef = useRef(0);
+  // Mirrors of playbackUrl / the in-flight prepare promise so async callers
+  // (the seek effect) can read the resolved URL without racing on the
+  // isPreparing state update.
+  const playbackUrlRef = useRef<string | null>(null);
+  const preparingPromiseRef = useRef<Promise<string | null> | null>(null);
 
   const playableFile = audioFiles.length === 1 ? audioFiles[0] : null;
   const audioFileIdsKey = useMemo(() => audioFiles.map((file) => file.id).join(":"), [audioFiles]);
@@ -268,26 +273,35 @@ function TranscriptAudioPlayer({
   );
 
   const preparePlayback = useCallback(async () => {
-    if (isPreparing || playbackUrl) return playbackUrl;
+    if (playbackUrlRef.current) return playbackUrlRef.current;
+    if (preparingPromiseRef.current) return preparingPromiseRef.current;
     if (audioFiles.length === 0) return null;
-    setIsPreparing(true);
-    try {
-      let target = playableFile;
-      if (!target && onMergeAudioFiles) {
-        target = await onMergeAudioFiles();
+    const promise = (async () => {
+      setIsPreparing(true);
+      try {
+        let target = playableFile;
+        if (!target && onMergeAudioFiles) {
+          target = await onMergeAudioFiles();
+        }
+        if (!target) return null;
+        const result = await window.electronAPI.getNoteAudioPlaybackUrl?.(noteId, target.id);
+        if (!result?.success || !result.url) return null;
+        playbackUrlRef.current = result.url;
+        setPlaybackUrl(result.url);
+        return result.url;
+      } finally {
+        setIsPreparing(false);
+        preparingPromiseRef.current = null;
       }
-      if (!target) return null;
-      const result = await window.electronAPI.getNoteAudioPlaybackUrl?.(noteId, target.id);
-      if (!result?.success || !result.url) return null;
-      setPlaybackUrl(result.url);
-      return result.url;
-    } finally {
-      setIsPreparing(false);
-    }
-  }, [audioFiles.length, isPreparing, noteId, onMergeAudioFiles, playableFile, playbackUrl]);
+    })();
+    preparingPromiseRef.current = promise;
+    return promise;
+  }, [audioFiles.length, noteId, onMergeAudioFiles, playableFile]);
 
   useEffect(() => {
     setPlaybackUrl(null);
+    playbackUrlRef.current = null;
+    preparingPromiseRef.current = null;
     setCurrentTime(0);
     setDuration(metadataDurationSeconds || 0);
     setIsPlaying(false);
@@ -301,6 +315,19 @@ function TranscriptAudioPlayer({
       const url = playbackUrl || (await preparePlayback());
       const audio = audioRef.current;
       if (!url || !audio) return;
+      // The audio may never have been activated (readyState 0 — <audio
+      // preload> does not reliably kick off loading for the custom protocol
+      // until the user interacts with the player). If the resource is not
+      // mounted yet, mount it and force a load so loadedmetadata fires and the
+      // pending seek in applySeek actually applies; otherwise clicking a
+      // transcript line only highlights/scrolls but the progress bar never
+      // moves until the user manually drags to activate the audio.
+      if (audio.getAttribute("src") !== url) {
+        audio.src = url;
+        audio.load();
+      } else if (!shouldApplyMediaSeekNow(audio)) {
+        audio.load();
+      }
       applySeek(audio, seekRequest.seconds);
     };
     seek();
