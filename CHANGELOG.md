@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.11] - 2026-09-17
+
+### Home notes show which folder they belong to
+
+- **Folder chip on the home timeline.** Every note/meeting on the home page now carries a small folder chip with the name of the folder it lives in, so the timeline tells you at a glance which topic or meeting a note belongs to. The home fetch loads the folder list alongside the recent notes and threads an id→name map down to the timeline item; notes without a folder simply render no chip.
+
+### Transcript playback and scrolling
+
+- **Clicking a transcript line now seeks immediately.** The click used to only highlight the line: the custom playback protocol is not started by the `preload` attribute alone, so the pending seek was never applied and the audio stayed dormant (`readyState` 0) until the user dragged the progress bar once. The player now mounts the resource and calls `load()` when it is not ready (so `loadedmetadata` always fires), and `preparePlayback` dedupes through refs instead of racing on the `isPreparing` state update — transcript clicks seek right away, even on a fresh note.
+- **Incoming live segments no longer yank the view back down.** The sticky-scroll listener was registered in a mount-once effect, but the scroll container does not exist while the transcript is empty and recording start/stop swaps it for a different node. During note recording the listener was never attached, the stick-to-bottom flag stayed `true` forever, and every incoming segment scrolled the user away from the text they were reading. The effect now re-runs when the container appears or is replaced, so the flag tracks the real scroll position.
+
+### Meeting minutes
+
+- **会议时间 is filled from the recording window.** The built-in meeting-minutes prompt told the model to write 未明确 for the meeting time whenever the transcript itself did not mention one, even though the app knows the recording window (`recorded_at` plus `audio_duration_seconds`). The local-time recording range is now injected into the system prompt as authoritative metadata that takes precedence over the action instructions, and as a last resort a post-processing pass fills a still-placeholder 会议时间 line. Concrete times the model derived are left alone, as are other lines such as 参会人员. The built-in prompt was updated for fresh installs; existing users keep their stored action prompt but still get the programmatic fallback.
+
 ## [2.0.10] - 2026-09-16
 
 ### Inline transcript editing + correction learning in every state
