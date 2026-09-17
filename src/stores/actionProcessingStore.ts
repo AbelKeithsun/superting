@@ -63,6 +63,7 @@ export interface RunActionOptions {
   currentTranscript?: string | null;
   currentRecordedAt?: string | null;
   currentCreatedAt?: string | null;
+  currentAudioDurationSeconds?: number | null;
   speakerLabels?: {
     you: string;
     them: string;
@@ -156,6 +157,7 @@ export function runBackgroundAction(
           transcript: options.currentTranscript ?? null,
           recorded_at: options.currentRecordedAt ?? null,
           created_at: options.currentCreatedAt ?? "",
+          audio_duration_seconds: options.currentAudioDurationSeconds ?? null,
         },
         action,
         modelId,

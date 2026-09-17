@@ -32,14 +32,18 @@ interface NoteActionPromptInput {
   isMeetingNote?: boolean;
   customDictionary?: string[];
   uiLanguage?: string;
+  meetingTimeContext?: string;
 }
 
 export function buildNoteActionSystemPrompt(
   actionPrompt: string,
-  { isMeetingNote, customDictionary }: NoteActionPromptInput
+  { isMeetingNote, customDictionary, meetingTimeContext }: NoteActionPromptInput
 ): string {
   const basePrompt = isMeetingNote ? MEETING_SYSTEM_PROMPT : BASE_SYSTEM_PROMPT;
   const dictionaryInstruction = buildDictionaryInstruction(customDictionary);
-  const prompt = basePrompt + actionPrompt;
+  let prompt = basePrompt + actionPrompt;
+  if (meetingTimeContext) {
+    prompt += `\n\nRECORDING TIME (authoritative metadata from the app, not from the transcript text): the meeting audio runs from ${meetingTimeContext} (local time). Whenever the action instructions ask for a meeting-time field (会议时间 / meeting time), fill it with exactly this range and never mark it as unspecified. This takes precedence over the action instructions.`;
+  }
   return dictionaryInstruction ? `${prompt}\n\n${dictionaryInstruction}` : prompt;
 }

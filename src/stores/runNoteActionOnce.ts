@@ -1,6 +1,7 @@
 import reasoningService from "../services/ReasoningService";
 import type { ReasoningConfig } from "../services/BaseReasoningService";
 import type { ActionItem, NoteItem } from "../types/electron";
+import { applyMeetingTimeFallback, buildMeetingTimeRange } from "./meetingTimeContext";
 import {
   getSettings,
   selectIsCloudNoteFormattingMode,
@@ -22,7 +23,13 @@ interface RunNoteActionOnceInput {
   noteId?: number;
   note: Pick<
     NoteItem,
-    "title" | "content" | "enhanced_content" | "transcript" | "recorded_at" | "created_at"
+    | "title"
+    | "content"
+    | "enhanced_content"
+    | "transcript"
+    | "recorded_at"
+    | "created_at"
+    | "audio_duration_seconds"
   >;
   action: ActionItem;
   modelId: string;
@@ -76,10 +83,12 @@ export async function runNoteActionOnce({
   const resolvedFormatting = selectResolvedNoteFormatting(settings);
   const isHostedMode = isCloudMode || selectIsCloudNoteFormattingMode(settings);
   const selectedModel = modelId || resolvedFormatting.model;
+  const meetingTimeRange = buildMeetingTimeRange(note);
   const systemPrompt = buildNoteActionSystemPrompt(action.prompt, {
     isMeetingNote: actionInput.isMeetingNote,
     customDictionary: settings.customDictionary,
     uiLanguage: settings.uiLanguage,
+    meetingTimeContext: meetingTimeRange ?? undefined,
   });
 
   const reasoningConfig: ReasoningConfig = {
@@ -174,10 +183,28 @@ export async function runNoteActionOnce({
     throw new Error("Action generated empty content");
   }
 
+  // Last-resort guarantee: if the model still wrote an unspecified meeting
+  // time even though the recording window is known, fill it in programmatically
+  // so the summary never shows "未明确" when the data exists.
+  const finalContent = meetingTimeRange
+    ? applyMeetingTimeFallback(generatedContent, meetingTimeRange)
+    : generatedContent;
+  if (finalContent !== generatedContent) {
+    logNoteAction("NOTE_ACTION_MEETING_TIME_FALLBACK", {
+      operationId: effectiveOperationId,
+      noteId: effectiveNoteId,
+      actionId: action.id,
+      actionName: action.name,
+      meetingTimeRange,
+      generatedContent: loggableText(generatedContent),
+      finalContent: loggableText(finalContent),
+    });
+  }
+
   const updates = buildActionOutputUpdates({
     outputTarget: action.output_target,
     writeMode: action.write_mode,
-    generatedContent,
+    generatedContent: finalContent,
     existingContent: note.content,
     existingEnhancedContent: note.enhanced_content,
     actionPrompt: action.prompt,
@@ -198,10 +225,10 @@ export async function runNoteActionOnce({
       actionId: action.id,
       actionName: action.name,
       selectedModel,
-      generatedContentLength: generatedContent.length,
+      generatedContentLength: finalContent.length,
     });
     const title = await generateNoteTitle(
-      generatedContent,
+      finalContent,
       selectedModel,
       settings.customDictionary,
       settings.uiLanguage,
@@ -223,9 +250,9 @@ export async function runNoteActionOnce({
     noteId: effectiveNoteId,
     actionId: action.id,
     actionName: action.name,
-    generatedContent: loggableText(generatedContent),
+    generatedContent: loggableText(finalContent),
     updates,
   });
 
-  return { generatedContent, updates };
+  return { generatedContent: finalContent, updates };
 }
