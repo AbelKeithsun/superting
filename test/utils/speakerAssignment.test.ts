@@ -265,7 +265,6 @@ test("transcript speaker blocks split a single oversized segment for display", (
   const blocks = buildTranscriptSpeakerBlocks(segments, {}, labels, {
     maxBlockDurationSeconds: 60,
     maxBlockTextLength: 24,
-    timelineDurationSeconds: 300,
   });
 
   assert.ok(blocks.length > 1);

@@ -1783,6 +1783,8 @@ declare global {
           source: "mic" | "system";
           type: "partial" | "final" | "retract";
           timestamp?: number;
+          /** Provider that stamped `timestamp`; selects the unit at ingest. */
+          provider?: string | null;
         }) => void
       ) => () => void;
       onMeetingSpeakerIdentified?: (

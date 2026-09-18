@@ -593,7 +593,6 @@ interface MeetingTranscriptChatProps {
   isRecording?: boolean;
   isDiarizing?: boolean;
   recordingStartedAt?: number | null;
-  timelineDurationSeconds?: number | null;
   onMapSpeaker?: (
     speakerId: string,
     displayName: string,
@@ -640,7 +639,6 @@ export function MeetingTranscriptChat({
   isRecording,
   isDiarizing,
   recordingStartedAt,
-  timelineDurationSeconds,
   onMapSpeaker,
   onMapSegmentSpeaker,
   onConfirmSuggestion,
@@ -758,10 +756,9 @@ export function MeetingTranscriptChat({
           maxBlockDurationSeconds: 60,
           maxBlockTextLength: 420,
           selfFallback: false,
-          timelineDurationSeconds,
         }
       ),
-    [segments, speakerMappings, t, timelineDurationSeconds]
+    [segments, speakerMappings, t]
   );
   const renderedSearchItems = isEditing ? segments : speakerBlocks;
 
@@ -876,11 +873,7 @@ export function MeetingTranscriptChat({
             {liveItems.map((item) => {
               const timestampLabel =
                 !item.pending && item.timestamp != null
-                  ? formatTranscriptTimestamp(
-                      item.timestamp,
-                      timelineStartedAt,
-                      timelineDurationSeconds
-                    )
+                  ? formatTranscriptTimestamp(item.timestamp, timelineStartedAt)
                   : null;
               const isEditingThis = liveEditingId === item.id && !item.pending;
 
@@ -1026,8 +1019,7 @@ export function MeetingTranscriptChat({
               !!onAttachSpeakerEmail;
             const timestampLabel = formatTranscriptTimestamp(
               segment.timestamp,
-              timelineStartedAt,
-              timelineDurationSeconds
+              timelineStartedAt
             );
             const fallbackSpeakerLabel =
               segment.speakerMatchStatus === "unmatched"

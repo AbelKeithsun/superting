@@ -28,48 +28,46 @@ export function formatRecordingElapsed(
   return formatClock(getElapsedRecordingSeconds(recordingStartedAt, nowMs));
 }
 
+/**
+ * Seconds on the note timeline for a segment stamp.
+ *
+ * Segments are normalised to timeline seconds at ingest — the provider's unit is
+ * resolved there, where the provider is known (see
+ * `src/utils/meetingTranscriptTimeline.ts`). A live session may still hand us an
+ * absolute stamp, which is placed relative to the session start; everything else
+ * is already timeline seconds and is rendered as-is.
+ *
+ * Do NOT infer a unit from the value's magnitude here. That guess divided a
+ * resumed session's timeline by 100 once it passed the saved audio duration
+ * (the note's audio files only cover the finished sessions), so a 33s line
+ * rendered as 00:00 and then crawled 00:01 / 00:02 while the recording ran on.
+ */
 export function getRelativeTranscriptSeconds(
   timestamp: number | null | undefined,
-  recordingStartedAt?: number | null,
-  timelineDurationSeconds?: number | null
+  recordingStartedAt?: number | null
 ): number | undefined {
   if (typeof timestamp !== "number" || !Number.isFinite(timestamp)) return undefined;
-  if (timestamp <= 1_000_000_000) {
-    const seconds = Math.max(0, timestamp);
-    if (
-      typeof timelineDurationSeconds === "number" &&
-      Number.isFinite(timelineDurationSeconds) &&
-      timelineDurationSeconds > 0 &&
-      seconds > timelineDurationSeconds + 30
-    ) {
-      const centiseconds = seconds / 100;
-      if (centiseconds <= timelineDurationSeconds + 30) return Math.max(0, centiseconds);
-    }
-    return seconds;
+  // Absolute (wall-clock) milliseconds can only be placed with a session start.
+  if (timestamp > 1_000_000_000) {
+    if (!recordingStartedAt || !Number.isFinite(recordingStartedAt)) return undefined;
+    return Math.max(0, (timestamp - recordingStartedAt) / 1000);
   }
-  if (!recordingStartedAt || !Number.isFinite(recordingStartedAt)) return undefined;
-  return Math.max(0, (timestamp - recordingStartedAt) / 1000);
+  return Math.max(0, timestamp);
 }
 
 export function formatTranscriptTimestamp(
   timestamp: number | null | undefined,
-  recordingStartedAt?: number | null,
-  timelineDurationSeconds?: number | null
+  recordingStartedAt?: number | null
 ): string {
-  const seconds = getRelativeTranscriptSeconds(
-    timestamp,
-    recordingStartedAt,
-    timelineDurationSeconds
-  );
+  const seconds = getRelativeTranscriptSeconds(timestamp, recordingStartedAt);
   return seconds == null ? "" : formatClock(seconds);
 }
 
 export function getTranscriptSeekSeconds(
   timestamp: number | null | undefined,
-  recordingStartedAt?: number | null,
-  timelineDurationSeconds?: number | null
+  recordingStartedAt?: number | null
 ): number | undefined {
-  return getRelativeTranscriptSeconds(timestamp, recordingStartedAt, timelineDurationSeconds);
+  return getRelativeTranscriptSeconds(timestamp, recordingStartedAt);
 }
 
 export function shouldApplyMediaSeekNow(media: {
@@ -88,19 +86,14 @@ export interface PlaybackTranscriptSegment {
 export function getPlaybackActiveSegmentId(
   currentSeconds: number,
   segments: PlaybackTranscriptSegment[],
-  recordingStartedAt?: number | null,
-  timelineDurationSeconds?: number | null
+  recordingStartedAt?: number | null
 ): string | null {
   if (!Number.isFinite(currentSeconds) || currentSeconds < 0) return null;
 
   const timeline = segments
     .map((segment) => ({
       id: segment.id,
-      seconds: getRelativeTranscriptSeconds(
-        segment.timestamp,
-        recordingStartedAt,
-        timelineDurationSeconds
-      ),
+      seconds: getRelativeTranscriptSeconds(segment.timestamp, recordingStartedAt),
     }))
     .filter((item): item is { id: string; seconds: number } => item.seconds != null)
     .sort((a, b) => a.seconds - b.seconds);

@@ -1,7 +1,21 @@
 import type { TranscriptSegment } from "../stores/meetingRecordingStore";
 import { normalizeTranscriptSegments } from "./transcriptSpeakerState";
+import { repairLegacyCentisecondTimestamps } from "./meetingTranscriptTimeline";
 import logger from "./logger";
-export function parseTranscriptSegments(raw: string): TranscriptSegment[] {
+
+export interface ParseTranscriptSegmentsOptions {
+  /**
+   * Note audio length. Used to repair legacy transcripts that were persisted in
+   * centiseconds, once, at this ingest boundary — the render path no longer
+   * guesses a unit from the magnitude of a timestamp.
+   */
+  timelineDurationSeconds?: number | null;
+}
+
+export function parseTranscriptSegments(
+  raw: string,
+  options: ParseTranscriptSegmentsOptions = {}
+): TranscriptSegment[] {
   if (!raw.startsWith("[")) return [];
   try {
     const parsed = JSON.parse(raw) as Array<{
@@ -25,27 +39,30 @@ export function parseTranscriptSegments(raw: string): TranscriptSegment[] {
       speakerMatchReason?: TranscriptSegment["speakerMatchReason"];
     }>;
     return normalizeTranscriptSegments(
-      parsed.map((s, i) => ({
-        id: `stored-${i}`,
-        text: s.text,
-        source: s.source,
-        timestamp: s.timestamp,
-        endTime: s.endTime,
-        editedByUser: s.editedByUser,
-        originalText: s.originalText,
-        learnedText: s.learnedText,
-        speaker: s.speaker,
-        speakerName: s.speakerName,
-        speakerIsPlaceholder: s.speakerIsPlaceholder,
-        suggestedName: s.suggestedName,
-        suggestedProfileId: s.suggestedProfileId,
-        speakerStatus: s.speakerStatus,
-        speakerLocked: s.speakerLocked,
-        speakerLockSource: s.speakerLockSource,
-        speakerMatchStatus: s.speakerMatchStatus,
-        speakerMatchMethod: s.speakerMatchMethod,
-        speakerMatchReason: s.speakerMatchReason,
-      }))
+      repairLegacyCentisecondTimestamps(
+        parsed.map((s, i) => ({
+          id: `stored-${i}`,
+          text: s.text,
+          source: s.source,
+          timestamp: s.timestamp,
+          endTime: s.endTime,
+          editedByUser: s.editedByUser,
+          originalText: s.originalText,
+          learnedText: s.learnedText,
+          speaker: s.speaker,
+          speakerName: s.speakerName,
+          speakerIsPlaceholder: s.speakerIsPlaceholder,
+          suggestedName: s.suggestedName,
+          suggestedProfileId: s.suggestedProfileId,
+          speakerStatus: s.speakerStatus,
+          speakerLocked: s.speakerLocked,
+          speakerLockSource: s.speakerLockSource,
+          speakerMatchStatus: s.speakerMatchStatus,
+          speakerMatchMethod: s.speakerMatchMethod,
+          speakerMatchReason: s.speakerMatchReason,
+        })),
+        options.timelineDurationSeconds
+      )
     );
   } catch (e) {
     logger.warn("Failed to parse transcript segments", e);

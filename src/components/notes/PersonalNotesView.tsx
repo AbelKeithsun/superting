@@ -666,7 +666,11 @@ export default function PersonalNotesView({
   const startRecording = useCallback(async () => {
     const noteId = activeNoteRef.current;
     const note = notes.find((n) => n.id === noteId);
-    const seedSegments = note?.transcript ? parseTranscriptSegments(note.transcript) : [];
+    const seedSegments = note?.transcript
+      ? parseTranscriptSegments(note.transcript, {
+          timelineDurationSeconds: note.audio_duration_seconds ?? null,
+        })
+      : [];
     await storeStartRecording({
       noteId,
       noteTitle: note?.title ?? null,
@@ -1391,7 +1395,11 @@ export default function PersonalNotesView({
   useEffect(() => {
     if (!meetingRecordingRequest || activeNoteId !== meetingRecordingRequest.noteId) return;
     const note = notes.find((n) => n.id === meetingRecordingRequest.noteId);
-    const seedSegments = note?.transcript ? parseTranscriptSegments(note.transcript) : [];
+    const seedSegments = note?.transcript
+      ? parseTranscriptSegments(note.transcript, {
+          timelineDurationSeconds: note.audio_duration_seconds ?? null,
+        })
+      : [];
     storeStartRecording({
       noteId: meetingRecordingRequest.noteId,
       noteTitle: note?.title ?? null,
@@ -1412,7 +1420,11 @@ export default function PersonalNotesView({
       (realtimeTranscript || realtimeSegments.length > 0)
     ) {
       const note = recordingNoteId ? notes.find((n) => n.id === recordingNoteId) : null;
-      const seedSegments = note?.transcript ? parseTranscriptSegments(note.transcript) : [];
+      const seedSegments = note?.transcript
+        ? parseTranscriptSegments(note.transcript, {
+            timelineDurationSeconds: note.audio_duration_seconds ?? null,
+          })
+        : [];
       const persistedSegments =
         realtimeSegments.length > 0
           ? offsetAppendedTranscriptSegments(realtimeSegments, seedSegments, recordingStartedAt)
@@ -1442,7 +1454,11 @@ export default function PersonalNotesView({
     const interval = setInterval(() => {
       if (!recordingNoteId || realtimeSegments.length === 0) return;
       const note = notes.find((n) => n.id === recordingNoteId);
-      const seedSegments = note?.transcript ? parseTranscriptSegments(note.transcript) : [];
+      const seedSegments = note?.transcript
+        ? parseTranscriptSegments(note.transcript, {
+            timelineDurationSeconds: note.audio_duration_seconds ?? null,
+          })
+        : [];
       const persistedSegments = offsetAppendedTranscriptSegments(
         realtimeSegments,
         seedSegments,

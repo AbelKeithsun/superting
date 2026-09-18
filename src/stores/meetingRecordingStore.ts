@@ -982,6 +982,7 @@ export async function startRecording(args: StartRecordingArgs): Promise<void> {
         source: "mic" | "system";
         type: "partial" | "final" | "retract";
         timestamp?: number;
+        provider?: string | null;
       }) => {
         if (data.type === "retract") {
           const current = useMeetingRecordingStore.getState().segments;
@@ -991,7 +992,8 @@ export async function startRecording(args: StartRecordingArgs): Promise<void> {
             toTranscriptTimelineSeconds(
               data.timestamp,
               useMeetingRecordingStore.getState().recordingStartedAt,
-              timelineOffsetSecondsValue
+              timelineOffsetSecondsValue,
+              data.provider
             )
           );
           if (next === current) return;
@@ -1020,7 +1022,8 @@ export async function startRecording(args: StartRecordingArgs): Promise<void> {
             timestamp: toTranscriptTimelineSeconds(
               data.timestamp,
               useMeetingRecordingStore.getState().recordingStartedAt,
-              timelineOffsetSecondsValue
+              timelineOffsetSecondsValue,
+              data.provider
             ),
           })
         );

@@ -997,8 +997,16 @@ export default function NoteEditor({
     if (isRecording) return meetingSegments ?? [];
     if (diarizedSegments && diarizedSegments.length > 0) return diarizedSegments;
     if (meetingSegments && meetingSegments.length > 0) return meetingSegments;
-    return parseTranscriptSegments(note.transcript || "");
-  }, [diarizedSegments, isRecording, meetingSegments, note.transcript]);
+    return parseTranscriptSegments(note.transcript || "", {
+      timelineDurationSeconds: transcriptAudioDurationSeconds,
+    });
+  }, [
+    diarizedSegments,
+    isRecording,
+    meetingSegments,
+    note.transcript,
+    transcriptAudioDurationSeconds,
+  ]);
 
   useEffect(() => {
     displaySegmentsRef.current = displaySegments;
@@ -1364,7 +1372,9 @@ export default function NoteEditor({
 
       const persisted = await window.electronAPI?.getNote?.(note.id);
       const existing = persisted?.transcript
-        ? parseTranscriptSegments(persisted.transcript)
+        ? parseTranscriptSegments(persisted.transcript, {
+            timelineDurationSeconds: persisted.audio_duration_seconds ?? null,
+          })
         : displaySegmentsRef.current;
 
       const enriched = mergeTranscriptSegments(
@@ -1405,7 +1415,9 @@ export default function NoteEditor({
       pendingDiarizationRef.current = null;
       void window.electronAPI?.getNote?.(note.id).then((persisted) => {
         const existing = persisted?.transcript
-          ? parseTranscriptSegments(persisted.transcript)
+          ? parseTranscriptSegments(persisted.transcript, {
+              timelineDurationSeconds: persisted.audio_duration_seconds ?? null,
+            })
           : displaySegmentsRef.current;
         const enriched = mergeTranscriptSegments(
           existing,
@@ -1447,11 +1459,7 @@ export default function NoteEditor({
 
   const handleSeekToTranscriptSegment = useCallback(
     (segment: TranscriptSeekTarget) => {
-      const seekSeconds = getTranscriptSeekSeconds(
-        segment.timestamp,
-        recordingStartedAt,
-        transcriptAudioDurationSeconds
-      );
+      const seekSeconds = getTranscriptSeekSeconds(segment.timestamp, recordingStartedAt);
       if (seekSeconds == null || !Number.isFinite(seekSeconds)) return;
       setActivePlaybackSegmentId(segment.id);
       setActivePlaybackScrollKey((current) => current + 1);
@@ -1460,7 +1468,7 @@ export default function NoteEditor({
         key: (current?.key ?? 0) + 1,
       }));
     },
-    [recordingStartedAt, transcriptAudioDurationSeconds]
+    [recordingStartedAt]
   );
 
   const handleTranscriptAudioUserSeek = useCallback(() => {
@@ -1472,14 +1480,13 @@ export default function NoteEditor({
       const nextSegmentId = getPlaybackActiveSegmentId(
         seconds,
         visibleTranscriptSegments,
-        recordingStartedAt,
-        transcriptAudioDurationSeconds
+        recordingStartedAt
       );
       setActivePlaybackSegmentId((current) =>
         current === nextSegmentId ? current : nextSegmentId
       );
     },
-    [recordingStartedAt, transcriptAudioDurationSeconds, visibleTranscriptSegments]
+    [recordingStartedAt, visibleTranscriptSegments]
   );
 
   // A speaker group is "already named" when the marked name is the one it
@@ -3618,7 +3625,6 @@ export default function NoteEditor({
                 }
                 onAttachSpeakerEmail={handleAttachSpeakerEmail}
                 recordingStartedAt={recordingStartedAt}
-                timelineDurationSeconds={transcriptAudioDurationSeconds}
                 onSeekToSegment={
                   !isRecording && !isTranscriptEditing ? handleSeekToTranscriptSegment : undefined
                 }

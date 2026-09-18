@@ -29,9 +29,16 @@ test("epoch transcript timestamps normalize to relative seconds", () => {
   assert.equal(getRelativeTranscriptSeconds(undefined, 1_700_000_000_000), undefined);
 });
 
-test("centisecond-style transcript timestamps normalize to audio seconds", () => {
-  assert.equal(formatTranscriptTimestamp(18_018, null, 300), "03:00");
-  assert.equal(getTranscriptSeekSeconds(18_018, null, 300), 180.18);
+test("timeline seconds render as stored without guessing a unit", () => {
+  // Regression: a resumed session's timeline runs past the duration of the
+  // saved audio (the note's audio files only cover the sessions that already
+  // stopped). The display used to treat such a value as centiseconds and divide
+  // it by 100, so a 33s line rendered 00:00 and then crawled 00:01 / 00:02 while
+  // the recording kept running. Units are normalised at ingest instead.
+  assert.equal(formatTranscriptTimestamp(33), "00:33");
+  assert.equal(formatTranscriptTimestamp(101), "01:41");
+  assert.equal(getTranscriptSeekSeconds(101), 101);
+  assert.equal(getTranscriptSeekSeconds(18_018), 18_018);
 });
 
 test("epoch transcript timestamps seek relative to the recording start", () => {

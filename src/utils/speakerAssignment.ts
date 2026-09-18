@@ -46,7 +46,6 @@ interface TranscriptSpeakerBlockOptions {
   maxBlockDurationSeconds?: number;
   maxBlockTextLength?: number;
   selfFallback?: boolean;
-  timelineDurationSeconds?: number | null;
 }
 
 const getSpeakerNumber = (speakerId: string) => {
@@ -105,32 +104,15 @@ const getTranscriptSpeakerBlockKey = (
   return `source:${segment.source}`;
 };
 
-const normalizeTranscriptTimestampSeconds = (
-  timestamp: number,
-  timelineDurationSeconds?: number | null
-) => {
-  if (timestamp > 1_000_000_000) return timestamp / 1000;
-  if (
-    typeof timelineDurationSeconds === "number" &&
-    Number.isFinite(timelineDurationSeconds) &&
-    timelineDurationSeconds > 0 &&
-    timestamp > timelineDurationSeconds + 30 &&
-    timestamp / 100 <= timelineDurationSeconds + 30
-  ) {
-    return timestamp / 100;
-  }
-  return timestamp;
-};
+// Units are normalised at ingest (see `meetingTranscriptTimeline.ts`); the only
+// conversion left here is the absolute-millisecond domain, needed so a delta
+// between two segments is computed in one unit. Never infer a unit from the
+// value's magnitude — that guess divided a resumed session's timeline by 100.
+const normalizeTranscriptTimestampSeconds = (timestamp: number) =>
+  timestamp > 1_000_000_000 ? timestamp / 1000 : timestamp;
 
-const getTranscriptTimestampDeltaSeconds = (
-  from: number,
-  to: number,
-  timelineDurationSeconds?: number | null
-) => {
-  const normalizedFrom = normalizeTranscriptTimestampSeconds(from, timelineDurationSeconds);
-  const normalizedTo = normalizeTranscriptTimestampSeconds(to, timelineDurationSeconds);
-  return normalizedTo - normalizedFrom;
-};
+const getTranscriptTimestampDeltaSeconds = (from: number, to: number) =>
+  normalizeTranscriptTimestampSeconds(to) - normalizeTranscriptTimestampSeconds(from);
 
 const splitTextForDisplay = (text: string, maxLength: number | null) => {
   const normalized = text.trim();
@@ -387,7 +369,6 @@ export function buildTranscriptSpeakerBlocks<T extends AssignableTranscriptSegme
       ? Math.floor(options.maxBlockTextLength)
       : null;
   const displayOptions = { selfFallback: options.selfFallback };
-  const timelineDurationSeconds = options.timelineDurationSeconds;
 
   const canMergeIntoPreviousBlock = (
     previous: TranscriptSpeakerBlock<T> | undefined,
@@ -412,11 +393,8 @@ export function buildTranscriptSpeakerBlocks<T extends AssignableTranscriptSegme
       return true;
     }
     return (
-      getTranscriptTimestampDeltaSeconds(
-        previous.timestamp,
-        segment.timestamp,
-        timelineDurationSeconds
-      ) <= maxBlockDurationSeconds
+      getTranscriptTimestampDeltaSeconds(previous.timestamp, segment.timestamp) <=
+      maxBlockDurationSeconds
     );
   };
 
