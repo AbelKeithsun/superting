@@ -316,6 +316,11 @@ class DatabaseManager {
           -- later diarization run or audio slice can convert between "seconds
           -- into this file" and "seconds on the note timeline" exactly.
           timeline_start_seconds REAL,
+          -- Piecewise map ([[fileSeconds, noteSeconds], ...]) for a file merged
+          -- from several sessions: the audio is concatenated verbatim, so each
+          -- session sits at its own offset. NULL for a single-session file,
+          -- where timeline_start_seconds is the whole map.
+          timeline_segments_json TEXT,
           UNIQUE(note_id, filename),
           FOREIGN KEY (note_id) REFERENCES notes(id) ON DELETE CASCADE
         )
@@ -785,6 +790,11 @@ class DatabaseManager {
       // to the old anchor at read time).
       try {
         this.db.exec("ALTER TABLE note_audio_files ADD COLUMN timeline_start_seconds REAL");
+      } catch (err) {
+        if (!err.message.includes("duplicate column")) throw err;
+      }
+      try {
+        this.db.exec("ALTER TABLE note_audio_files ADD COLUMN timeline_segments_json TEXT");
       } catch (err) {
         if (!err.message.includes("duplicate column")) throw err;
       }
@@ -1908,26 +1918,44 @@ class DatabaseManager {
       const timelineStartSeconds = Number.isFinite(Number(options.timelineStartSeconds))
         ? Math.max(0, Number(options.timelineStartSeconds))
         : null;
+      const timelineSegmentsJson = Array.isArray(options.timelineSegments)
+        ? JSON.stringify(options.timelineSegments)
+        : null;
       const insert = this.db.prepare(
         `INSERT OR IGNORE INTO note_audio_files
-          (note_id, filename, duration_seconds, recorded_at, timeline_start_seconds)
-         VALUES (?, ?, ?, ?, ?)`
+          (note_id, filename, duration_seconds, recorded_at, timeline_start_seconds, timeline_segments_json)
+         VALUES (?, ?, ?, ?, ?, ?)`
       );
       const backfillTimelineStart = this.db.prepare(
         `UPDATE note_audio_files
          SET timeline_start_seconds = ?
          WHERE note_id = ? AND filename = ? AND timeline_start_seconds IS NULL`
       );
+      const backfillTimelineSegments = this.db.prepare(
+        `UPDATE note_audio_files
+         SET timeline_segments_json = ?
+         WHERE note_id = ? AND filename = ? AND timeline_segments_json IS NULL`
+      );
       const fetch = this.db.prepare(
         "SELECT * FROM note_audio_files WHERE note_id = ? AND filename = ?"
       );
 
       const transaction = this.db.transaction(() => {
-        insert.run(noteId, safeFilename, durationSeconds, recordedAt, timelineStartSeconds);
+        insert.run(
+          noteId,
+          safeFilename,
+          durationSeconds,
+          recordedAt,
+          timelineStartSeconds,
+          timelineSegmentsJson
+        );
         if (timelineStartSeconds != null) {
           // A row written before this column existed still gets its anchor the
           // next time the same session is registered.
           backfillTimelineStart.run(timelineStartSeconds, noteId, safeFilename);
+        }
+        if (timelineSegmentsJson != null) {
+          backfillTimelineSegments.run(timelineSegmentsJson, noteId, safeFilename);
         }
         if (options.updateLatest) {
           this.db
@@ -2077,6 +2105,9 @@ class DatabaseManager {
         // anchor before the source rows go away. (Sessions merged together are
         // concatenated, so a note with pauses between sessions is only anchored
         // at its first one — see the diarization matching note in ipcHandlers.)
+        const timelineSegmentsJson = Array.isArray(options.timelineSegments)
+          ? JSON.stringify(options.timelineSegments)
+          : null;
         let timelineStartSeconds = Number.isFinite(Number(options.timelineStartSeconds))
           ? Math.max(0, Number(options.timelineStartSeconds))
           : null;
@@ -2109,10 +2140,17 @@ class DatabaseManager {
         this.db
           .prepare(
             `INSERT OR REPLACE INTO note_audio_files
-              (note_id, filename, duration_seconds, recorded_at, timeline_start_seconds)
-             VALUES (?, ?, ?, ?, ?)`
+              (note_id, filename, duration_seconds, recorded_at, timeline_start_seconds, timeline_segments_json)
+             VALUES (?, ?, ?, ?, ?, ?)`
           )
-          .run(noteId, safeMergedFilename, durationSeconds, recordedAt, timelineStartSeconds);
+          .run(
+            noteId,
+            safeMergedFilename,
+            durationSeconds,
+            recordedAt,
+            timelineStartSeconds,
+            timelineSegmentsJson
+          );
 
         this.db
           .prepare(
@@ -2156,7 +2194,8 @@ class DatabaseManager {
       const transaction = this.db.transaction(() => {
         const rows = this.db
           .prepare(
-            `SELECT note_id, duration_seconds, recorded_at, created_at, timeline_start_seconds
+            `SELECT note_id, duration_seconds, recorded_at, created_at,
+                    timeline_start_seconds, timeline_segments_json
              FROM note_audio_files
              WHERE filename = ?`
           )
@@ -2173,8 +2212,8 @@ class DatabaseManager {
           this.db
             .prepare(
               `INSERT OR REPLACE INTO note_audio_files
-                (note_id, filename, duration_seconds, recorded_at, timeline_start_seconds)
-               VALUES (?, ?, ?, ?, ?)`
+                (note_id, filename, duration_seconds, recorded_at, timeline_start_seconds, timeline_segments_json)
+               VALUES (?, ?, ?, ?, ?, ?)`
             )
             .run(
               row.note_id,
@@ -2183,7 +2222,8 @@ class DatabaseManager {
               row.recorded_at || row.created_at || new Date().toISOString(),
               Number.isFinite(Number(row.timeline_start_seconds))
                 ? Number(row.timeline_start_seconds)
-                : null
+                : null,
+              row.timeline_segments_json || null
             );
         }
 

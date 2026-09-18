@@ -230,6 +230,13 @@ export interface NoteAudioFile {
    * "seconds into this file" to the note timeline exactly.
    */
   timeline_start_seconds?: number | null;
+  /**
+   * Piecewise `[[fileSeconds, noteSeconds], ...]` map for a file merged from
+   * several sessions (NULL otherwise): the audio is concatenated verbatim, so
+   * each session sits at its own offset. Read it with the helpers in
+   * `src/utils/diarizationTimeline`.
+   */
+  timeline_segments_json?: string | null;
 }
 
 export interface FolderItem {

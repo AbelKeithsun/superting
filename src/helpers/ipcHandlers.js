@@ -55,6 +55,8 @@ const {
   toNoteTimelineSegments,
   noteTimelineStartForAudio,
   noteAudioSecondsForTimestamp,
+  normalizeTimelineSegments,
+  buildMergedTimelineSegments,
 } = require("../utils/diarizationTimeline");
 const postMigrationDetector = require("./postMigrationDetector");
 const {
@@ -3047,6 +3049,26 @@ class IPCHandlers {
         }
 
         const ordered = [...files].reverse();
+        // The files are concatenated verbatim (the archive keeps every recorded
+        // second), so each session ends up at its own offset inside the merged
+        // file. Record that piecewise map instead of touching the audio: it is
+        // what lets a later diarization run or audio slice convert between
+        // "seconds into the merged file" and "seconds on the note timeline".
+        const mergedTimeline = buildMergedTimelineSegments(
+          ordered.map((file) => ({
+            durationSeconds: file.duration_seconds,
+            timelineStartSeconds: file.timeline_start_seconds,
+            timelineSegments: file.timeline_segments_json,
+          }))
+        );
+        if (!mergedTimeline) {
+          debugLogger.debug("Meeting audio merge without a timeline map", {
+            noteId,
+            fileCount: ordered.length,
+            reason: "missing-timeline-anchor",
+          });
+        }
+
         const mergeResult = await this.audioStorageManager.mergeRetainedAudioToOpusWebm(
           noteId,
           ordered.map((file) => file.filename),
@@ -3063,7 +3085,16 @@ class IPCHandlers {
           ordered.map((file) => file.filename),
           mergeResult.filename,
           totalDuration || null,
-          { recordedAt: new Date().toISOString() }
+          {
+            // The merged file starts where the earliest recording started, so
+            // its timestamp is the recording time — not the moment of merging.
+            recordedAt:
+              ordered[0].recorded_at || ordered[0].created_at || new Date().toISOString(),
+            timelineSegments: mergedTimeline || undefined,
+            // The flat anchor stays the map's first entry, so readers without
+            // the piecewise map still resolve the first session correctly.
+            timelineStartSeconds: mergedTimeline ? mergedTimeline[0][1] : undefined,
+          }
         );
         this.audioStorageManager.deleteRetainedAudioFiles(ordered.map((file) => file.filename));
 
@@ -9455,8 +9486,9 @@ class IPCHandlers {
     const baseNoteSeconds = Number.isFinite(Number(audioFile?.timeline_start_seconds))
       ? Math.max(0, Number(audioFile.timeline_start_seconds))
       : 0;
+    const fileTimelineSegments = normalizeTimelineSegments(audioFile?.timeline_segments_json);
     const normalize = (value) =>
-      noteAudioSecondsForTimestamp(value, audioStartMs, baseNoteSeconds);
+      noteAudioSecondsForTimestamp(value, audioStartMs, baseNoteSeconds, fileTimelineSegments);
     const fileDurationSeconds = Number(audioFile?.duration_seconds);
     const fileEndSeconds = Number.isFinite(fileDurationSeconds)
       ? fileDurationSeconds + 5
@@ -10703,6 +10735,7 @@ class IPCHandlers {
       const matchingSegments = toAudioRelativeSegments(transcriptSegments, {
         audioStartMs: audioFileStartMs,
         baseNoteSeconds: audioFileTimelineStart,
+        timelineSegments: normalizeTimelineSegments(audioFile.timeline_segments_json),
       });
       if (transcriptSegments.some((segment) => isAbsoluteMs(segment.timestamp))) {
         debugLogger.debug("Rediarize matching rebased legacy absolute timestamps", {

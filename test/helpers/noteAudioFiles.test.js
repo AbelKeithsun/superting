@@ -112,7 +112,13 @@ test("replaceNoteAudioFilesWithMergedFile keeps only merged recording as latest 
     [older, newer],
     merged,
     90,
-    { recordedAt: "2026-05-29T10:45:00.000Z" }
+    {
+      recordedAt: "2026-05-29T10:45:00.000Z",
+      timelineSegments: [
+        [0, 0],
+        [60, 76],
+      ],
+    }
   );
 
   assert.equal(result.success, true);
@@ -124,8 +130,41 @@ test("replaceNoteAudioFilesWithMergedFile keeps only merged recording as latest 
     files.map((file) => file.filename),
     [merged]
   );
-  // The merged file starts where its earliest source started.
+  // The verbatim concatenation keeps each session at its own offset, so the
+  // merged row carries the piecewise map instead of shifted audio.
+  assert.deepEqual(JSON.parse(files[0].timeline_segments_json), [
+    [0, 0],
+    [60, 76],
+  ]);
+  // The flat anchor stays the map's first entry.
   assert.equal(files[0].timeline_start_seconds, 0);
+});
+
+test("replaceNoteAudioFilesWithMergedFile falls back to the earliest anchor", (t) => {
+  const db = createDatabase(t);
+  const note = db.saveNote("Meeting", "", "meeting").note;
+  const older = "SuperTing-meeting-2026-05-29-09-00-00-6.wav";
+  const newer = "SuperTing-meeting-2026-05-29-09-30-00-6.wav";
+  const merged = "SuperTing-meeting-merged-2026-05-29-09-45-00-6.webm";
+
+  db.addNoteAudioFile(note.id, older, 60, {
+    recordedAt: "2026-05-29T09:00:00.000Z",
+    timelineStartSeconds: 12,
+    updateLatest: true,
+  });
+  db.addNoteAudioFile(note.id, newer, 30, {
+    recordedAt: "2026-05-29T09:30:00.000Z",
+    timelineStartSeconds: 80,
+    updateLatest: true,
+  });
+
+  // No map provided (a caller that could not build one): the earliest anchor is
+  // still inherited, and the map stays NULL rather than being invented.
+  db.replaceNoteAudioFilesWithMergedFile(note.id, [older, newer], merged, 90, {});
+
+  const files = db.getNoteAudioFiles(note.id);
+  assert.equal(files[0].timeline_start_seconds, 12);
+  assert.equal(files[0].timeline_segments_json, null);
 });
 
 test("note audio files record where the session starts on the note timeline", (t) => {
@@ -173,6 +212,10 @@ test("replaceNoteAudioFilename preserves a note recording when compressed global
   db.addNoteAudioFile(note.id, wavName, 60, {
     recordedAt: "2026-05-29T10:00:00.000Z",
     timelineStartSeconds: 42,
+    timelineSegments: [
+      [0, 42],
+      [30, 90],
+    ],
     updateLatest: true,
   });
 
@@ -190,6 +233,10 @@ test("replaceNoteAudioFilename preserves a note recording when compressed global
   assert.equal(files[0].duration_seconds, 60);
   // A rename/compress must not lose where the recording starts on the timeline.
   assert.equal(files[0].timeline_start_seconds, 42);
+  assert.deepEqual(JSON.parse(files[0].timeline_segments_json), [
+    [0, 42],
+    [30, 90],
+  ]);
 });
 
 test("backfill from audio directory imports old meeting audio files with note ids", (t) => {

@@ -2,7 +2,10 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 
 const {
+  audioSecondsForNoteSeconds,
+  buildMergedTimelineSegments,
   dbTimestampMs,
+  normalizeTimelineSegments,
   noteAudioSecondsForTimestamp,
   noteTimelineStartForAudio,
   restoreTranscriptTimestamps,
@@ -166,4 +169,86 @@ test("audio-relative values add the capture skew, absolute ones use the session 
       .timestamp,
     778
   );
+});
+
+test("a merged file keeps a per-session map instead of shifted audio", () => {
+  // Session 1 recorded 60s but its last line is at 46s; session 2 starts at 47
+  // on the note timeline. The file keeps all 90s, so session 2 sits at file
+  // second 60 — the map is what expresses that.
+  const map = buildMergedTimelineSegments([
+    { durationSeconds: 60, timelineStartSeconds: 0 },
+    { durationSeconds: 30, timelineStartSeconds: 47 },
+  ]);
+
+  assert.deepEqual(map, [
+    [0, 0],
+    [60, 47],
+  ]);
+  // Note timeline -> file seconds, for matching and slicing.
+  assert.equal(audioSecondsForNoteSeconds(0, { timelineSegments: map }), 0);
+  assert.equal(audioSecondsForNoteSeconds(46, { timelineSegments: map }), 46);
+  assert.equal(audioSecondsForNoteSeconds(47, { timelineSegments: map }), 60);
+  assert.equal(audioSecondsForNoteSeconds(50, { timelineSegments: map }), 63);
+  assert.equal(audioSecondsForNoteSeconds(76, { timelineSegments: map }), 89);
+  // Inside one session both clocks tick 1:1 — never interpolated.
+  assert.equal(audioSecondsForNoteSeconds(60, { timelineSegments: map }), 73);
+});
+
+test("a single-session file needs no map, just its anchor", () => {
+  assert.equal(audioSecondsForNoteSeconds(800, { timelineStartSeconds: 766.5 }), 33.5);
+  assert.equal(audioSecondsForNoteSeconds(50, {}), 50);
+  assert.equal(audioSecondsForNoteSeconds(undefined, {}), undefined);
+});
+
+test("merging an already-merged file chains its map", () => {
+  const map = buildMergedTimelineSegments([
+    { durationSeconds: 60, timelineStartSeconds: 0 },
+    // A previously merged file: session 2 starts at file 60 / note 47.
+    { durationSeconds: 90, timelineSegments: [[0, 47], [60, 100]] },
+  ]);
+
+  assert.deepEqual(map, [
+    [0, 0],
+    [60, 47],
+    [120, 100],
+  ]);
+  assert.equal(audioSecondsForNoteSeconds(120, { timelineSegments: map }), 140);
+});
+
+test("merge maps are refused when an anchor or duration is missing", () => {
+  assert.equal(buildMergedTimelineSegments([]), null);
+  assert.equal(
+    buildMergedTimelineSegments([{ durationSeconds: 10, timelineStartSeconds: null }]),
+    null
+  );
+  assert.equal(buildMergedTimelineSegments([{ timelineStartSeconds: 0 }]), null);
+  assert.equal(normalizeTimelineSegments("not json"), null);
+  assert.equal(normalizeTimelineSegments([[0, 0], [60]]), null);
+  assert.deepEqual(normalizeTimelineSegments("[[60,47],[0,0]]"), [
+    [0, 0],
+    [60, 47],
+  ]);
+});
+
+test("the piecewise map is used when converting a note-timeline segment", () => {
+  const segments = [
+    { id: "s2", timestamp: 50, endTime: 55 },
+    { id: "s2b", timestamp: 76 },
+  ];
+  const map = [
+    [0, 0],
+    [60, 47],
+  ];
+
+  assert.deepEqual(
+    toAudioRelativeSegments(segments, { timelineSegments: map }).map((s) => [
+      s.timestamp,
+      s.endTime,
+    ]),
+    [
+      [63, 68],
+      [89, undefined],
+    ]
+  );
+  assert.equal(noteAudioSecondsForTimestamp(50, null, 0, map), 63);
 });
