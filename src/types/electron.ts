@@ -1740,6 +1740,13 @@ declare global {
         language?: string;
         scriptLanguage?: string;
         noteId?: number | null;
+        /**
+         * Note-timeline zero for this session (wall-clock ms). The background
+         * diarization result is converted onto the note timeline with it.
+         */
+        sessionStartedAtMs?: number;
+        /** Timeline seconds already occupied by earlier sessions of this note. */
+        timelineOffsetSeconds?: number;
         dataRetentionEnabled?: boolean;
         audioRetentionDays?: number;
         meetingAudioQuality?: "standard" | "high" | "lossless";

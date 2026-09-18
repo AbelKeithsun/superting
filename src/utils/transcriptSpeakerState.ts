@@ -162,7 +162,25 @@ const alignTimestampDomains = (
   const incomingMin = Math.min(...incomingTs);
   const incomingIsAbsolute = incomingMin > ABSOLUTE_MS_THRESHOLD;
   const existingIsAbsolute = existingMax > ABSOLUTE_MS_THRESHOLD;
-  if (incomingIsAbsolute === existingIsAbsolute) return incomingSegments;
+  if (incomingIsAbsolute === existingIsAbsolute) {
+    // Both sides are timeline seconds. They only share an origin when they also
+    // share an end: a payload that stops well before the note does is a
+    // different origin (a diarization result measured from the start of the
+    // audio file it ran on), and trusting its timestamps would rewrite the note
+    // with near-zero values. The last line of each side describes the same
+    // instant, so anchor there, exactly like the absolute branches below.
+    const incomingMax = Math.max(...incomingTs);
+    const tolerance = Math.max(MERGE_TIMESTAMP_WINDOW_MS / 1000, existingMax * 0.05);
+    if (!incomingIsAbsolute && incomingMax < existingMax - tolerance) {
+      const offsetSeconds = existingMax - incomingMax;
+      return incomingSegments.map((s) =>
+        typeof s.timestamp === "number" && Number.isFinite(s.timestamp)
+          ? { ...s, timestamp: Math.max(0, s.timestamp + offsetSeconds) }
+          : s
+      );
+    }
+    return incomingSegments;
+  }
   if (incomingIsAbsolute && existingMax < RELATIVE_SECONDS_MAX) {
     const incomingMax = Math.max(...incomingTs);
     const offsetMs = existingMax * 1000 - incomingMax;

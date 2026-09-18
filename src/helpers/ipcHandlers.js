@@ -47,6 +47,14 @@ const {
 } = require("./speakerAssignmentPolicy");
 const { selectDiarizationInput } = require("./diarizationInputPolicy");
 const { downsample24kTo16k, pcm16ToWav } = require("../utils/audioUtils");
+const {
+  isAbsoluteMs,
+  dbTimestampMs,
+  toAudioRelativeSegments,
+  restoreTranscriptTimestamps,
+  toNoteTimelineSegments,
+  noteAudioSecondsForTimestamp,
+} = require("../utils/diarizationTimeline");
 const postMigrationDetector = require("./postMigrationDetector");
 const {
   DEFAULT_EXPECTED_SPEAKER_COUNT,
@@ -6051,7 +6059,19 @@ class IPCHandlers {
       meetingDiarizationPath = null;
       meetingDiarizationStartedAt = null;
       meetingDiarizationSegments = [];
-      return { diarizationPcmPath, diarizationSegments, diarizationStartedAt };
+      // Snapshotted with the rest of the session: by the time the background
+      // diarization runs, the next session may already be starting.
+      const sessionStartedAtMs = meetingSessionStartedAtMs;
+      const timelineOffsetSeconds = meetingTimelineOffsetSeconds;
+      meetingSessionStartedAtMs = null;
+      meetingTimelineOffsetSeconds = 0;
+      return {
+        diarizationPcmPath,
+        diarizationSegments,
+        diarizationStartedAt,
+        sessionStartedAtMs,
+        timelineOffsetSeconds,
+      };
     };
 
     const captureMeetingRetainedAudioState = async (options = {}) => {
@@ -6514,6 +6534,14 @@ class IPCHandlers {
     let meetingDiarizationPath = null;
     let meetingDiarizationStartedAt = null;
     let meetingDiarizationSegments = [];
+    // Where this session sits on the note's timeline, as reported by the
+    // renderer: the note already holds `meetingTimelineOffsetSeconds` seconds of
+    // earlier sessions, and this session's timeline zero is
+    // `meetingSessionStartedAtMs`. Diarization runs over one audio file and
+    // reports seconds from that file's start, so its result is converted with
+    // these two anchors instead of being handed over rebased to zero.
+    let meetingSessionStartedAtMs = null;
+    let meetingTimelineOffsetSeconds = 0;
     let meetingRetainedAudioWriter = null;
     let meetingLiveSpeakerActive = false;
     let meetingLiveSpeakerFeedCount = 0;
@@ -7447,6 +7475,12 @@ class IPCHandlers {
 
       meetingTranscriptionStartInProgress = true;
       meetingStartedAt = Date.now();
+      meetingSessionStartedAtMs = Number.isFinite(Number(options.sessionStartedAtMs))
+        ? Number(options.sessionStartedAtMs)
+        : null;
+      meetingTimelineOffsetSeconds = Number.isFinite(Number(options.timelineOffsetSeconds))
+        ? Math.max(0, Number(options.timelineOffsetSeconds))
+        : 0;
       meetingNormalizationLanguage =
         options.scriptLanguage || options.normalizationLanguage || options.language || null;
       meetingSessionAudioQuality = MEETING_AUDIO_QUALITY_TIERS.has(options.meetingAudioQuality)
@@ -7874,8 +7908,13 @@ class IPCHandlers {
             debugLogger.error("Local meeting final transcription failed", { error: err.message });
           }
           flushPendingMicFinals(true);
-          const { diarizationPcmPath, diarizationSegments, diarizationStartedAt } =
-            await captureMeetingDiarizationState();
+          const {
+            diarizationPcmPath,
+            diarizationSegments,
+            diarizationStartedAt,
+            sessionStartedAtMs,
+            timelineOffsetSeconds,
+          } = await captureMeetingDiarizationState();
           const transcript =
             diarizationSegments
               .map((segment) => segment.text)
@@ -7909,7 +7948,12 @@ class IPCHandlers {
             liveSpeakerState,
             sessionSpeakerConfigSnapshot,
             noteIdSnapshot,
-            { retainedAudioFilename: savedAudio?.filename, retainedAudioStartedAt }
+            {
+              retainedAudioFilename: savedAudio?.filename,
+              retainedAudioStartedAt,
+              sessionStartedAtMs,
+              timelineOffsetSeconds,
+            }
           );
 
           return buildMeetingStopResult({
@@ -7921,8 +7965,13 @@ class IPCHandlers {
         }
 
         const results = await disconnectMeetingStreaming({ flushPending: true });
-        const { diarizationPcmPath, diarizationSegments, diarizationStartedAt } =
-          await captureMeetingDiarizationState();
+        const {
+          diarizationPcmPath,
+          diarizationSegments,
+          diarizationStartedAt,
+          sessionStartedAtMs,
+          timelineOffsetSeconds,
+        } = await captureMeetingDiarizationState();
         const transcript =
           diarizationSegments
             .map((segment) => segment.text)
@@ -7956,7 +8005,12 @@ class IPCHandlers {
           liveSpeakerState,
           sessionSpeakerConfigSnapshot,
           noteIdSnapshot,
-          { retainedAudioFilename: savedAudio?.filename, retainedAudioStartedAt }
+          {
+            retainedAudioFilename: savedAudio?.filename,
+            retainedAudioStartedAt,
+            sessionStartedAtMs,
+            timelineOffsetSeconds,
+          }
         );
 
         return buildMeetingStopResult({
@@ -9367,22 +9421,19 @@ class IPCHandlers {
   // audio segments (click-to-play, multiple clips per voiceprint).
   /**
    * Audio windows (seconds, relative to the note's audio) covered by one
-   * speaker's segments. Epoch-ms wall-clock segments are rebased the same way
-   * `_rediarizeNoteAudio` does, so callers can slice the retained audio
+   * speaker's segments. Epoch-ms wall-clock segments are rebased on the audio
+   * file's own start (`recorded_at`), so callers can slice the retained audio
    * directly.
    */
   _noteSpeakerAudioWindows(note, speakerId, { minSeconds = 0 } = {}) {
     const segments = this._parseNoteTranscriptSegments(note);
     if (segments.length === 0) return [];
 
-    // Normalize timestamps to seconds relative to the note's audio (epoch-ms
-    // wall-clock segments are rebased like _rediarizeNoteAudio does).
-    const firstSystem = segments.find((s) => s.source === "system")?.timestamp;
-    const isEpochMs = typeof firstSystem === "number" && firstSystem > 1e9;
-    const normalize = (value) => {
-      if (typeof value !== "number" || !Number.isFinite(value)) return undefined;
-      return isEpochMs ? Math.max(0, (value - firstSystem) / 1000) : value;
-    };
+    // Rebase absolute stamps on the retained audio's own start — the note's
+    // `recorded_at`. The first transcript line is always later than the file
+    // starts, so anchoring on it sliced every clip early by that much.
+    const audioStartMs = dbTimestampMs(note?.recorded_at);
+    const normalize = (value) => noteAudioSecondsForTimestamp(value, audioStartMs);
 
     const timeline = segments
       .map((segment) => ({
@@ -10024,7 +10075,27 @@ class IPCHandlers {
     noteId = null,
     sessionAudio = {}
   ) {
-    const { retainedAudioFilename = null, retainedAudioStartedAt = null } = sessionAudio || {};
+    const {
+      retainedAudioFilename = null,
+      retainedAudioStartedAt = null,
+      sessionStartedAtMs = null,
+      timelineOffsetSeconds = 0,
+    } = sessionAudio || {};
+
+    // Everything the renderer merges and persists goes back onto the note's
+    // timeline. Diarization reports seconds from the start of one audio file,
+    // while the note already holds `timelineOffsetSeconds` seconds of earlier
+    // sessions; handing raw (or file-relative) values over is what appended
+    // near-zero duplicates to resumed notes.
+    // `audioStartMs` is the wall clock at which this session's audio began
+    // (the diarized file's start): it is what turns file-relative seconds back
+    // into wall-clock ones before the note offset is applied.
+    const toNoteTimeline = (segments, audioStartMs = audioStartedAt) =>
+      toNoteTimelineSegments(segments, {
+        audioStartMs,
+        sessionStartedAtMs,
+        timelineOffsetSeconds,
+      });
 
     const send = (payload) => {
       if (win && !win.isDestroyed()) {
@@ -10045,10 +10116,12 @@ class IPCHandlers {
         });
       } catch (_) {}
       send({
-        segments: transcriptSegments.map((segment, index) => ({
-          ...segment,
-          id: segment.id || `segment-${index}`,
-        })),
+        segments: toNoteTimeline(
+          transcriptSegments.map((segment, index) => ({
+            ...segment,
+            id: segment.id || `segment-${index}`,
+          }))
+        ),
         diarizationSkipped: true,
         skipReason,
       });
@@ -10205,24 +10278,25 @@ class IPCHandlers {
 
         const startMs =
           (Number.isFinite(inputReferenceMs) && inputReferenceMs) ||
-          transcriptSegments.find((segment) => segment.source === "system")?.timestamp ||
-          transcriptSegments[0]?.timestamp ||
-          0;
-        const isEpochMs = startMs > 1e9;
-        const normalized = transcriptSegments.map((seg) => ({
-          ...seg,
-          timestamp:
-            seg.timestamp != null
-              ? isEpochMs
-                ? (seg.timestamp - startMs) / 1000
-                : seg.timestamp
-              : undefined,
-        }));
+          transcriptSegments.find((segment) => isAbsoluteMs(segment.timestamp))?.timestamp ||
+          null;
+        // Overlap matching needs the same domain the diarization windows use
+        // (seconds from the audio file's start); the transcript itself is only
+        // borrowed for the match.
+        const matchingSegments = toAudioRelativeSegments(transcriptSegments, {
+          audioStartMs: startMs,
+        });
 
-        const enrichedSegments = this.diarizationManager.mergeWithTranscript(
-          normalized,
+        const mergedSegments = this.diarizationManager.mergeWithTranscript(
+          matchingSegments,
           diarizationSegments,
           { assignMicSegments: true, diarizationAlreadyStabilized: true }
+        );
+        // Diarization only decides *who* spoke: put the note's own timestamps
+        // back, then convert onto the note timeline for the renderer to store.
+        const enrichedSegments = toNoteTimeline(
+          restoreTranscriptTimestamps(mergedSegments, transcriptSegments),
+          startMs
         );
 
         const speakerSet = new Set(diarizationSegments.map((d) => d.speaker));
@@ -10565,26 +10639,29 @@ class IPCHandlers {
         };
       }
 
-      const startMs =
-        transcriptSegments.find((segment) => segment.source === "system")?.timestamp ||
-        transcriptSegments[0]?.timestamp ||
-        0;
-      const isEpochMs = startMs > 1e9;
-      const normalized = transcriptSegments.map((segment) => ({
-        ...segment,
-        timestamp:
-          segment.timestamp != null
-            ? isEpochMs
-              ? (segment.timestamp - startMs) / 1000
-              : segment.timestamp
-            : undefined,
-        endTime:
-          segment.endTime != null
-            ? isEpochMs
-              ? (segment.endTime - startMs) / 1000
-              : segment.endTime
-            : segment.endTime,
-      }));
+      // The diarized file reports seconds from its own start; the transcript is
+      // the note's timeline. Legacy transcripts that still carry absolute stamps
+      // are rebased on the audio file's own start — never on the first
+      // transcript line, which is always later than the file starts.
+      const audioFileStartMs = dbTimestampMs(audioFile.recorded_at);
+      const matchingSegments = toAudioRelativeSegments(transcriptSegments, {
+        audioStartMs: audioFileStartMs,
+      });
+      if (transcriptSegments.some((segment) => isAbsoluteMs(segment.timestamp))) {
+        debugLogger.debug("Rediarize matching rebased legacy absolute timestamps", {
+          noteId,
+          audioFileId: audioFile.id ?? null,
+          audioFileStartMs,
+        });
+      } else if (!audioFileStartMs) {
+        // Without a start anchor a multi-session note cannot be mapped onto the
+        // diarized file: matching falls back to the note timeline (unchanged
+        // behaviour) and the user may need to correct a few speakers.
+        debugLogger.debug("Rediarize matching used the note timeline as-is", {
+          noteId,
+          audioFileId: audioFile.id ?? null,
+        });
+      }
       // mergeWithTranscript renumbers speakers in first-appearance order; mirror
       // that so saved embeddings use the same ids as the transcript.
       const rediarizeSpeakerRenumber = new Map();
@@ -10597,7 +10674,7 @@ class IPCHandlers {
       }
 
       const mergeResult = this.diarizationManager.mergeWithTranscript(
-        normalized,
+        matchingSegments,
         diarizationSegments,
         {
           assignMicSegments: true,
@@ -10605,7 +10682,12 @@ class IPCHandlers {
           includeDiagnostics: true,
         }
       );
-      const enrichedSegments = mergeResult.segments;
+      // Only the speaker assignment comes from this run: the note keeps its own
+      // timeline (saving the matching domain back is what reset notes to zero).
+      const enrichedSegments = restoreTranscriptTimestamps(
+        mergeResult.segments,
+        transcriptSegments
+      );
       const diagnostics = mergeResult.diagnostics || createEmptyDiarizationDiagnostics();
 
       const result = this.databaseManager.updateNote(noteId, {

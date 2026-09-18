@@ -794,6 +794,11 @@ export async function startRecording(args: StartRecordingArgs): Promise<void> {
   if (isRecordingFlag || isStartingFlag) return;
   isStartingFlag = true;
 
+  // The note timeline's zero for this session: every live stamp is converted
+  // with a single subtraction from this instant, and the background diarization
+  // result is anchored on it too.
+  const sessionStartedAtMs = Date.now();
+
   const initialEnabled =
     args.diarizationEnabled ??
     (getSettings() as { speakerDiarizationEnabled?: boolean }).speakerDiarizationEnabled ??
@@ -831,7 +836,7 @@ export async function startRecording(args: StartRecordingArgs): Promise<void> {
   useMeetingRecordingStore.setState({
     isRecording: true,
     isTranscribing: true,
-    recordingStartedAt: Date.now(),
+    recordingStartedAt: sessionStartedAtMs,
     recordingNoteId: args.noteId,
     recordingNoteTitle: args.noteTitle,
     recordingFolderId: args.folderId,
@@ -868,6 +873,12 @@ export async function startRecording(args: StartRecordingArgs): Promise<void> {
       window.electronAPI?.meetingTranscriptionStart?.({
         ...getMeetingTranscriptionOptions(),
         noteId: args.noteId ?? null,
+        // Anchors the background diarization result on THIS note's timeline:
+        // the diarized audio file reports seconds from its own start, and the
+        // note already holds `timelineOffsetSecondsValue` seconds of earlier
+        // sessions.
+        sessionStartedAtMs,
+        timelineOffsetSeconds: timelineOffsetSecondsValue,
       }),
       getMeetingMicConstraints().then(async (constraints) => {
         try {
