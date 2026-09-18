@@ -317,6 +317,48 @@ function audioSecondsForNoteSeconds(
   return Math.max(0, value - offset);
 }
 
+/**
+ * Monotonic milliseconds (never jumps, unaffected by NTP or suspend-adjusted
+ * wall clocks). Available in both processes; used for any interval that must be
+ * trusted, so timeline math never depends on two `Date.now()` readings.
+ */
+function monotonicNowMs() {
+  if (typeof performance !== "undefined" && typeof performance.now === "function") {
+    return performance.now();
+  }
+  if (typeof process !== "undefined" && typeof process.hrtime?.bigint === "function") {
+    return Number(process.hrtime.bigint() / 1000000n);
+  }
+  // Last resort: still a number, just not immune to wall-clock jumps.
+  return Date.now();
+}
+
+/**
+ * Note-timeline second at which a session's audio actually started, observed
+ * from the capture side: the delay between the session's own origin and the
+ * first audio chunk is measured with one monotonic clock inside the process that
+ * receives the audio, so it survives wall-clock jumps and needs no second
+ * `Date.now()`.
+ *
+ * Returns `null` when the session anchors or the observation are missing — the
+ * caller must then fall back to its own derivation rather than invent a value.
+ */
+function observedTimelineStartSeconds({
+  timelineOffsetSeconds = 0,
+  sessionStartedMonoMs,
+  audioStartMonoMs,
+} = {}) {
+  const sessionStart = finite(sessionStartedMonoMs);
+  const audioStart = finite(audioStartMonoMs);
+  if (sessionStart == null || audioStart == null) return null;
+  const offset = Math.max(0, Number.isFinite(timelineOffsetSeconds) ? timelineOffsetSeconds : 0);
+  // A session's audio cannot start before its own slot on the timeline, so a
+  // negative interval (clocks handed over late) never moves the anchor back into
+  // the previous session's range.
+  const delaySeconds = Math.max(0, (audioStart - sessionStart) / 1000);
+  return offset + delaySeconds;
+}
+
 module.exports = {
   ABSOLUTE_MS_THRESHOLD,
   isAbsoluteMs,
@@ -324,7 +366,9 @@ module.exports = {
   toAudioRelativeSegments,
   restoreTranscriptTimestamps,
   toNoteTimelineSegments,
+  monotonicNowMs,
   noteTimelineStartForAudio,
+  observedTimelineStartSeconds,
   noteAudioSecondsForTimestamp,
   normalizeTimelineSegments,
   buildMergedTimelineSegments,

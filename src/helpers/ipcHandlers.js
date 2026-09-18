@@ -57,6 +57,7 @@ const {
   noteAudioSecondsForTimestamp,
   normalizeTimelineSegments,
   buildMergedTimelineSegments,
+  monotonicNowMs,
 } = require("../utils/diarizationTimeline");
 const postMigrationDetector = require("./postMigrationDetector");
 const {
@@ -6099,6 +6100,7 @@ class IPCHandlers {
       const sessionStartedAtMs = meetingSessionStartedAtMs;
       const timelineOffsetSeconds = meetingTimelineOffsetSeconds;
       meetingSessionStartedAtMs = null;
+      meetingSessionStartedMonoMs = null;
       meetingTimelineOffsetSeconds = 0;
       return {
         diarizationPcmPath,
@@ -6130,7 +6132,36 @@ class IPCHandlers {
       }
     };
 
-    const persistMeetingAudioForNote = async (noteId, retainedAudio, anchors = {}) => {
+    /**
+   * Anchor for a session's audio file, in note-timeline seconds.
+   *
+   * The capture-side observation wins when present: the writer measured the
+   * session-start → audio-start interval with its own monotonic clock. The
+   * stop-time derivation is kept as a fallback (and as a cross-check, logged
+   * when the two disagree by more than half a second).
+   */
+  const resolveTimelineStartSeconds = (retainedAudio, anchors = {}) => {
+    const observed = Number(retainedAudio?.timelineStartSeconds);
+    const derived = noteTimelineStartForAudio({
+      sessionStartedAtMs: anchors.sessionStartedAtMs,
+      timelineOffsetSeconds: anchors.timelineOffsetSeconds,
+      audioStartMs: retainedAudio?.startedAt,
+    });
+    if (Number.isFinite(observed)) {
+      if (Math.abs(observed - derived) > 0.5) {
+        debugLogger.debug("Meeting audio anchor differs from the stop-time derivation", {
+          observed,
+          derived,
+          firstChunkWallMs: retainedAudio?.firstChunkWallMs ?? null,
+          sessionStartedAtMs: anchors.sessionStartedAtMs ?? null,
+        });
+      }
+      return observed;
+    }
+    return derived;
+  };
+
+  const persistMeetingAudioForNote = async (noteId, retainedAudio, anchors = {}) => {
       if (!meetingShouldRetainAudio || !noteId || !retainedAudio?.pcmPath) {
         if (retainedAudio?.error) {
           debugLogger.warn("Meeting audio retention skipped", {
@@ -6175,12 +6206,10 @@ class IPCHandlers {
                 ? new Date(retainedAudio.startedAt).toISOString()
                 : undefined,
               // Where this session's file starts on the note's timeline, so
-              // later diarization/slicing can map it exactly.
-              timelineStartSeconds: noteTimelineStartForAudio({
-                sessionStartedAtMs: anchors.sessionStartedAtMs,
-                timelineOffsetSeconds: anchors.timelineOffsetSeconds,
-                audioStartMs: retainedAudio.startedAt,
-              }),
+              // later diarization/slicing can map it exactly. Prefer the
+              // capture-side observation (one monotonic interval); fall back to
+              // the stop-time derivation only when it is unavailable.
+              timelineStartSeconds: resolveTimelineStartSeconds(retainedAudio, anchors),
               updateLatest: true,
             }
           );
@@ -6583,6 +6612,9 @@ class IPCHandlers {
     // reports seconds from that file's start, so its result is converted with
     // these two anchors instead of being handed over rebased to zero.
     let meetingSessionStartedAtMs = null;
+    // Monotonic twin of the line above: the audio-start interval is measured
+    // with one clock, so a wall-clock jump can never move the anchor.
+    let meetingSessionStartedMonoMs = null;
     let meetingTimelineOffsetSeconds = 0;
     let meetingRetainedAudioWriter = null;
     let meetingLiveSpeakerActive = false;
@@ -6648,6 +6680,11 @@ class IPCHandlers {
           sampleRate: 48000,
           mixStrategy: meetingSessionAudioMix,
           debugLogger,
+          // The writer observes the audio's real start, so it is the one that
+          // reports where this session sits on the note timeline.
+          sessionStartedAtMs: meetingSessionStartedAtMs,
+          sessionStartedMonoMs: meetingSessionStartedMonoMs,
+          timelineOffsetSeconds: meetingTimelineOffsetSeconds,
         });
       }
       return meetingRetainedAudioWriter;
@@ -7520,6 +7557,7 @@ class IPCHandlers {
       meetingSessionStartedAtMs = Number.isFinite(Number(options.sessionStartedAtMs))
         ? Number(options.sessionStartedAtMs)
         : null;
+      meetingSessionStartedMonoMs = meetingSessionStartedAtMs == null ? null : monotonicNowMs();
       meetingTimelineOffsetSeconds = Number.isFinite(Number(options.timelineOffsetSeconds))
         ? Math.max(0, Number(options.timelineOffsetSeconds))
         : 0;

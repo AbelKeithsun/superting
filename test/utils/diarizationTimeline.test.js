@@ -3,6 +3,8 @@ const assert = require("node:assert/strict");
 
 const {
   audioSecondsForNoteSeconds,
+  monotonicNowMs,
+  observedTimelineStartSeconds,
   buildMergedTimelineSegments,
   dbTimestampMs,
   normalizeTimelineSegments,
@@ -251,4 +253,44 @@ test("the piecewise map is used when converting a note-timeline segment", () => 
     ]
   );
   assert.equal(noteAudioSecondsForTimestamp(50, null, 0, map), 63);
+});
+
+test("the anchor is observed from one monotonic interval, not two wall clocks", () => {
+  const T0 = 1_800_000_000_000;
+
+  // Session 2 starts 47s into the note; its audio began 1.52s after that.
+  assert.equal(
+    observedTimelineStartSeconds({
+      timelineOffsetSeconds: 47,
+      sessionStartedMonoMs: 5_000,
+      audioStartMonoMs: 6_520,
+    }),
+    48.52
+  );
+  // First session, audio starting immediately.
+  assert.equal(
+    observedTimelineStartSeconds({ sessionStartedMonoMs: 1_000, audioStartMonoMs: 1_000 }),
+    0
+  );
+  // A negative interval (clock handed over late) never moves the anchor back.
+  assert.equal(
+    observedTimelineStartSeconds({
+      timelineOffsetSeconds: 10,
+      sessionStartedMonoMs: 2_000,
+      audioStartMonoMs: 1_500,
+    }),
+    10
+  );
+  // Nothing observed -> null, so the caller keeps its own derivation.
+  assert.equal(observedTimelineStartSeconds({ timelineOffsetSeconds: 47 }), null);
+  assert.equal(
+    observedTimelineStartSeconds({ sessionStartedMonoMs: 100, audioStartMonoMs: undefined }),
+    null
+  );
+  // The clock itself is monotonic and finite.
+  const first = monotonicNowMs();
+  const second = monotonicNowMs();
+  assert.equal(Number.isFinite(first), true);
+  assert.ok(second >= first);
+  assert.ok(Math.abs(Date.now() - T0) < 1e12);
 });

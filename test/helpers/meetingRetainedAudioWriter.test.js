@@ -130,3 +130,50 @@ test("finalize aligns source start times before mixing", async (t) => {
   assert.equal(result.sourceMix, "mixed");
   assert.ok(result.durationSeconds > 1.49 && result.durationSeconds < 1.51);
 });
+
+test("finalize reports the note-timeline anchor it observed", async (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "superting-meeting-retained-"));
+  const sessionStartedAtMs = 1_800_000_000_000;
+  let mono = 5_000;
+  const writer = new MeetingRetainedAudioWriter({
+    tmpDir: root,
+    sessionStartedAtMs,
+    sessionStartedMonoMs: mono,
+    timelineOffsetSeconds: 47,
+    monotonicNow: () => mono,
+  });
+  t.after(async () => {
+    await writer.cleanup();
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  // Session 2 of a note whose first session already occupies 47s, and the audio
+  // really began 1.52s after the session did (monotonic clock, one process).
+  mono = 6_520;
+  writer.writeChunk("mic", buildTonePcm({ durationSec: 0.5 }), sessionStartedAtMs + 1_600);
+
+  const result = await writer.finalize({ requireAudible: true });
+
+  assert.equal(result.success, true);
+  assert.equal(result.timelineStartSeconds, 48.52);
+  // The wall-clock start is derived from the same interval, not read again.
+  assert.equal(result.startedAt.getTime(), sessionStartedAtMs + 1_520);
+  // The raw first-chunk stamp is kept for diagnostics.
+  assert.equal(result.firstChunkWallMs, sessionStartedAtMs + 1_600);
+});
+
+test("without a session origin the writer leaves the anchor unobserved", async (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "superting-meeting-retained-"));
+  const writer = new MeetingRetainedAudioWriter({ tmpDir: root, timelineOffsetSeconds: 47 });
+  t.after(async () => {
+    await writer.cleanup();
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  writer.writeChunk("mic", buildTonePcm({ durationSec: 0.5 }));
+  const result = await writer.finalize({ requireAudible: true });
+
+  assert.equal(result.success, true);
+  // Null, not a guess: the caller falls back to its own derivation.
+  assert.equal(result.timelineStartSeconds, null);
+});

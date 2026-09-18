@@ -2,6 +2,10 @@ const fs = require("fs");
 const os = require("os");
 const path = require("path");
 const crypto = require("crypto");
+const {
+  monotonicNowMs,
+  observedTimelineStartSeconds,
+} = require("../utils/diarizationTimeline");
 
 const VALID_SOURCES = new Set(["mic", "system"]);
 const VALID_MIX_STRATEGIES = new Set(["stereo", "mix", "system-priority"]);
@@ -176,6 +180,24 @@ class MeetingRetainedAudioWriter {
     this.id = options.id || `${Date.now()}-${crypto.randomBytes(4).toString("hex")}`;
     this.startedAt = null;
     this.finalizedPath = null;
+    // Where this session sits on the note timeline, handed over when the
+    // session starts. The writer is the one component that observes the audio's
+    // real start, so it — not a stop-time subtraction of two wall clocks —
+    // records the timeline anchor.
+    this.sessionStartedAtMs = Number.isFinite(Number(options.sessionStartedAtMs))
+      ? Number(options.sessionStartedAtMs)
+      : null;
+    this.sessionStartedMonoMs = Number.isFinite(Number(options.sessionStartedMonoMs))
+      ? Number(options.sessionStartedMonoMs)
+      : null;
+    this.timelineOffsetSeconds = Number.isFinite(Number(options.timelineOffsetSeconds))
+      ? Math.max(0, Number(options.timelineOffsetSeconds))
+      : 0;
+    this.monotonicNow =
+      typeof options.monotonicNow === "function" ? options.monotonicNow : monotonicNowMs;
+    // Monotonic instant of the first chunk written for this session: the width
+    // of the interval session-start → audio-start is measured with one clock.
+    this.startedMonoMs = null;
     this.sources = {
       mic: this.createSourceState("mic"),
       system: this.createSourceState("system"),
@@ -187,6 +209,7 @@ class MeetingRetainedAudioWriter {
       source,
       path: path.join(this.tmpDir, `superting-meeting-retained-${this.id}-${source}.pcm`),
       firstTimestampMs: null,
+      firstMonoMs: null,
       bytesWritten: 0,
       peak: 0,
     };
@@ -201,8 +224,11 @@ class MeetingRetainedAudioWriter {
     const state = this.sources[source];
     if (state.firstTimestampMs == null) {
       state.firstTimestampMs = timestampMs;
+      state.firstMonoMs = this.monotonicNow();
     }
     this.startedAt = this.startedAt == null ? timestampMs : Math.min(this.startedAt, timestampMs);
+    this.startedMonoMs =
+      this.startedMonoMs == null ? state.firstMonoMs : Math.min(this.startedMonoMs, state.firstMonoMs);
     state.bytesWritten += resampled.length;
     state.peak = Math.max(state.peak, calculatePeak(resampled));
     fs.mkdirSync(this.tmpDir, { recursive: true });
@@ -308,10 +334,26 @@ class MeetingRetainedAudioWriter {
       stats: this.buildStats(candidates),
     });
 
+    // Observed anchor: measured entirely with the monotonic clock inside this
+    // process, so it does not depend on two Date.now() readings staying in step.
+    const timelineStartSeconds = observedTimelineStartSeconds({
+      timelineOffsetSeconds: this.timelineOffsetSeconds,
+      sessionStartedMonoMs: this.sessionStartedMonoMs,
+      audioStartMonoMs: this.startedMonoMs,
+    });
+    // Audio start as wall clock, derived once from the same interval (used for
+    // `recorded_at`/filenames). Falls back to the raw first-chunk stamp.
+    const audioStartWallMs =
+      timelineStartSeconds != null && this.sessionStartedAtMs != null
+        ? this.sessionStartedAtMs + (this.startedMonoMs - this.sessionStartedMonoMs)
+        : this.startedAt;
+
     return {
       success: true,
       pcmPath: outputPath,
-      startedAt: this.startedAt ? new Date(this.startedAt) : new Date(),
+      startedAt: audioStartWallMs ? new Date(audioStartWallMs) : new Date(),
+      timelineStartSeconds,
+      firstChunkWallMs: this.startedAt,
       durationSeconds: mixedPcm.length / (this.sampleRate * channels * BYTES_PER_SAMPLE),
       sourceMix,
       sampleRate: this.sampleRate,
