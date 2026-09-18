@@ -4,6 +4,7 @@ const assert = require("node:assert/strict");
 const {
   dbTimestampMs,
   noteAudioSecondsForTimestamp,
+  noteTimelineStartForAudio,
   restoreTranscriptTimestamps,
   toAudioRelativeSegments,
   toNoteTimelineSegments,
@@ -86,11 +87,37 @@ test("voiceprint windows count from the audio file's start, not the first line",
   const audioStartMs = 1_800_000_000_000;
 
   assert.equal(noteAudioSecondsForTimestamp(audioStartMs + 61_500, audioStartMs), 61.5);
-  // Timeline-relative notes need no rebasing.
+  // Timeline-relative notes are shifted by the file's own timeline start.
   assert.equal(noteAudioSecondsForTimestamp(61.5, null), 61.5);
+  assert.equal(noteAudioSecondsForTimestamp(827.5, null, 766), 61.5);
   // An absolute stamp without the file start cannot be placed: no guess.
   assert.equal(noteAudioSecondsForTimestamp(audioStartMs + 61_500, null), undefined);
   assert.equal(noteAudioSecondsForTimestamp(undefined, audioStartMs), undefined);
+});
+
+test("a session's audio records the note-timeline second its file starts at", () => {
+  const sessionStartedAtMs = 1_800_000_000_000;
+
+  // First session: the note timeline starts with this file.
+  assert.equal(noteTimelineStartForAudio({ sessionStartedAtMs }), 0);
+  // Resumed session: everything earlier already occupies 766s.
+  assert.equal(
+    noteTimelineStartForAudio({ sessionStartedAtMs, timelineOffsetSeconds: 766 }),
+    766
+  );
+  // Capture began 2.5s after the session did: the file's first sample sits at
+  // 768.5 on the note timeline.
+  assert.equal(
+    noteTimelineStartForAudio({
+      sessionStartedAtMs,
+      timelineOffsetSeconds: 766,
+      audioStartMs: sessionStartedAtMs + 2_500,
+    }),
+    768.5
+  );
+  // A missing session anchor still records the resume offset (no invented skew).
+  assert.equal(noteTimelineStartForAudio({ timelineOffsetSeconds: 766 }), 766);
+  assert.equal(noteTimelineStartForAudio(), 0);
 });
 
 test("diarization output is placed on the note timeline before the renderer stores it", () => {

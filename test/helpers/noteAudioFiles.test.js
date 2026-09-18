@@ -98,10 +98,12 @@ test("replaceNoteAudioFilesWithMergedFile keeps only merged recording as latest 
 
   db.addNoteAudioFile(note.id, older, 60, {
     recordedAt: "2026-05-29T10:00:00.000Z",
+    timelineStartSeconds: 0,
     updateLatest: true,
   });
   db.addNoteAudioFile(note.id, newer, 30, {
     recordedAt: "2026-05-29T10:30:00.000Z",
+    timelineStartSeconds: 76,
     updateLatest: true,
   });
 
@@ -117,9 +119,48 @@ test("replaceNoteAudioFilesWithMergedFile keeps only merged recording as latest 
   const updated = db.getNote(note.id);
   assert.equal(updated.source_file, merged);
   assert.equal(updated.audio_duration_seconds, 90);
+  const files = db.getNoteAudioFiles(note.id);
   assert.deepEqual(
-    db.getNoteAudioFiles(note.id).map((file) => file.filename),
+    files.map((file) => file.filename),
     [merged]
+  );
+  // The merged file starts where its earliest source started.
+  assert.equal(files[0].timeline_start_seconds, 0);
+});
+
+test("note audio files record where the session starts on the note timeline", (t) => {
+  const db = createDatabase(t);
+  const note = db.saveNote("Meeting", "", "meeting").note;
+  const first = "SuperTing-meeting-2026-05-29-10-00-00-5.wav";
+  const second = "SuperTing-meeting-2026-05-29-11-00-00-5.wav";
+
+  db.addNoteAudioFile(note.id, first, 60, {
+    recordedAt: "2026-05-29T10:00:00.000Z",
+    timelineStartSeconds: 0,
+  });
+  db.addNoteAudioFile(note.id, second, 30, {
+    recordedAt: "2026-05-29T11:00:00.000Z",
+    timelineStartSeconds: 766.5,
+  });
+
+  const files = db.getNoteAudioFiles(note.id);
+  assert.equal(files[0].timeline_start_seconds, 766.5);
+  assert.equal(files[1].timeline_start_seconds, 0);
+
+  // A row from before the column existed gets its anchor backfilled the next
+  // time the same session is registered.
+  db.db
+    .prepare("UPDATE note_audio_files SET timeline_start_seconds = NULL WHERE filename = ?")
+    .run(second);
+  db.addNoteAudioFile(note.id, second, 30, {
+    recordedAt: "2026-05-29T11:00:00.000Z",
+    timelineStartSeconds: 766.5,
+  });
+  assert.equal(
+    db
+      .getNoteAudioFiles(note.id)
+      .find((file) => file.filename === second).timeline_start_seconds,
+    766.5
   );
 });
 
@@ -131,6 +172,7 @@ test("replaceNoteAudioFilename preserves a note recording when compressed global
 
   db.addNoteAudioFile(note.id, wavName, 60, {
     recordedAt: "2026-05-29T10:00:00.000Z",
+    timelineStartSeconds: 42,
     updateLatest: true,
   });
 
@@ -146,6 +188,8 @@ test("replaceNoteAudioFilename preserves a note recording when compressed global
   assert.equal(files.length, 1);
   assert.equal(files[0].filename, webmName);
   assert.equal(files[0].duration_seconds, 60);
+  // A rename/compress must not lose where the recording starts on the timeline.
+  assert.equal(files[0].timeline_start_seconds, 42);
 });
 
 test("backfill from audio directory imports old meeting audio files with note ids", (t) => {

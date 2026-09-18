@@ -53,6 +53,7 @@ const {
   toAudioRelativeSegments,
   restoreTranscriptTimestamps,
   toNoteTimelineSegments,
+  noteTimelineStartForAudio,
   noteAudioSecondsForTimestamp,
 } = require("../utils/diarizationTimeline");
 const postMigrationDetector = require("./postMigrationDetector");
@@ -3016,7 +3017,10 @@ class IPCHandlers {
             [audioFile.filename],
             compressed.filename,
             audioFile.duration_seconds,
-            { recordedAt: audioFile.recorded_at || audioFile.created_at || undefined }
+            {
+              recordedAt: audioFile.recorded_at || audioFile.created_at || undefined,
+              timelineStartSeconds: audioFile.timeline_start_seconds,
+            }
           );
         }
 
@@ -6095,7 +6099,7 @@ class IPCHandlers {
       }
     };
 
-    const persistMeetingAudioForNote = async (noteId, retainedAudio) => {
+    const persistMeetingAudioForNote = async (noteId, retainedAudio, anchors = {}) => {
       if (!meetingShouldRetainAudio || !noteId || !retainedAudio?.pcmPath) {
         if (retainedAudio?.error) {
           debugLogger.warn("Meeting audio retention skipped", {
@@ -6139,6 +6143,13 @@ class IPCHandlers {
               recordedAt: retainedAudio.startedAt
                 ? new Date(retainedAudio.startedAt).toISOString()
                 : undefined,
+              // Where this session's file starts on the note's timeline, so
+              // later diarization/slicing can map it exactly.
+              timelineStartSeconds: noteTimelineStartForAudio({
+                sessionStartedAtMs: anchors.sessionStartedAtMs,
+                timelineOffsetSeconds: anchors.timelineOffsetSeconds,
+                audioStartMs: retainedAudio.startedAt,
+              }),
               updateLatest: true,
             }
           );
@@ -7924,7 +7935,10 @@ class IPCHandlers {
             requireAudible: Boolean(transcript.trim()),
           });
           const retainedAudioStartedAt = retainedAudio?.startedAt ?? null;
-          const savedAudio = await persistMeetingAudioForNote(meetingNoteId, retainedAudio);
+          const savedAudio = await persistMeetingAudioForNote(meetingNoteId, retainedAudio, {
+            sessionStartedAtMs,
+            timelineOffsetSeconds,
+          });
           const sessionSpeakerConfigSnapshot = this.activeMeetingSpeakerConfig;
           const noteIdSnapshot = meetingNoteId;
           const stopMetadataSnapshot = {
@@ -7981,7 +7995,10 @@ class IPCHandlers {
           requireAudible: Boolean(transcript.trim()),
         });
         const retainedAudioStartedAt = retainedAudio?.startedAt ?? null;
-        const savedAudio = await persistMeetingAudioForNote(meetingNoteId, retainedAudio);
+        const savedAudio = await persistMeetingAudioForNote(meetingNoteId, retainedAudio, {
+          sessionStartedAtMs,
+          timelineOffsetSeconds,
+        });
 
         const sessionSpeakerConfigSnapshot = this.activeMeetingSpeakerConfig;
         const noteIdSnapshot = meetingNoteId;
@@ -9420,20 +9437,30 @@ class IPCHandlers {
   // every diarized utterance of that speaker in the source note as auditionable
   // audio segments (click-to-play, multiple clips per voiceprint).
   /**
-   * Audio windows (seconds, relative to the note's audio) covered by one
-   * speaker's segments. Epoch-ms wall-clock segments are rebased on the audio
-   * file's own start (`recorded_at`), so callers can slice the retained audio
-   * directly.
+   * Audio windows (seconds into ONE audio file) covered by one speaker's
+   * segments.
+   *
+   * Pass the file that will be sliced (`audioFile`): its own
+   * `timeline_start_seconds` (relative transcripts) or `recorded_at` (legacy
+   * absolute stamps) is what makes the conversion exact. Windows that fall
+   * outside that file are dropped instead of being cut from the wrong session.
+   * Without a file the note's `recorded_at` is the best available anchor, which
+   * is only correct for a single-session note.
    */
-  _noteSpeakerAudioWindows(note, speakerId, { minSeconds = 0 } = {}) {
+  _noteSpeakerAudioWindows(note, speakerId, { minSeconds = 0, audioFile = null } = {}) {
     const segments = this._parseNoteTranscriptSegments(note);
     if (segments.length === 0) return [];
 
-    // Rebase absolute stamps on the retained audio's own start — the note's
-    // `recorded_at`. The first transcript line is always later than the file
-    // starts, so anchoring on it sliced every clip early by that much.
-    const audioStartMs = dbTimestampMs(note?.recorded_at);
-    const normalize = (value) => noteAudioSecondsForTimestamp(value, audioStartMs);
+    const audioStartMs = dbTimestampMs(audioFile?.recorded_at || note?.recorded_at);
+    const baseNoteSeconds = Number.isFinite(Number(audioFile?.timeline_start_seconds))
+      ? Math.max(0, Number(audioFile.timeline_start_seconds))
+      : 0;
+    const normalize = (value) =>
+      noteAudioSecondsForTimestamp(value, audioStartMs, baseNoteSeconds);
+    const fileDurationSeconds = Number(audioFile?.duration_seconds);
+    const fileEndSeconds = Number.isFinite(fileDurationSeconds)
+      ? fileDurationSeconds + 5
+      : null;
 
     const timeline = segments
       .map((segment) => ({
@@ -9456,6 +9483,7 @@ class IPCHandlers {
       .map((entry, index) => {
         if (entry.segment.speaker !== speakerId) return null;
         const startSeconds = Math.max(0, entry.startSeconds);
+        if (fileEndSeconds != null && startSeconds > fileEndSeconds) return null;
         let endSeconds =
           Number.isFinite(entry.endSeconds) && entry.endSeconds > startSeconds
             ? entry.endSeconds
@@ -9570,14 +9598,22 @@ class IPCHandlers {
     const note = this.databaseManager.getNote(noteId);
     if (!note) return null;
 
-    const windows = this._noteSpeakerAudioWindows(note, speakerId, { minSeconds: 1.5 });
-    if (windows.length === 0) return null;
+    const audioFiles = this.databaseManager.getNoteAudioFiles(noteId) || [];
+    if (audioFiles.length === 0) return null;
 
-    const audioFiles = this.databaseManager.getNoteAudioFiles(noteId);
-    const audioFile = audioFiles?.[0] || null;
-    if (!audioFile) return null;
-    const audioPath = this.audioStorageManager.getRetainedAudioPath(audioFile.filename);
-    if (!audioPath) return null;
+    // Candidate windows, each paired with the file it was measured against.
+    const candidates = [];
+    for (const audioFile of audioFiles) {
+      const audioPath = this.audioStorageManager.getRetainedAudioPath(audioFile.filename);
+      if (!audioPath) continue;
+      for (const window of this._noteSpeakerAudioWindows(note, speakerId, {
+        minSeconds: 1.5,
+        audioFile,
+      })) {
+        candidates.push({ audioPath, window });
+      }
+    }
+    if (candidates.length === 0) return null;
 
     const speakerEmbeddings = require("./speakerEmbeddings");
     if (!speakerEmbeddings.isAvailable()) {
@@ -9585,19 +9621,26 @@ class IPCHandlers {
       return null;
     }
 
-    const longest = [...windows]
+    const longest = candidates
       .sort(
         (a, b) =>
-          b.endSeconds - b.startSeconds - (a.endSeconds - a.startSeconds) ||
-          a.startSeconds - b.startSeconds
+          b.window.endSeconds -
+            b.window.startSeconds -
+            (a.window.endSeconds - a.window.startSeconds) ||
+          a.window.startSeconds - b.window.startSeconds
       )
       .slice(0, 3);
 
-    let tmpWav = null;
+    const preparedWavs = new Map();
     try {
-      tmpWav = await this._prepareAudioForDiarization(audioPath);
       const embeddings = [];
-      for (const window of longest) {
+      for (const { audioPath, window } of longest) {
+        let tmpWav = preparedWavs.get(audioPath);
+        if (!tmpWav) {
+          tmpWav = await this._prepareAudioForDiarization(audioPath);
+          if (!tmpWav) continue;
+          preparedWavs.set(audioPath, tmpWav);
+        }
         const embedding = await speakerEmbeddings.extractEmbedding(
           tmpWav,
           window.startSeconds,
@@ -9617,7 +9660,7 @@ class IPCHandlers {
       );
       return null;
     } finally {
-      if (tmpWav) {
+      for (const tmpWav of preparedWavs.values()) {
         try {
           fs.unlinkSync(tmpWav);
         } catch (_) {}
@@ -9774,20 +9817,25 @@ class IPCHandlers {
       if (!noteId || !voiceprintId) return 0;
       const note = this.databaseManager.getNote(noteId);
       if (!note) return 0;
-      const audioFiles = this.databaseManager.getNoteAudioFiles(noteId);
-      const audioFile = audioFiles?.[0] || null;
-      if (!audioFile) return 0;
+      const audioFiles = this.databaseManager.getNoteAudioFiles(noteId) || [];
+      if (audioFiles.length === 0) return 0;
 
-      const windows = this._noteSpeakerAudioWindows(note, speakerId);
-      if (windows.length === 0) return 0;
-
-      const clips = windows.map((window) => ({
-        noteId,
-        speakerId,
-        startSeconds: window.startSeconds,
-        endSeconds: window.endSeconds,
-        audioFileId: audioFile.id,
-      }));
+      // Every window is measured against the file it will be played from, so a
+      // multi-session note no longer slices session 1's lines out of the last
+      // session's audio.
+      const clips = [];
+      for (const audioFile of audioFiles) {
+        for (const window of this._noteSpeakerAudioWindows(note, speakerId, { audioFile })) {
+          clips.push({
+            noteId,
+            speakerId,
+            startSeconds: window.startSeconds,
+            endSeconds: window.endSeconds,
+            audioFileId: audioFile.id,
+          });
+        }
+      }
+      if (clips.length === 0) return 0;
       return this.databaseManager.replaceVoiceprintSegments(voiceprintId, clips);
     } catch (error) {
       debugLogger.warn("Failed to capture voiceprint segments", { error: error.message }, "speaker");
@@ -10521,6 +10569,8 @@ class IPCHandlers {
 
     const audioResult = this.databaseManager.addNoteAudioFile(noteId, filename, null, {
       recordedAt: new Date().toISOString(),
+      // An attached file is the start of this note's audio timeline.
+      timelineStartSeconds: 0,
       updateLatest: true,
     });
     const updatedNote = this.databaseManager.getNote(noteId);
@@ -10644,8 +10694,15 @@ class IPCHandlers {
       // are rebased on the audio file's own start — never on the first
       // transcript line, which is always later than the file starts.
       const audioFileStartMs = dbTimestampMs(audioFile.recorded_at);
+      // Relative transcripts are shifted by the file's own timeline start;
+      // legacy absolute ones are rebased on the file's wall clock. Rows written
+      // before the column existed fall back to 0 (the old behaviour).
+      const audioFileTimelineStart = Number.isFinite(Number(audioFile.timeline_start_seconds))
+        ? Math.max(0, Number(audioFile.timeline_start_seconds))
+        : 0;
       const matchingSegments = toAudioRelativeSegments(transcriptSegments, {
         audioStartMs: audioFileStartMs,
+        baseNoteSeconds: audioFileTimelineStart,
       });
       if (transcriptSegments.some((segment) => isAbsoluteMs(segment.timestamp))) {
         debugLogger.debug("Rediarize matching rebased legacy absolute timestamps", {

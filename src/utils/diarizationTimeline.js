@@ -99,18 +99,46 @@ function restoreTranscriptTimestamps(enriched, originals) {
 }
 
 /**
- * Seconds into the note's audio for a stored transcript timestamp, used to slice
- * retained audio (voiceprint audition clips). Absolute stamps are rebased on the
- * audio file's own start — not on the first transcript line, which is always
- * later than the file starts. Timeline-relative values are returned as they are.
+ * Note-timeline seconds at which an audio file's first sample sits — the value
+ * persisted on `note_audio_files.timeline_start_seconds` when a session's audio
+ * is saved.
+ *
+ * The session's timeline zero is `timelineOffsetSeconds` (everything earlier
+ * sessions already occupy), and the file itself may start a little after the
+ * session did (capture setup), which is the same skew the live ingest sees.
+ * Storing this makes "seconds into this file" and "seconds on the note timeline"
+ * convertible in both directions, for any later diarization run or audio slice.
  */
-function noteAudioSecondsForTimestamp(value, audioStartMs) {
+function noteTimelineStartForAudio({
+  sessionStartedAtMs,
+  timelineOffsetSeconds = 0,
+  audioStartMs,
+} = {}) {
+  const offset = Number.isFinite(timelineOffsetSeconds) ? timelineOffsetSeconds : 0;
+  const sessionStart = finite(sessionStartedAtMs);
+  const audioStart = finite(audioStartMs);
+  const skewSeconds =
+    audioStart != null && sessionStart != null ? (audioStart - sessionStart) / 1000 : 0;
+  return Math.max(0, offset + skewSeconds);
+}
+
+/**
+ * Seconds into an audio file for a stored (note-timeline) timestamp, used to
+ * slice retained audio. Relative values are shifted by the file's own
+ * `timeline_start_seconds`; legacy absolute stamps are rebased on the file's
+ * wall-clock start. A missing anchor means "cannot place it" — `undefined`, not
+ * a guess.
+ */
+function noteAudioSecondsForTimestamp(value, audioStartMs, baseNoteSeconds = 0) {
   const numeric = finite(value);
   if (numeric == null) return undefined;
-  if (!isAbsoluteMs(numeric)) return Math.max(0, numeric);
-  const anchor = finite(audioStartMs);
-  if (anchor == null) return undefined;
-  return Math.max(0, (numeric - anchor) / 1000);
+  if (isAbsoluteMs(numeric)) {
+    const anchor = finite(audioStartMs);
+    if (anchor == null) return undefined;
+    return Math.max(0, (numeric - anchor) / 1000);
+  }
+  const base = Number.isFinite(baseNoteSeconds) ? baseNoteSeconds : 0;
+  return Math.max(0, numeric - base);
 }
 
 /**
@@ -177,5 +205,6 @@ module.exports = {
   toAudioRelativeSegments,
   restoreTranscriptTimestamps,
   toNoteTimelineSegments,
+  noteTimelineStartForAudio,
   noteAudioSecondsForTimestamp,
 };

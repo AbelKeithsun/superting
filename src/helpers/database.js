@@ -312,6 +312,10 @@ class DatabaseManager {
           duration_seconds REAL,
           created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
           recorded_at DATETIME,
+          -- Note-timeline seconds at which this file's first sample sits, so a
+          -- later diarization run or audio slice can convert between "seconds
+          -- into this file" and "seconds on the note timeline" exactly.
+          timeline_start_seconds REAL,
           UNIQUE(note_id, filename),
           FOREIGN KEY (note_id) REFERENCES notes(id) ON DELETE CASCADE
         )
@@ -773,6 +777,14 @@ class DatabaseManager {
       }
       try {
         this.db.exec("ALTER TABLE transcriptions ADD COLUMN deleted_at TEXT");
+      } catch (err) {
+        if (!err.message.includes("duplicate column")) throw err;
+      }
+      // Meeting sessions record where their audio file starts on the note's
+      // timeline (NULL for rows written before this existed — those fall back
+      // to the old anchor at read time).
+      try {
+        this.db.exec("ALTER TABLE note_audio_files ADD COLUMN timeline_start_seconds REAL");
       } catch (err) {
         if (!err.message.includes("duplicate column")) throw err;
       }
@@ -1893,17 +1905,30 @@ class DatabaseManager {
       }
 
       const recordedAt = options.recordedAt || new Date().toISOString();
+      const timelineStartSeconds = Number.isFinite(Number(options.timelineStartSeconds))
+        ? Math.max(0, Number(options.timelineStartSeconds))
+        : null;
       const insert = this.db.prepare(
         `INSERT OR IGNORE INTO note_audio_files
-          (note_id, filename, duration_seconds, recorded_at)
-         VALUES (?, ?, ?, ?)`
+          (note_id, filename, duration_seconds, recorded_at, timeline_start_seconds)
+         VALUES (?, ?, ?, ?, ?)`
+      );
+      const backfillTimelineStart = this.db.prepare(
+        `UPDATE note_audio_files
+         SET timeline_start_seconds = ?
+         WHERE note_id = ? AND filename = ? AND timeline_start_seconds IS NULL`
       );
       const fetch = this.db.prepare(
         "SELECT * FROM note_audio_files WHERE note_id = ? AND filename = ?"
       );
 
       const transaction = this.db.transaction(() => {
-        insert.run(noteId, safeFilename, durationSeconds, recordedAt);
+        insert.run(noteId, safeFilename, durationSeconds, recordedAt, timelineStartSeconds);
+        if (timelineStartSeconds != null) {
+          // A row written before this column existed still gets its anchor the
+          // next time the same session is registered.
+          backfillTimelineStart.run(timelineStartSeconds, noteId, safeFilename);
+        }
         if (options.updateLatest) {
           this.db
             .prepare(
@@ -2048,6 +2073,28 @@ class DatabaseManager {
 
       const recordedAt = options.recordedAt || new Date().toISOString();
       const transaction = this.db.transaction(() => {
+        // The merged file starts where its earliest source started: inherit that
+        // anchor before the source rows go away. (Sessions merged together are
+        // concatenated, so a note with pauses between sessions is only anchored
+        // at its first one — see the diarization matching note in ipcHandlers.)
+        let timelineStartSeconds = Number.isFinite(Number(options.timelineStartSeconds))
+          ? Math.max(0, Number(options.timelineStartSeconds))
+          : null;
+        if (timelineStartSeconds == null && names.length > 0) {
+          const placeholders = names.map(() => "?").join(", ");
+          const row = this.db
+            .prepare(
+              `SELECT MIN(timeline_start_seconds) AS timeline_start_seconds
+               FROM note_audio_files
+               WHERE note_id = ?
+                 AND filename IN (${placeholders})
+                 AND timeline_start_seconds IS NOT NULL`
+            )
+            .get(noteId, ...names);
+          const inherited = Number(row?.timeline_start_seconds);
+          timelineStartSeconds = Number.isFinite(inherited) ? Math.max(0, inherited) : null;
+        }
+
         if (names.length > 0) {
           const placeholders = names.map(() => "?").join(", ");
           this.db
@@ -2062,10 +2109,10 @@ class DatabaseManager {
         this.db
           .prepare(
             `INSERT OR REPLACE INTO note_audio_files
-              (note_id, filename, duration_seconds, recorded_at)
-             VALUES (?, ?, ?, ?)`
+              (note_id, filename, duration_seconds, recorded_at, timeline_start_seconds)
+             VALUES (?, ?, ?, ?, ?)`
           )
-          .run(noteId, safeMergedFilename, durationSeconds, recordedAt);
+          .run(noteId, safeMergedFilename, durationSeconds, recordedAt, timelineStartSeconds);
 
         this.db
           .prepare(
@@ -2109,7 +2156,7 @@ class DatabaseManager {
       const transaction = this.db.transaction(() => {
         const rows = this.db
           .prepare(
-            `SELECT note_id, duration_seconds, recorded_at, created_at
+            `SELECT note_id, duration_seconds, recorded_at, created_at, timeline_start_seconds
              FROM note_audio_files
              WHERE filename = ?`
           )
@@ -2126,14 +2173,17 @@ class DatabaseManager {
           this.db
             .prepare(
               `INSERT OR REPLACE INTO note_audio_files
-                (note_id, filename, duration_seconds, recorded_at)
-               VALUES (?, ?, ?, ?)`
+                (note_id, filename, duration_seconds, recorded_at, timeline_start_seconds)
+               VALUES (?, ?, ?, ?, ?)`
             )
             .run(
               row.note_id,
               safeNewFilename,
               row.duration_seconds,
-              row.recorded_at || row.created_at || new Date().toISOString()
+              row.recorded_at || row.created_at || new Date().toISOString(),
+              Number.isFinite(Number(row.timeline_start_seconds))
+                ? Number(row.timeline_start_seconds)
+                : null
             );
         }
 

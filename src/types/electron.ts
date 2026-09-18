@@ -224,6 +224,12 @@ export interface NoteAudioFile {
   recorded_at: string | null;
   size_bytes: number | null;
   extension: string;
+  /**
+   * Note-timeline seconds at which this file's first sample sits (NULL for rows
+   * recorded before the column existed). Lets diarization and audio slicing map
+   * "seconds into this file" to the note timeline exactly.
+   */
+  timeline_start_seconds?: number | null;
 }
 
 export interface FolderItem {
