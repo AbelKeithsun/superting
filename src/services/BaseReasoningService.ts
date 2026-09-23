@@ -1,6 +1,26 @@
 import { getCleanupSystemPrompt } from "../config/prompts";
 import { getSettings } from "../stores/settingsStore";
 
+export interface ReasoningTokenUsage {
+  inputTokens?: number;
+  outputTokens?: number;
+  reasoningTokens?: number;
+  cachedTokens?: number;
+}
+
+/**
+ * Live progress of one streaming request, delivered via ReasoningConfig.onStream.
+ * `attempt-start` fires at each (re)try so consumers can reset their
+ * accumulators; `completed` / `incomplete` carry the exact token usage.
+ */
+export type ReasoningStreamEvent =
+  | { type: "attempt-start" }
+  | { type: "reasoning-delta"; text: string }
+  | { type: "content-delta"; text: string }
+  | { type: "completed"; usage?: ReasoningTokenUsage }
+  | { type: "incomplete"; reason?: string; usage?: ReasoningTokenUsage }
+  | { type: "failed"; message: string };
+
 export interface ReasoningConfig {
   maxTokens?: number;
   temperature?: number;
@@ -11,6 +31,13 @@ export interface ReasoningConfig {
   customApiKey?: string;
   provider?: string;
   disableThinking?: boolean;
+  /**
+   * When set (and the provider/endpoint supports it — currently the OpenAI
+   * Responses API), the request streams and this callback receives reasoning
+   * deltas, content deltas and the final token usage. Providers without
+   * streaming simply never call it.
+   */
+  onStream?: (event: ReasoningStreamEvent) => void;
   /**
    * When true, an empty/unparseable model response throws a descriptive
    * error instead of silently returning the input text. Note actions set

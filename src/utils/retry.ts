@@ -55,6 +55,32 @@ export function requestTimeoutError(timeoutMs: number): Error {
   return error;
 }
 
+/**
+ * Build the error thrown when the model exhausts its output token budget
+ * (`incomplete_details.reason === "max_output_tokens"`, or a reasoning-only
+ * response with no visible content).
+ *
+ * Marked `noRetry` because blind provider-level retries would burn the same
+ * budget again; callers that can raise the budget (note actions, transcript
+ * polish) catch the `outputBudgetExceeded` flag and retry once deliberately
+ * with a doubled cap.
+ */
+export function outputBudgetExceededError(message?: string): Error {
+  const error = new Error(
+    message ??
+      "The model spent its entire output budget on reasoning and returned no content. " +
+        "Raise the output token budget or lower the reasoning effort, then run the action again."
+  ) as Error & { noRetry?: boolean; outputBudgetExceeded?: boolean };
+  error.noRetry = true;
+  error.outputBudgetExceeded = true;
+  return error;
+}
+
+/** Type guard for the deliberate-retry path in note actions / polish. */
+export function isOutputBudgetExceeded(error: unknown): boolean {
+  return (error as { outputBudgetExceeded?: boolean } | null)?.outputBudgetExceeded === true;
+}
+
 // Specific retry strategy for API calls
 export function createApiRetryStrategy() {
   return {

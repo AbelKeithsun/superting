@@ -2099,6 +2099,27 @@
       "mixSystemPriority": "Priorité système",
       "newRecordingsOnly": "Les changements de qualité ne s'appliquent qu'aux nouveaux enregistrements ; les existants ne sont pas réencodés."
     },
+    "aiDrawer": {
+      "collapse": "Replier le panneau",
+      "close": "Fermer",
+      "reviewBadge": "À relire",
+      "chunkLabel": "Bloc {{index}}/{{total}}",
+      "phaseQueued": "En file",
+      "statsInput": "Entrée",
+      "statsReasoning": "Réflex.",
+      "statsOutput": "Sortie",
+      "statsSpeed": "{{speed}} tok/s",
+      "statsElapsed": "{{seconds}} s",
+      "thinking": "Processus de réflexion",
+      "contentOutput": "Sortie",
+      "applying": "Application des changements…",
+      "retryChunk": "Réessayer ce bloc",
+      "polishDone": "{{count}} segments appliqués",
+      "polishDoneAuto": "{{count}} segments appliqués automatiquement en arrière-plan",
+      "actionRunning": "« {{name}} » en cours…",
+      "actionDone": "Terminé — écrit dans la note",
+      "navAwayConfirm": "Une opération IA est encore en cours.\n\nOK : quitter — elle se terminera en arrière-plan et appliquera tout automatiquement.\nAnnuler : rester sur cette note jusqu'à la fin."
+    },
     "transcript": {
     "polish": {
       "title": "Peaufiner la transcription avec l’IA",

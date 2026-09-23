@@ -2060,6 +2060,27 @@
       "mixSystemPriority": "Приоритет системы",
       "newRecordingsOnly": "Изменения качества действуют только на новые записи; существующие не перекодируются."
     },
+    "aiDrawer": {
+      "collapse": "Свернуть панель",
+      "close": "Закрыть",
+      "reviewBadge": "Ожидает проверки",
+      "chunkLabel": "Блок {{index}}/{{total}}",
+      "phaseQueued": "В очереди",
+      "statsInput": "Вход",
+      "statsReasoning": "Мысли",
+      "statsOutput": "Выход",
+      "statsSpeed": "{{speed}} ток/с",
+      "statsElapsed": "{{seconds}} с",
+      "thinking": "Процесс рассуждения",
+      "contentOutput": "Вывод",
+      "applying": "Применение изменений…",
+      "retryChunk": "Повторить блок",
+      "polishDone": "Применены изменения к {{count}} фрагментам",
+      "polishDoneAuto": "Изменения автоматически применены к {{count}} фрагментам в фоне",
+      "actionRunning": "Выполняется «{{name}}»…",
+      "actionDone": "Готово — записано в заметку",
+      "navAwayConfirm": "Операция ИИ ещё выполняется.\n\nОК: уйти — завершится в фоне и применит всё автоматически.\nОтмена: остаться в этой заметке до завершения."
+    },
     "transcript": {
     "polish": {
       "title": "Отредактировать транскрипт с помощью ИИ",

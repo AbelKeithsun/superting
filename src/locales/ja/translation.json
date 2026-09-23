@@ -2058,6 +2058,27 @@
       "mixSystemPriority": "システム優先",
       "newRecordingsOnly": "品質設定は新しい録音にのみ適用され、既存の録音は再エンコードされません。"
     },
+    "aiDrawer": {
+      "collapse": "パネルを折りたたむ",
+      "close": "閉じる",
+      "reviewBadge": "レビュー待ち",
+      "chunkLabel": "チャンク {{index}}/{{total}}",
+      "phaseQueued": "待機中",
+      "statsInput": "入力",
+      "statsReasoning": "思考",
+      "statsOutput": "出力",
+      "statsSpeed": "{{speed}} tok/s",
+      "statsElapsed": "{{seconds}}秒",
+      "thinking": "思考プロセス",
+      "contentOutput": "出力",
+      "applying": "変更を適用中…",
+      "retryChunk": "このチャンクを再試行",
+      "polishDone": "{{count}} 件のセグメントを適用しました",
+      "polishDoneAuto": "バックグラウンドで {{count}} 件を自動適用しました",
+      "actionRunning": "「{{name}}」を実行中…",
+      "actionDone": "完了 — ノートに書き込みました",
+      "navAwayConfirm": "AI 操作がまだ実行中です。\n\n「OK」: このノートを離れ、バックグラウンドで完了後に自動適用します。\n「キャンセル」: このノートに留まり、完了を待ちます。"
+    },
     "transcript": {
     "polish": {
       "title": "AI で文字起こしを校正",

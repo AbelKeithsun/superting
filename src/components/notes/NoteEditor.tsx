@@ -30,14 +30,17 @@ import { MarkdownSourceEditor } from "../ui/MarkdownSourceEditor";
 import type { Editor } from "@tiptap/react";
 import { MeetingTranscriptChat, type TranscriptSeekTarget } from "./MeetingTranscriptChat";
 import CorrectionSubmitDialog from "./CorrectionSubmitDialog";
-import TranscriptPolishDialog from "./TranscriptPolishDialog";
+import NoteAiDrawer, { NoteAiDrawerReopenFab } from "./NoteAiDrawer";
+import {
+  isNoteAiOperationActive,
+  registerPolishApplyHandler,
+  requestAutoApplyAndLeave,
+  startPolishOperation,
+} from "../../stores/noteAiOperationStore";
 import { buildPolishLines, applyTranscriptPolishUpdates } from "../../stores/transcriptPolishCore";
 import VoiceprintSlotDialog from "./VoiceprintSlotDialog";
 import type { TranscriptSegment } from "../../stores/meetingRecordingStore";
-import {
-  updateSegmentText,
-  suggestSessionExpectedCount,
-} from "../../stores/meetingRecordingStore";
+import { updateSegmentText, suggestSessionExpectedCount } from "../../stores/meetingRecordingStore";
 import {
   Dialog,
   DialogContent,
@@ -826,10 +829,7 @@ export default function NoteEditor({
   } | null>(null);
   const speakerContactResolveRef = useRef<
     | ((
-        choice:
-          | { action: "link"; personId: number }
-          | { action: "create" }
-          | { action: "ignore" }
+        choice: { action: "link"; personId: number } | { action: "create" } | { action: "ignore" }
       ) => void)
     | null
   >(null);
@@ -1014,11 +1014,10 @@ export default function NoteEditor({
     displaySegmentsRef.current = displaySegments;
   }, [displaySegments]);
 
-  // 选段润色: the transcript view reports a contiguous selection, the dialog
-  // confirms the rewrite per segment, and only the accepted rows land back in the
-  // transcript (never in the note body, and never through the correction learner
-  // — an AI rewrite is not a 错→对 pair).
-  const [polishSegmentIds, setPolishSegmentIds] = useState<string[] | null>(null);
+  // 选段润色: the transcript view reports a contiguous selection, the side
+  // drawer streams the run and hosts the review, and only the accepted rows
+  // land back in the transcript (never in the note body, and never through the
+  // correction learner — an AI rewrite is not a 错→对 pair).
   const polishLines = useMemo(
     () =>
       buildPolishLines(displaySegments, {
@@ -1370,9 +1369,7 @@ export default function NoteEditor({
       setDiarizationOutcome({
         status: "completed",
         reason: null,
-        speakerCount: new Set(
-          data.segments.map((segment) => segment.speaker).filter(Boolean)
-        ).size,
+        speakerCount: new Set(data.segments.map((segment) => segment.speaker).filter(Boolean)).size,
       });
 
       // Draft guard: while the user is mid-edit, merging into the note would
@@ -1580,8 +1577,7 @@ export default function NoteEditor({
         } else if (result?.voiceprintCreated) {
           toast({
             title: t("notes.speaker.voiceprintEnrolledToast", {
-              defaultValue:
-                "已从本场会议音频提取 {{name}} 的声纹，可在 词典 → 联系人 中试听校准",
+              defaultValue: "已从本场会议音频提取 {{name}} 的声纹，可在 词典 → 联系人 中试听校准",
               name: displayName,
             }),
           });
@@ -1622,7 +1618,10 @@ export default function NoteEditor({
       const resolution = skipResolution
         ? null
         : await window.electronAPI?.resolveSpeakerContact?.(displayName, email ?? null);
-      if (resolution?.success && (resolution.status === "exact" || resolution.status === "ambiguous")) {
+      if (
+        resolution?.success &&
+        (resolution.status === "exact" || resolution.status === "ambiguous")
+      ) {
         const choice = await new Promise<{
           action: "link" | "create" | "ignore";
           personId?: number;
@@ -2034,12 +2033,20 @@ export default function NoteEditor({
   }, [contentEditTarget, hasUnsavedContentDraft, saveContentDraft, t]);
 
   useEffect(() => {
-    if (!contentEditTarget) return;
     return setActiveNoteChangeGuard((nextId, currentId) => {
       if (currentId !== note.id || nextId === currentId) return true;
+      // A running/unreviewed AI operation holds the user on the note unless
+      // they explicitly hand it to the background (finish + auto-apply).
+      if (isNoteAiOperationActive(note.id)) {
+        const runInBackground = window.confirm(t("notes.aiDrawer.navAwayConfirm"));
+        if (!runInBackground) return false;
+        requestAutoApplyAndLeave(note.id);
+        return true;
+      }
+      if (!contentEditTarget) return true;
       return confirmSaveContentDraft();
     });
-  }, [confirmSaveContentDraft, contentEditTarget, note.id]);
+  }, [confirmSaveContentDraft, contentEditTarget, note.id, t]);
 
   const startContentEdit = useCallback(() => {
     if (!canEditCurrentContent || !currentContentTarget) return;
@@ -2352,9 +2359,7 @@ export default function NoteEditor({
   );
 
   // Manual exit of the correction loop (auto-learn off, or nothing learnable).
-  const [correctionDrafts, setCorrectionDrafts] = useState<
-    Array<{ from: string; to: string }>
-  >([]);
+  const [correctionDrafts, setCorrectionDrafts] = useState<Array<{ from: string; to: string }>>([]);
   const [correctionReason, setCorrectionReason] = useState<string | undefined>(undefined);
   const [isCorrectionDialogOpen, setIsCorrectionDialogOpen] = useState(false);
 
@@ -2556,11 +2561,20 @@ export default function NoteEditor({
     [persistDisplaySegments]
   );
 
+  // The drawer applies through the editor while this note is open (so the
+  // in-memory transcript and the DB write stay consistent); unregisters on
+  // unmount, after which the store falls back to a direct DB write.
+  useEffect(
+    () => registerPolishApplyHandler(note.id, handleTranscriptPolishApply),
+    [note.id, handleTranscriptPolishApply]
+  );
+
   // Quiet learning receipt: an in-note toast with undo instead of the
   // dictation overlay popping up mid-meeting.
-  const [quietLearnedPairs, setQuietLearnedPairs] = useState<
-    Array<{ from: string; to: string }> | null
-  >(null);
+  const [quietLearnedPairs, setQuietLearnedPairs] = useState<Array<{
+    from: string;
+    to: string;
+  }> | null>(null);
   useEffect(() => {
     const cleanup = window.electronAPI?.onCorrectionsLearnedQuiet?.((data) => {
       if (!data?.pairs?.length) return;
@@ -2876,7 +2890,7 @@ export default function NoteEditor({
 
   return (
     <div
-      className="flex h-full min-w-0 min-h-0 overflow-hidden"
+      className="relative flex h-full min-w-0 min-h-0 overflow-hidden"
       onDragOver={handleNoteDragOver}
       onDrop={handleNoteDrop}
     >
@@ -2891,17 +2905,7 @@ export default function NoteEditor({
           });
         }}
       />
-      <TranscriptPolishDialog
-        open={!!polishSegmentIds && polishSegmentIds.length > 0}
-        onOpenChange={(open) => {
-          if (!open) setPolishSegmentIds(null);
-        }}
-        noteId={note.id}
-        lines={polishLines}
-        selectedIds={polishSegmentIds ?? []}
-        noteContent={note.content}
-        onApply={handleTranscriptPolishApply}
-      />
+      <NoteAiDrawerReopenFab noteId={note.id} />
       <VoiceprintSlotDialog
         open={!!voiceprintSlotPrompt}
         onOpenChange={(open) => {
@@ -3639,7 +3643,12 @@ export default function NoteEditor({
                 onPolishSegments={
                   isRecording || isTranscriptEditing
                     ? undefined
-                    : (segmentIds) => setPolishSegmentIds(segmentIds)
+                    : (segmentIds) =>
+                        void startPolishOperation(note.id, {
+                          lines: polishLines,
+                          selectedIds: segmentIds,
+                          noteContent: note.content,
+                        })
                 }
                 searchTerm={findText}
                 ignoreCase={ignoreCase}
@@ -4039,8 +4048,7 @@ export default function NoteEditor({
             </DialogTitle>
             <DialogDescription>
               {t("notes.speaker.contactResolveDescription", {
-                defaultValue:
-                  "标记的「{{name}}」与以下联系人可能相同，请选择如何处理：",
+                defaultValue: "标记的「{{name}}」与以下联系人可能相同，请选择如何处理：",
                 name: speakerContactPrompt?.displayName ?? "",
               })}
             </DialogDescription>
@@ -4060,9 +4068,7 @@ export default function NoteEditor({
                     {person.display_name}
                   </div>
                   <div className="truncate text-[11px] text-muted-foreground">
-                    {[person.email, person.organization]
-                      .filter(Boolean)
-                      .join(" · ") ||
+                    {[person.email, person.organization].filter(Boolean).join(" · ") ||
                       t("notes.speaker.contactResolveNoDetails", "未填写更多信息")}
                   </div>
                 </div>
@@ -4070,7 +4076,9 @@ export default function NoteEditor({
                   variant="outline"
                   size="sm"
                   className="h-7 shrink-0 px-2.5 text-xs"
-                  onClick={() => speakerContactResolveRef.current?.({ action: "link", personId: person.id })}
+                  onClick={() =>
+                    speakerContactResolveRef.current?.({ action: "link", personId: person.id })
+                  }
                 >
                   {t("notes.speaker.contactResolveLink", {
                     defaultValue: "关联到「{{name}}」",
@@ -4099,6 +4107,7 @@ export default function NoteEditor({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      <NoteAiDrawer noteId={note.id} />
     </div>
   );
 }

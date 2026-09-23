@@ -1,8 +1,15 @@
 import type { InferenceProvider } from "./types";
+import type { ReasoningStreamEvent } from "../../BaseReasoningService";
 import { API_ENDPOINTS, TOKEN_LIMITS, buildApiUrl } from "../../../config/constants";
 import { getOpenAiApiConfig } from "../../../models/ModelRegistry";
 import { getSettings } from "../../../stores/settingsStore";
-import { withRetry, createApiRetryStrategy, requestTimeoutError } from "../../../utils/retry";
+import {
+  withRetry,
+  createApiRetryStrategy,
+  requestTimeoutError,
+  outputBudgetExceededError,
+} from "../../../utils/retry";
+import { createResponsesSseParser, normalizeResponsesEvent } from "../../../utils/responsesSse";
 import logger from "../../../utils/logger";
 import { getConfiguredOpenAIBase } from "../openaiBase";
 import { applyThinkingSuppression } from "../thinkingSuppression";
@@ -60,6 +67,85 @@ function rememberPreference(base: string, preference: "responses" | "chat"): voi
     data[base] = preference;
     window.localStorage.setItem(OPENAI_ENDPOINT_PREF_STORAGE_KEY, JSON.stringify(data));
   } catch {}
+}
+
+interface StreamedResponsesResult {
+  streamed: true;
+  text: string;
+  usage?: Record<string, unknown>;
+  status: string;
+  incompleteReason?: string;
+}
+
+/**
+ * Consume a Responses-API SSE stream (`stream: true`). The visible answer is
+ * accumulated from `response.output_text.delta` events; every stage is
+ * forwarded to `onStream` so callers can render the thinking process and the
+ * token usage live. Terminal events carry the full response object, which
+ * back-fills text/usage when the deltas were missed.
+ */
+async function consumeResponsesStream(
+  res: Response,
+  onStream: (event: ReasoningStreamEvent) => void
+): Promise<StreamedResponsesResult> {
+  const reader = res.body?.getReader();
+  if (!reader) throw new Error("Streaming response has no readable body");
+
+  const decoder = new TextDecoder();
+  const parser = createResponsesSseParser();
+  let text = "";
+  let usage: Record<string, unknown> | undefined;
+  let status = "completed";
+  let incompleteReason: string | undefined;
+  let failedMessage: string | undefined;
+
+  const dispatch = (event: ReturnType<typeof normalizeResponsesEvent>) => {
+    switch (event.kind) {
+      case "reasoning-delta":
+        onStream({ type: "reasoning-delta", text: event.text });
+        break;
+      case "content-delta":
+        text += event.text;
+        onStream({ type: "content-delta", text: event.text });
+        break;
+      case "completed":
+      case "incomplete": {
+        if (event.kind === "incomplete") {
+          status = "incomplete";
+          incompleteReason = event.reason;
+        }
+        const responseObj = event.response as Record<string, unknown> | undefined;
+        usage = responseObj?.usage as Record<string, unknown> | undefined;
+        if (!text && responseObj) {
+          text = extractOpenAiResponseText(responseObj).text;
+        }
+        onStream(
+          event.kind === "completed"
+            ? { type: "completed", usage: event.usage }
+            : { type: "incomplete", reason: event.reason, usage: event.usage }
+        );
+        break;
+      }
+      case "failed":
+        failedMessage = event.message;
+        onStream({ type: "failed", message: event.message });
+        break;
+    }
+  };
+
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    for (const raw of parser.feed(decoder.decode(value, { stream: true }))) {
+      dispatch(normalizeResponsesEvent(raw));
+    }
+  }
+  for (const raw of parser.flush()) {
+    dispatch(normalizeResponsesEvent(raw));
+  }
+
+  if (failedMessage) throw new Error(failedMessage);
+  return { streamed: true, text, usage, status, incompleteReason };
 }
 
 function getEndpointCandidates(base: string): Array<{ url: string; type: "responses" | "chat" }> {
@@ -179,6 +265,9 @@ export const openaiProvider: InferenceProvider = {
       let lastError: Error | null = null;
 
       for (const { url: endpoint, type } of endpointCandidates) {
+        // Streaming is only wired for the Responses API (SSE event stream);
+        // the chat-completions fallback stays a plain JSON fetch.
+        const streamCallback = type === "responses" ? config.onStream : undefined;
         // Responses API: reasoning models burn hidden thinking tokens before any
         // visible output. When thinking is disabled for the scope, ask for low
         // reasoning effort. Strict servers that reject the unknown `reasoning`
@@ -207,6 +296,10 @@ export const openaiProvider: InferenceProvider = {
               requestBody.input = messages;
               requestBody.store = false;
               requestBody.max_output_tokens = maxTokens;
+              if (streamCallback) {
+                requestBody.stream = true;
+                streamCallback({ type: "attempt-start" });
+              }
               if (
                 allowReasoningField &&
                 config.disableThinking === true &&
@@ -276,6 +369,9 @@ export const openaiProvider: InferenceProvider = {
             }
 
             rememberPreference(openAiBase, type);
+            if (streamCallback) {
+              return await consumeResponsesStream(res, streamCallback);
+            }
             return res.json();
           } catch (error) {
             if ((error as Error).name === "AbortError") {
@@ -299,18 +395,30 @@ export const openaiProvider: InferenceProvider = {
       throw lastError || new Error("No OpenAI endpoint responded");
     }, createApiRetryStrategy());
 
-    const extraction = extractOpenAiResponseText(response);
+    const streamed = (response as StreamedResponsesResult | undefined)?.streamed === true;
+    const extraction = streamed
+      ? {
+          text: (response as StreamedResponsesResult).text,
+          status: (response as StreamedResponsesResult).status,
+          incompleteReason: (response as StreamedResponsesResult).incompleteReason,
+          reasoningOnly: false,
+          isResponsesApi: true,
+          isChatCompletions: false,
+        }
+      : extractOpenAiResponseText(response);
     const isResponsesApi = extraction.isResponsesApi;
     const isChatCompletions = extraction.isChatCompletions;
 
     logger.logReasoning("OPENAI_RAW_RESPONSE", {
       model,
       format: isResponsesApi ? "responses" : isChatCompletions ? "chat_completions" : "unknown",
-      hasOutput: isResponsesApi,
-      outputLength: isResponsesApi ? response.output.length : 0,
-      outputTypes: isResponsesApi
-        ? response.output.map((item: { type: string }) => item.type)
-        : undefined,
+      hasOutput: isResponsesApi && !streamed,
+      outputLength: isResponsesApi && !streamed ? response.output.length : 0,
+      outputTypes:
+        isResponsesApi && !streamed
+          ? response.output.map((item: { type: string }) => item.type)
+          : undefined,
+      streamed,
       hasChoices: isChatCompletions,
       choicesLength: isChatCompletions ? response.choices.length : 0,
       status: extraction.status,
@@ -345,10 +453,7 @@ export const openaiProvider: InferenceProvider = {
         // for note actions that meant overwriting the note with the raw
         // transcript. Surface a descriptive error instead.
         if (extraction.incompleteReason === "max_output_tokens" || extraction.reasoningOnly) {
-          throw new Error(
-            "The model spent its entire output budget on reasoning and returned no content. " +
-              "Raise the output token budget or lower the reasoning effort, then run the action again."
-          );
+          throw outputBudgetExceededError();
         }
         throw new Error(
           "The model returned an empty or unreadable response. Check the model and endpoint configuration, then try again."
@@ -356,6 +461,20 @@ export const openaiProvider: InferenceProvider = {
       }
 
       return text;
+    }
+
+    // A truncated rewrite is worse than no rewrite at all — the caller would
+    // otherwise write a partial result over the note/transcript. Fail loudly
+    // with the budget flag; note actions and transcript polish catch it and
+    // retry once with a doubled cap.
+    if (
+      config.failOnEmptyResponse &&
+      extraction.status === "incomplete" &&
+      extraction.incompleteReason === "max_output_tokens"
+    ) {
+      throw outputBudgetExceededError(
+        "The model hit its output token budget mid-answer and the response was truncated."
+      );
     }
 
     return responseText;

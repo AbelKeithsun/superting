@@ -1,4 +1,5 @@
 import reasoningService from "../services/ReasoningService";
+import type { ReasoningConfig, ReasoningStreamEvent } from "../services/BaseReasoningService";
 import { getSettings } from "./settingsStore";
 import { resolveNoteFormattingRequest } from "./noteFormattingRequest";
 import {
@@ -19,8 +20,10 @@ import {
 import {
   computeNoteActionMaxTokens,
   noteActionMaxTokensCeiling,
+  NOTE_ACTION_MIN_MAX_TOKENS,
   NOTE_ACTION_REQUEST_TIMEOUT_MS,
 } from "./noteActionBudget.js";
+import { isOutputBudgetExceeded } from "../utils/retry";
 import { logNoteAction } from "./noteActionLogger";
 import { baseSegmentIdForDisplayChunk } from "../utils/speakerAssignment";
 
@@ -55,12 +58,28 @@ export interface RunTranscriptPolishInput {
   noteId?: number;
   /** Progress for multi-chunk runs: (completed chunks, total chunks). */
   onProgress?: (done: number, total: number) => void;
+  /** Live stream events per chunk (only providers with SSE streaming emit). */
+  onChunkStream?: (chunkIndex: number, event: ReasoningStreamEvent) => void;
 }
+
+export interface TranscriptPolishFailedChunk {
+  chunkIndex: number;
+  segmentIds: string[];
+  message: string;
+}
+
+type ChunkOutcome =
+  | ({ ok: true } & ReturnType<typeof buildTranscriptPolishUpdates> & {
+        mode: "numbered" | "ordered-lines";
+      })
+  | ({ ok: false } & TranscriptPolishFailedChunk & { error: unknown });
 
 export interface RunTranscriptPolishResult {
   updates: TranscriptPolishUpdate[];
   /** Selected segments the model did not return; they keep their text. */
   missingIds: string[];
+  /** Chunks whose request failed outright — retryable from the UI. */
+  failedChunks: TranscriptPolishFailedChunk[];
   mode: "numbered" | "ordered-lines";
   selectionChars: number;
 }
@@ -108,6 +127,7 @@ export async function runTranscriptPolish({
   isCloudMode = false,
   noteId,
   onProgress,
+  onChunkStream,
 }: RunTranscriptPolishInput): Promise<RunTranscriptPolishResult> {
   const operationId = `note-${noteId ?? -1}-transcript-polish-${Date.now()}`;
   // Defensive: the transcript view splits long segments into display-only
@@ -159,30 +179,31 @@ export async function runTranscriptPolish({
     }
   }
 
-  const resolveChunk = (chunk: PolishLine[], chunkChars: number, systemPrompt: string) =>
+  // Budget by TOTAL input characters (system prompt + context + note +
+  // targets), not just the selection: a reasoning model burns hidden thinking
+  // tokens on everything it reads, so budgeting by the selection alone
+  // under-funds small selections with large context and produced the
+  // "spent its entire output budget on reasoning" failure.
+  const resolveChunk = (systemPrompt: string, budgetTokens: number) =>
     resolveNoteFormattingRequest({
       modelId,
       systemPrompt,
       isCloudMode,
-      // Only the chunk's segments are re-emitted, so the budget follows the
-      // chunk size rather than the whole selection.
-      maxTokensForProvider: (provider) =>
-        computeNoteActionMaxTokens(chunkChars, noteActionMaxTokensCeiling(provider)),
+      maxTokensForProvider: () => budgetTokens,
       timeoutMs: NOTE_ACTION_REQUEST_TIMEOUT_MS,
       temperature: 0.2,
       disableThinking: true,
     });
 
   // Fail fast on "no model configured" before firing any request.
-  const firstChunkChars = chunks[0].reduce((total, line) => total + line.text.length, 0);
   const probe = resolveChunk(
-    chunks[0],
-    firstChunkChars,
-    buildTranscriptPolishSystemPrompt(customDictionary)
+    buildTranscriptPolishSystemPrompt(customDictionary),
+    NOTE_ACTION_MIN_MAX_TOKENS
   );
   if (!probe.hasModel) {
     throw new Error("No AI model selected");
   }
+  const budgetCeiling = noteActionMaxTokensCeiling(probe.resolvedFormatting.provider);
 
   logNoteAction("TRANSCRIPT_POLISH_REQUEST", {
     operationId,
@@ -201,62 +222,128 @@ export async function runTranscriptPolish({
   const results = await mapPool(
     chunks,
     TRANSCRIPT_POLISH_PARALLELISM,
-    async (chunk, chunkIndex) => {
-      const chunkChars = chunk.reduce((total, line) => total + line.text.length, 0);
-      const offset = chunkStartOffsets[chunkIndex];
-      const { before, after } = slicePolishContext(
-        lines,
-        startIndex + offset,
-        startIndex + offset + chunk.length - 1,
-        polishContextCharCap(chunkChars)
-      );
-      const { systemPrompt, userMessage } = buildTranscriptPolishMessages({
-        targets: chunk,
-        before,
-        after,
-        noteContent,
-        customDictionary,
-        maxNoteChars: polishNoteCharCap(chunkChars),
-      });
-      const { selectedModel, reasoningConfig } = resolveChunk(chunk, chunkChars, systemPrompt);
+    async (chunk, chunkIndex): Promise<ChunkOutcome> => {
+      try {
+        const chunkChars = chunk.reduce((total, line) => total + line.text.length, 0);
+        const offset = chunkStartOffsets[chunkIndex];
+        const { before, after } = slicePolishContext(
+          lines,
+          startIndex + offset,
+          startIndex + offset + chunk.length - 1,
+          polishContextCharCap(chunkChars)
+        );
+        const { systemPrompt, userMessage } = buildTranscriptPolishMessages({
+          targets: chunk,
+          before,
+          after,
+          noteContent,
+          customDictionary,
+          maxNoteChars: polishNoteCharCap(chunkChars),
+        });
+        const inputChars = systemPrompt.length + userMessage.length;
+        const budget = computeNoteActionMaxTokens(inputChars, budgetCeiling);
+        const streamFor = (config: ReasoningConfig): ReasoningConfig => ({
+          ...config,
+          onStream: (event) => onChunkStream?.(chunkIndex, event),
+        });
 
-      const raw = await reasoningService.processText(
-        userMessage,
-        selectedModel,
-        null,
-        reasoningConfig
-      );
+        let raw: string;
+        try {
+          const first = resolveChunk(systemPrompt, budget);
+          raw = await reasoningService.processText(
+            userMessage,
+            first.selectedModel,
+            null,
+            streamFor(first.reasoningConfig)
+          );
+        } catch (error) {
+          // Budget exhaustion gets one deliberate retry with a doubled cap.
+          const doubled = Math.min(budgetCeiling, budget * 2);
+          if (!isOutputBudgetExceeded(error) || doubled <= budget) throw error;
+          logNoteAction(
+            "TRANSCRIPT_POLISH_BUDGET_RETRY",
+            { operationId, noteId: noteId ?? -1, chunkIndex, budget, retryBudget: doubled },
+            "warn"
+          );
+          const second = resolveChunk(systemPrompt, doubled);
+          raw = await reasoningService.processText(
+            userMessage,
+            second.selectedModel,
+            null,
+            streamFor(second.reasoningConfig)
+          );
+        }
 
-      const parsed = parseTranscriptPolishResponse(raw, chunk);
-      if (parsed.entries.length === 0) {
+        const parsed = parseTranscriptPolishResponse(raw, chunk);
+        if (parsed.entries.length === 0) {
+          logNoteAction(
+            "TRANSCRIPT_POLISH_UNPARSED",
+            {
+              operationId,
+              noteId: noteId ?? -1,
+              chunkIndex,
+              segmentCount: chunk.length,
+              selectedModel: probe.selectedModel,
+              responseLength: String(raw ?? "").length,
+              responseHead: String(raw ?? "").slice(0, 300),
+            },
+            "error"
+          );
+          throw new TranscriptPolishError(
+            "unparsed-response",
+            "The model did not return one line per selected segment"
+          );
+        }
+
+        done += 1;
+        onProgress?.(done, chunks.length);
+        return {
+          ok: true as const,
+          ...buildTranscriptPolishUpdates(chunk, parsed),
+          mode: parsed.mode,
+        };
+      } catch (error) {
+        // Chunk-level fault isolation: one failed chunk must not sink the
+        // whole run — the rest still produce reviewable diffs.
+        done += 1;
+        onProgress?.(done, chunks.length);
+        const message = error instanceof Error ? error.message : String(error);
         logNoteAction(
-          "TRANSCRIPT_POLISH_UNPARSED",
-          {
-            operationId,
-            noteId: noteId ?? -1,
-            chunkIndex,
-            segmentCount: chunk.length,
-            selectedModel,
-            responseLength: String(raw ?? "").length,
-            responseHead: String(raw ?? "").slice(0, 300),
-          },
+          "TRANSCRIPT_POLISH_CHUNK_FAILED",
+          { operationId, noteId: noteId ?? -1, chunkIndex, message },
           "error"
         );
-        throw new TranscriptPolishError(
-          "unparsed-response",
-          "The model did not return one line per selected segment"
-        );
+        return {
+          ok: false as const,
+          chunkIndex,
+          segmentIds: chunk.map((line) => line.id).filter((id): id is string => Boolean(id)),
+          message,
+          error,
+        };
       }
-
-      done += 1;
-      onProgress?.(done, chunks.length);
-      return { ...buildTranscriptPolishUpdates(chunk, parsed), mode: parsed.mode };
     }
   );
 
-  const updates = results.flatMap((result) => result.updates);
-  const missingIds = results.flatMap((result) => result.missingIds);
-  const mode = results.every((result) => result.mode === "ordered-lines")
+  const successes = results.filter(
+    (result): result is Extract<ChunkOutcome, { ok: true }> => result.ok
+  );
+  const failures = results.filter(
+    (result): result is Extract<ChunkOutcome, { ok: false }> => !result.ok
+  );
+  if (successes.length === 0 && failures.length > 0) {
+    // All chunks failed (always the case for a single-chunk run): preserve the
+    // typed error so the UI can localise it.
+    throw failures[0].error;
+  }
+
+  const updates = successes.flatMap((result) => result.updates);
+  const missingIds = successes.flatMap((result) => result.missingIds);
+  const failedChunks = failures.map(({ chunkIndex, segmentIds, message }) => ({
+    chunkIndex,
+    segmentIds,
+    message,
+  }));
+  const mode = successes.every((result) => result.mode === "ordered-lines")
     ? "ordered-lines"
     : "numbered";
 
@@ -267,8 +354,9 @@ export async function runTranscriptPolish({
     chunkCount: chunks.length,
     changedCount: updates.length,
     missingCount: missingIds.length,
+    failedChunkCount: failedChunks.length,
     mode,
   });
 
-  return { updates, missingIds, mode, selectionChars };
+  return { updates, missingIds, failedChunks, mode, selectionChars };
 }

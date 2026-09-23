@@ -2059,6 +2059,27 @@
       "mixSystemPriority": "Systempriorität",
       "newRecordingsOnly": "Qualitätsänderungen wirken sich nur auf neue Aufnahmen aus; bestehende Aufnahmen werden nicht neu kodiert."
     },
+    "aiDrawer": {
+      "collapse": "Panel einklappen",
+      "close": "Schließen",
+      "reviewBadge": "Zur Prüfung",
+      "chunkLabel": "Block {{index}}/{{total}}",
+      "phaseQueued": "In Warteschlange",
+      "statsInput": "Ein",
+      "statsReasoning": "Denken",
+      "statsOutput": "Aus",
+      "statsSpeed": "{{speed}} tok/s",
+      "statsElapsed": "{{seconds}}s",
+      "thinking": "Denkprozess",
+      "contentOutput": "Ausgabe",
+      "applying": "Änderungen werden angewendet…",
+      "retryChunk": "Block erneut versuchen",
+      "polishDone": "{{count}} Segmente übernommen",
+      "polishDoneAuto": "{{count}} Segmente im Hintergrund automatisch übernommen",
+      "actionRunning": "„{{name}}“ läuft…",
+      "actionDone": "Fertig — in die Notiz geschrieben",
+      "navAwayConfirm": "Ein KI-Vorgang läuft noch.\n\nOK: Notiz verlassen — er läuft im Hintergrund zu Ende und wendet alles automatisch an.\nAbbrechen: Auf dieser Notiz bleiben und warten."
+    },
     "transcript": {
     "polish": {
       "title": "Transkript mit KI überarbeiten",

@@ -2058,6 +2058,27 @@
       "mixSystemPriority": "Priorità sistema",
       "newRecordingsOnly": "Le modifiche di qualità valgono solo per le nuove registrazioni; quelle esistenti non vengono ricodificate."
     },
+    "aiDrawer": {
+      "collapse": "Comprimi pannello",
+      "close": "Chiudi",
+      "reviewBadge": "Da rivedere",
+      "chunkLabel": "Blocco {{index}}/{{total}}",
+      "phaseQueued": "In coda",
+      "statsInput": "Input",
+      "statsReasoning": "Pensiero",
+      "statsOutput": "Output",
+      "statsSpeed": "{{speed}} tok/s",
+      "statsElapsed": "{{seconds}}s",
+      "thinking": "Processo di ragionamento",
+      "contentOutput": "Output",
+      "applying": "Applicazione delle modifiche…",
+      "retryChunk": "Riprova blocco",
+      "polishDone": "Applicate modifiche a {{count}} segmenti",
+      "polishDoneAuto": "Modifiche applicate automaticamente a {{count}} segmenti in background",
+      "actionRunning": "«{{name}}» in esecuzione…",
+      "actionDone": "Fatto — scritto nella nota",
+      "navAwayConfirm": "Un'operazione AI è ancora in corso.\n\nOK: esci — finirà in background e applicherà tutto automaticamente.\nAnnulla: resta su questa nota fino al completamento."
+    },
     "transcript": {
     "polish": {
       "title": "Rifinisci la trascrizione con IA",

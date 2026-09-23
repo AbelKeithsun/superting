@@ -1,4 +1,5 @@
 import reasoningService from "../services/ReasoningService";
+import type { ReasoningConfig, ReasoningStreamEvent } from "../services/BaseReasoningService";
 import type { ActionItem, NoteItem } from "../types/electron";
 import { applyMeetingTimeFallback, buildMeetingTimeRange } from "./meetingTimeContext";
 import { getSettings } from "./settingsStore";
@@ -9,6 +10,7 @@ import {
   noteActionMaxTokensCeiling,
   NOTE_ACTION_REQUEST_TIMEOUT_MS,
 } from "./noteActionBudget.js";
+import { isOutputBudgetExceeded } from "../utils/retry";
 import { generateNoteTitle } from "../utils/generateTitle";
 import { buildNoteActionInput } from "../components/notes/noteActionInput";
 import {
@@ -35,6 +37,8 @@ interface RunNoteActionOnceInput {
   modelId: string;
   isCloudMode: boolean;
   operationId?: string;
+  /** Live reasoning/content stream for the side drawer (SSE providers only). */
+  onStream?: (event: ReasoningStreamEvent) => void;
   speakerLabels: {
     you: string;
     them: string;
@@ -53,11 +57,11 @@ export async function runNoteActionOnce({
   modelId,
   isCloudMode,
   operationId,
+  onStream,
   speakerLabels,
 }: RunNoteActionOnceInput): Promise<RunNoteActionOnceResult> {
   const effectiveNoteId = noteId ?? -1;
-  const effectiveOperationId =
-    operationId ?? makeNoteActionOperationId(effectiveNoteId, action.id);
+  const effectiveOperationId = operationId ?? makeNoteActionOperationId(effectiveNoteId, action.id);
   const actionInput = buildNoteActionInput({
     noteContent: note.content,
     rawTranscript: note.transcript,
@@ -90,10 +94,12 @@ export async function runNoteActionOnce({
 
   // The output cap is shared with hidden reasoning on thinking models, and a
   // rewrite-style action (优化转录文本) re-emits the whole transcript, so the
-  // budget scales with the input size — with a per-provider ceiling, because a
-  // cap above the model's own limit is rejected outright. A bigger budget also
-  // makes the request run longer: the provider default (90s) aborted long
-  // rewrites mid-generation.
+  // budget scales with the TOTAL input size (system prompt included — the
+  // model thinks over everything it reads) — with a per-provider ceiling,
+  // because a cap above the model's own limit is rejected outright. A bigger
+  // budget also makes the request run longer: the provider default (90s)
+  // aborted long rewrites mid-generation.
+  const inputChars = systemPrompt.length + actionInput.content.length;
   const { selectedModel, reasoningConfig, resolvedFormatting, isHostedMode, hasModel } =
     resolveNoteFormattingRequest({
       settings,
@@ -101,10 +107,7 @@ export async function runNoteActionOnce({
       systemPrompt,
       isCloudMode,
       maxTokensForProvider: (provider) =>
-        computeNoteActionMaxTokens(
-          actionInput.content.length,
-          noteActionMaxTokensCeiling(provider)
-        ),
+        computeNoteActionMaxTokens(inputChars, noteActionMaxTokensCeiling(provider)),
       timeoutMs: NOTE_ACTION_REQUEST_TIMEOUT_MS,
     });
 
@@ -146,12 +149,50 @@ export async function runNoteActionOnce({
     actionPrompt: action.prompt,
   });
 
-  const generatedContent = await reasoningService.processText(
-    actionInput.content,
-    selectedModel,
-    null,
-    reasoningConfig
-  );
+  const withStream = (config: ReasoningConfig): ReasoningConfig => ({ ...config, onStream });
+
+  let generatedContent: string;
+  try {
+    generatedContent = await reasoningService.processText(
+      actionInput.content,
+      selectedModel,
+      null,
+      withStream(reasoningConfig)
+    );
+  } catch (error) {
+    // Output-budget exhaustion self-heals once with a doubled cap (bounded by
+    // the provider ceiling); anything else propagates.
+    const ceiling = noteActionMaxTokensCeiling(resolvedFormatting.provider);
+    const budget = reasoningConfig.maxTokens ?? computeNoteActionMaxTokens(inputChars, ceiling);
+    const doubled = Math.min(ceiling, budget * 2);
+    if (!isOutputBudgetExceeded(error) || doubled <= budget) throw error;
+    logNoteAction(
+      "NOTE_ACTION_BUDGET_RETRY",
+      {
+        operationId: effectiveOperationId,
+        noteId: effectiveNoteId,
+        actionId: action.id,
+        actionName: action.name,
+        budget,
+        retryBudget: doubled,
+      },
+      "warn"
+    );
+    const retried = resolveNoteFormattingRequest({
+      settings,
+      modelId,
+      systemPrompt,
+      isCloudMode,
+      maxTokensForProvider: () => doubled,
+      timeoutMs: NOTE_ACTION_REQUEST_TIMEOUT_MS,
+    });
+    generatedContent = await reasoningService.processText(
+      actionInput.content,
+      retried.selectedModel,
+      null,
+      withStream(retried.reasoningConfig)
+    );
+  }
   logNoteAction("NOTE_ACTION_MODEL_RESPONSE", {
     operationId: effectiveOperationId,
     noteId: effectiveNoteId,

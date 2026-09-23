@@ -2058,6 +2058,27 @@
       "mixSystemPriority": "Prioridad de sistema",
       "newRecordingsOnly": "Los cambios de calidad solo afectan a grabaciones nuevas; las existentes no se recodifican."
     },
+    "aiDrawer": {
+      "collapse": "Contraer panel",
+      "close": "Cerrar",
+      "reviewBadge": "Por revisar",
+      "chunkLabel": "Bloque {{index}}/{{total}}",
+      "phaseQueued": "En cola",
+      "statsInput": "Entrada",
+      "statsReasoning": "Pens.",
+      "statsOutput": "Salida",
+      "statsSpeed": "{{speed}} tok/s",
+      "statsElapsed": "{{seconds}}s",
+      "thinking": "Proceso de razonamiento",
+      "contentOutput": "Salida",
+      "applying": "Aplicando cambios…",
+      "retryChunk": "Reintentar bloque",
+      "polishDone": "Se aplicaron cambios a {{count}} segmentos",
+      "polishDoneAuto": "Cambios aplicados automáticamente a {{count}} segmentos en segundo plano",
+      "actionRunning": "Ejecutando «{{name}}»…",
+      "actionDone": "Hecho — escrito en la nota",
+      "navAwayConfirm": "Una operación de IA sigue en curso.\n\nAceptar: salir ahora — terminará en segundo plano y aplicará todo automáticamente.\nCancelar: quedarse en esta nota hasta que termine."
+    },
     "transcript": {
     "polish": {
       "title": "Pulir transcripción con IA",

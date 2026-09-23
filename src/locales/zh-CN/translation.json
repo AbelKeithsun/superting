@@ -2062,6 +2062,27 @@
       "mixSystemPriority": "系统优先",
       "newRecordingsOnly": "音质设置仅对新录音生效，历史录音不会重新编码。"
     },
+    "aiDrawer": {
+      "collapse": "收起面板",
+      "close": "关闭",
+      "reviewBadge": "待审阅",
+      "chunkLabel": "块 {{index}}/{{total}}",
+      "phaseQueued": "排队中",
+      "statsInput": "输入",
+      "statsReasoning": "思考",
+      "statsOutput": "输出",
+      "statsSpeed": "{{speed}} tok/s",
+      "statsElapsed": "{{seconds}}s",
+      "thinking": "思考过程",
+      "contentOutput": "输出内容",
+      "applying": "正在应用更改…",
+      "retryChunk": "重试此块",
+      "polishDone": "已应用 {{count}} 段更改",
+      "polishDoneAuto": "已在后台自动应用 {{count}} 段更改",
+      "actionRunning": "正在运行「{{name}}」…",
+      "actionDone": "已完成并写入笔记",
+      "navAwayConfirm": "AI 操作还在进行中。\n\n「确定」：切走笔记，后台跑完并自动应用全部结果。\n「取消」：留在此笔记，等待完成。"
+    },
     "transcript": {
     "polish": {
       "title": "AI 润色转录",

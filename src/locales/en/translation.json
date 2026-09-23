@@ -2100,6 +2100,27 @@
       "mixSystemPriority": "System priority",
       "newRecordingsOnly": "Quality changes affect new recordings only; existing recordings are not re-encoded."
     },
+    "aiDrawer": {
+      "collapse": "Collapse panel",
+      "close": "Close",
+      "reviewBadge": "Review",
+      "chunkLabel": "Chunk {{index}}/{{total}}",
+      "phaseQueued": "Queued",
+      "statsInput": "In",
+      "statsReasoning": "Think",
+      "statsOutput": "Out",
+      "statsSpeed": "{{speed}} tok/s",
+      "statsElapsed": "{{seconds}}s",
+      "thinking": "Thinking",
+      "contentOutput": "Output",
+      "applying": "Applying changes…",
+      "retryChunk": "Retry chunk",
+      "polishDone": "Applied changes to {{count}} segments",
+      "polishDoneAuto": "Auto-applied changes to {{count}} segments in the background",
+      "actionRunning": "Running “{{name}}”…",
+      "actionDone": "Done — written to the note",
+      "navAwayConfirm": "An AI operation is still running.\n\nOK: leave now — it finishes in the background and applies everything automatically.\nCancel: stay on this note until it completes."
+    },
     "transcript": {
     "polish": {
       "title": "AI polish transcript",

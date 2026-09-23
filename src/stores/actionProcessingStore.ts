@@ -3,6 +3,12 @@ import type { ActionItem } from "../types/electron";
 import { type ActionOutputTarget, validateActionUpdateResult } from "./actionProcessingCore";
 import { loggableText, logNoteAction, makeNoteActionOperationId } from "./noteActionLogger";
 import { runNoteActionOnce } from "./runNoteActionOnce";
+import {
+  clearNoteAiOperation,
+  finishActionOperation,
+  startActionOperation,
+  updateActionStream,
+} from "./noteAiOperationStore";
 
 export type ActionProcessingStatus = "idle" | "processing" | "success";
 
@@ -145,6 +151,8 @@ export function runBackgroundAction(
     actionName: action.name,
     outputTarget: action.output_target === "content" ? "content" : "enhanced_content",
   });
+  // Side drawer: show the run (thinking stream + token stats) as it happens.
+  startActionOperation(noteId, action.name);
 
   (async () => {
     try {
@@ -163,10 +171,12 @@ export function runBackgroundAction(
         modelId,
         isCloudMode: options.isCloudMode,
         operationId,
+        onStream: (event) => updateActionStream(noteId, event),
         speakerLabels: options.speakerLabels ?? { you: "You", them: "Them" },
       });
 
       if (cancelledFlags.get(noteId)) {
+        clearNoteAiOperation(noteId);
         logNoteAction(
           "NOTE_ACTION_CANCELLED_AFTER_MODEL_RESPONSE",
           {
@@ -201,6 +211,7 @@ export function runBackgroundAction(
       validateActionUpdateResult(updateResult, labels.actionFailed);
 
       setNoteState(noteId, { status: "success", actionName: action.name });
+      finishActionOperation(noteId, true);
       logNoteAction("NOTE_ACTION_SUCCESS", {
         operationId,
         noteId,
@@ -216,6 +227,7 @@ export function runBackgroundAction(
       successTimers.set(noteId, timer);
     } catch (err) {
       if (cancelledFlags.get(noteId)) {
+        clearNoteAiOperation(noteId);
         logNoteAction(
           "NOTE_ACTION_CANCELLED_AFTER_ERROR",
           {
@@ -232,6 +244,7 @@ export function runBackgroundAction(
       processingFlags.set(noteId, false);
       clearNoteState(noteId);
       const message = err instanceof Error ? err.message : labels.actionFailed;
+      finishActionOperation(noteId, false, message);
       logNoteAction(
         "NOTE_ACTION_ERROR",
         {
