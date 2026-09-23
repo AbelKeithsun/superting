@@ -18,6 +18,13 @@ export interface ReasoningConfig {
    * raw content. Dictation cleanup keeps the passthrough default.
    */
   failOnEmptyResponse?: boolean;
+  /**
+   * Wall-clock cap for a single provider request, in milliseconds. Defaults to
+   * each provider's own timeout (90s). Note actions raise it: a full transcript
+   * rewrite on a reasoning model has to emit the visible answer *and* the
+   * hidden thinking tokens, which measured ~170s for a 59k-character input.
+   */
+  timeoutMs?: number;
 }
 
 export abstract class BaseReasoningService {

@@ -2,7 +2,7 @@ import type { InferenceProvider } from "./types";
 import { API_ENDPOINTS, TOKEN_LIMITS, buildApiUrl } from "../../../config/constants";
 import { getOpenAiApiConfig } from "../../../models/ModelRegistry";
 import { getSettings } from "../../../stores/settingsStore";
-import { withRetry, createApiRetryStrategy } from "../../../utils/retry";
+import { withRetry, createApiRetryStrategy, requestTimeoutError } from "../../../utils/retry";
 import logger from "../../../utils/logger";
 import { getConfiguredOpenAIBase } from "../openaiBase";
 import { applyThinkingSuppression } from "../thinkingSuppression";
@@ -151,6 +151,9 @@ export const openaiProvider: InferenceProvider = {
     ];
 
     const openAiBase = config.baseUrl?.trim() || getConfiguredOpenAIBase();
+    // Note actions can legitimately generate tens of thousands of tokens (a
+    // full transcript rewrite measured ~170s), so they raise the cap.
+    const requestTimeoutMs = config.timeoutMs || REQUEST_TIMEOUT_MS;
     await detectServerType(openAiBase);
     const endpointCandidates = getEndpointCandidates(openAiBase);
     const isCustomEndpoint = openAiBase !== API_ENDPOINTS.OPENAI_BASE;
@@ -183,7 +186,7 @@ export const openaiProvider: InferenceProvider = {
         const reasoningCacheKey = `${openAiBase}|${model}`;
         for (const allowReasoningField of [true, false]) {
           const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+          const timeoutId = setTimeout(() => controller.abort(), requestTimeoutMs);
           try {
             const maxTokens =
               config.maxTokens ||
@@ -276,7 +279,7 @@ export const openaiProvider: InferenceProvider = {
             return res.json();
           } catch (error) {
             if ((error as Error).name === "AbortError") {
-              throw new Error("Request timed out after 90s");
+              throw requestTimeoutError(requestTimeoutMs);
             }
             lastError = error as Error;
             if (type === "responses") {

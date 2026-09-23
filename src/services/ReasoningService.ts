@@ -6,7 +6,7 @@ import {
 } from "../models/ModelRegistry";
 import { BaseReasoningService, ReasoningConfig } from "./BaseReasoningService";
 import { SecureCache } from "../utils/SecureCache";
-import { withRetry, createApiRetryStrategy } from "../utils/retry";
+import { withRetry, createApiRetryStrategy, requestTimeoutError } from "../utils/retry";
 import { API_ENDPOINTS, TOKEN_LIMITS, buildApiUrl, ensureV1Suffix } from "../config/constants";
 import logger from "../utils/logger";
 import { getSettings } from "../stores/settingsStore";
@@ -185,12 +185,13 @@ class ReasoningService extends BaseReasoningService {
       requestBody: JSON.stringify(requestBody).substring(0, 200),
     });
 
+    // Note actions generate far more tokens than dictation cleanup, so they
+    // raise the wall-clock cap through config.timeoutMs (see openai.ts).
+    const requestTimeoutMs = config.timeoutMs || ReasoningService.REQUEST_TIMEOUT_MS;
+
     const response = await withRetry(async () => {
       const controller = new AbortController();
-      const timeoutId = setTimeout(
-        () => controller.abort(),
-        ReasoningService.REQUEST_TIMEOUT_MS
-      );
+      const timeoutId = setTimeout(() => controller.abort(), requestTimeoutMs);
       try {
         const headers: Record<string, string> = {
           "Content-Type": "application/json",
@@ -245,7 +246,7 @@ class ReasoningService extends BaseReasoningService {
         return jsonResponse;
       } catch (error) {
         if ((error as Error).name === "AbortError") {
-          throw new Error("Request timed out after 90s");
+          throw requestTimeoutError(requestTimeoutMs);
         }
         throw error;
       } finally {

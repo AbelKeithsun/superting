@@ -8,7 +8,11 @@ import {
   selectResolvedNoteFormatting,
 } from "./settingsStore";
 import { buildNoteActionSystemPrompt } from "./noteActionPrompt";
-import { computeNoteActionMaxTokens } from "./noteActionBudget.js";
+import {
+  computeNoteActionMaxTokens,
+  noteActionMaxTokensCeiling,
+  NOTE_ACTION_REQUEST_TIMEOUT_MS,
+} from "./noteActionBudget.js";
 import { generateNoteTitle } from "../utils/generateTitle";
 import { buildNoteActionInput } from "../components/notes/noteActionInput";
 import {
@@ -95,10 +99,17 @@ export async function runNoteActionOnce({
     systemPrompt,
     temperature: 0.3,
     disableThinking: settings.noteFormattingDisableThinking,
-    // Reasoning models burn hidden thinking tokens before any visible output,
-    // so the provider default (4096) can end with zero content — scale the
-    // budget with the input size, and never fall back to echoing the input.
-    maxTokens: computeNoteActionMaxTokens(actionInput.content.length),
+    // The output cap is shared with hidden reasoning on thinking models, and a
+    // rewrite-style action (优化转录文本) re-emits the whole transcript, so the
+    // budget scales with the input size — with a per-provider ceiling, because
+    // a cap above the model's own limit is rejected outright.
+    maxTokens: computeNoteActionMaxTokens(
+      actionInput.content.length,
+      noteActionMaxTokensCeiling(resolvedFormatting.provider)
+    ),
+    // A bigger budget makes the request run longer: the provider default (90s)
+    // aborted long rewrites mid-generation.
+    timeoutMs: NOTE_ACTION_REQUEST_TIMEOUT_MS,
     failOnEmptyResponse: true,
   };
 

@@ -39,10 +39,31 @@ export async function withRetry<T>(fn: () => Promise<T>, options: RetryOptions =
   throw lastError;
 }
 
+/**
+ * Build the error thrown when a request hits its wall-clock cap.
+ *
+ * Unlike a network failure this is not transient — the request was accepted and
+ * was still being generated — so it is marked `noRetry` and
+ * `createApiRetryStrategy` refuses it. Retrying would only multiply the wait
+ * (note actions allow up to 10 minutes per attempt).
+ */
+export function requestTimeoutError(timeoutMs: number): Error {
+  const error = new Error(`Request timed out after ${Math.round(timeoutMs / 1000)}s`) as Error & {
+    noRetry?: boolean;
+  };
+  error.noRetry = true;
+  return error;
+}
+
 // Specific retry strategy for API calls
 export function createApiRetryStrategy() {
   return {
     shouldRetry: (error: any) => {
+      // A wall-clock timeout means the request was in flight and simply took
+      // longer than the cap — not that the network failed. Retrying multiplies
+      // the wait (note actions allow up to 10 minutes per attempt).
+      if (error?.noRetry === true) return false;
+
       // Retry on network errors or 5xx status codes
       if (!error.response) return true; // Network error
 
