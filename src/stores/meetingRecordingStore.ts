@@ -29,7 +29,7 @@ import {
 import { stripRealtimeSpeakerMetadata } from "../utils/liveTranscriptStream";
 import {
   getTranscriptTimelineOffsetSeconds,
-  toTranscriptTimelineSeconds,
+  resolveLiveSegmentTimelineSeconds,
 } from "../utils/meetingTranscriptTimeline";
 
 export interface TranscriptSegment {
@@ -993,6 +993,12 @@ export async function startRecording(args: StartRecordingArgs): Promise<void> {
         source: "mic" | "system";
         type: "partial" | "final" | "retract";
         timestamp?: number;
+        /**
+         * Authoritative note-timeline position from the main process's
+         * monotonic session clock (resume offset included). Preferred over the
+         * epoch-ms `timestamp` conversion when present.
+         */
+        timelineSeconds?: number | null;
         provider?: string | null;
       }) => {
         if (data.type === "retract") {
@@ -1000,11 +1006,10 @@ export async function startRecording(args: StartRecordingArgs): Promise<void> {
           const next = removeRetractedSegment(
             current,
             data,
-            toTranscriptTimelineSeconds(
-              data.timestamp,
+            resolveLiveSegmentTimelineSeconds(
+              data,
               useMeetingRecordingStore.getState().recordingStartedAt,
-              timelineOffsetSecondsValue,
-              data.provider
+              timelineOffsetSecondsValue
             )
           );
           if (next === current) return;
@@ -1030,11 +1035,10 @@ export async function startRecording(args: StartRecordingArgs): Promise<void> {
             id: `seg-${++segmentCounter}`,
             text: data.text,
             source: data.source,
-            timestamp: toTranscriptTimelineSeconds(
-              data.timestamp,
+            timestamp: resolveLiveSegmentTimelineSeconds(
+              data,
               useMeetingRecordingStore.getState().recordingStartedAt,
-              timelineOffsetSecondsValue,
-              data.provider
+              timelineOffsetSecondsValue
             ),
           })
         );
@@ -1377,7 +1381,8 @@ export function updateSegmentText(segmentId: string, text: string): TranscriptSe
   return next;
 }
 
-export function lockSpeaker(speakerId: string, displayName: string): void {  if (!speakerId || !displayName) return;
+export function lockSpeaker(speakerId: string, displayName: string): void {
+  if (!speakerId || !displayName) return;
   speakerLocks.set(speakerId, displayName);
   const next = useMeetingRecordingStore.getState().segments.map((s) =>
     s.speaker === speakerId

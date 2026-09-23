@@ -2079,6 +2079,7 @@
       "retryChunk": "重试此块",
       "polishDone": "已应用 {{count}} 段更改",
       "polishDoneAuto": "已在后台自动应用 {{count}} 段更改",
+      "polishDiscard": "放弃更改",
       "actionRunning": "正在运行「{{name}}」…",
       "actionDone": "已完成并写入笔记",
       "navAwayConfirm": "AI 操作还在进行中。\n\n「确定」：切走笔记，后台跑完并自动应用全部结果。\n「取消」：留在此笔记，等待完成。"

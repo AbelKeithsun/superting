@@ -2075,6 +2075,7 @@
       "retryChunk": "Repetir bloco",
       "polishDone": "Alterações aplicadas a {{count}} segmentos",
       "polishDoneAuto": "Alterações aplicadas automaticamente a {{count}} segmentos em segundo plano",
+      "polishDiscard": "Descartar alterações",
       "actionRunning": "A executar «{{name}}»…",
       "actionDone": "Concluído — escrito na nota",
       "navAwayConfirm": "Uma operação de IA ainda está em curso.\n\nOK: sair agora — termina em segundo plano e aplica tudo automaticamente.\nCancelar: ficar nesta nota até concluir."

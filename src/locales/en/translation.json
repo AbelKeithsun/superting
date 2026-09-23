@@ -2117,6 +2117,7 @@
       "retryChunk": "Retry chunk",
       "polishDone": "Applied changes to {{count}} segments",
       "polishDoneAuto": "Auto-applied changes to {{count}} segments in the background",
+      "polishDiscard": "Discard changes",
       "actionRunning": "Running “{{name}}”…",
       "actionDone": "Done — written to the note",
       "navAwayConfirm": "An AI operation is still running.\n\nOK: leave now — it finishes in the background and applies everything automatically.\nCancel: stay on this note until it completes."

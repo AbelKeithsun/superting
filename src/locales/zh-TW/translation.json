@@ -2075,6 +2075,7 @@
       "retryChunk": "重試此區塊",
       "polishDone": "已套用 {{count}} 段更改",
       "polishDoneAuto": "已在背景自動套用 {{count}} 段更改",
+      "polishDiscard": "放棄更改",
       "actionRunning": "正在執行「{{name}}」…",
       "actionDone": "已完成並寫入筆記",
       "navAwayConfirm": "AI 操作仍在進行中。\n\n「確定」：離開此筆記，在背景跑完並自動套用全部結果。\n「取消」：留在此筆記，等待完成。"

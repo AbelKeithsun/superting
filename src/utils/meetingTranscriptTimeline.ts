@@ -145,6 +145,36 @@ export function toTranscriptTimelineSeconds(
 }
 
 /**
+ * Resolve a live segment's position on the note timeline.
+ *
+ * The main process stamps every meeting segment with `timelineSeconds` —
+ * monotonic seconds since session start plus the resume offset, computed by the
+ * side that owns the clock. That value is already on the note timeline and is
+ * immune to renderer clock/origin state, which once shifted a whole meeting by
+ * hours. Only payloads from older/other pipelines (no `timelineSeconds`) fall
+ * back to the epoch-ms conversion.
+ */
+export function resolveLiveSegmentTimelineSeconds(
+  data: {
+    timelineSeconds?: number | null;
+    timestamp?: number | null;
+    provider?: string | null;
+  },
+  recordingStartedAt: number | null | undefined,
+  timelineOffsetSeconds: number
+): number | undefined {
+  if (typeof data.timelineSeconds === "number" && Number.isFinite(data.timelineSeconds)) {
+    return Math.max(0, data.timelineSeconds);
+  }
+  return toTranscriptTimelineSeconds(
+    data.timestamp,
+    recordingStartedAt,
+    timelineOffsetSeconds,
+    data.provider
+  );
+}
+
+/**
  * Repairs legacy transcripts whose timestamps were persisted in centiseconds.
  *
  * Older builds stored some providers' centisecond stamps verbatim. The renderer

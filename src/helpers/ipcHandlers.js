@@ -5886,11 +5886,12 @@ class IPCHandlers {
       meetingLocalTranscript += `${meetingLocalTranscript ? " " : ""}${text}`;
     };
 
-    const storeMeetingDiarizationSegment = (text, source, timestamp, micSuppression = null) => {
+    const storeMeetingDiarizationSegment = (text, source, timestamp, micSuppression = null, timelineSeconds = null) => {
       meetingDiarizationSegments.push({
         text,
         source,
         timestamp,
+        timelineSeconds: Number.isFinite(timelineSeconds) ? timelineSeconds : null,
         suppressionReason: source === "mic" ? micSuppression?.reason || null : null,
         hasBleedEvidence: source === "mic" ? !!micSuppression?.hasBleedEvidence : false,
         likelyRenderBleed: source === "mic" ? !!micSuppression?.likelyRenderBleed : false,
@@ -5920,10 +5921,24 @@ class IPCHandlers {
       });
     };
 
+    // Authoritative live-timeline stamp: monotonic seconds since this session
+    // started (captured in the start handler) plus the resume offset. The side
+    // that stamps the segment owns the clock — immune to renderer clock/origin
+    // bugs, which once shifted a whole meeting's timeline by hours.
+    const meetingTimelineSecondsNow = () =>
+      meetingSessionStartedMonoMs == null
+        ? undefined
+        : Math.max(
+            0,
+            (monotonicNowMs() - meetingSessionStartedMonoMs) / 1000 +
+              (Number.isFinite(meetingTimelineOffsetSeconds) ? meetingTimelineOffsetSeconds : 0)
+          );
+
     const sendMeetingFinalSegment = ({
       text,
       source,
       timestamp,
+      timelineSeconds = undefined,
       micSuppression = null,
       send = null,
       includeInLocalTranscript = false,
@@ -5935,13 +5950,15 @@ class IPCHandlers {
         type: "final",
         timestamp,
       });
+      // normalizeMeetingSegment does not know this field — attach after.
+      if (timelineSeconds != null) segment.timelineSeconds = timelineSeconds;
       const finalText = segment.displayText || segment.text || text;
 
       if (includeInLocalTranscript) {
         appendMeetingLocalTranscript(finalText);
       }
 
-      storeMeetingDiarizationSegment(finalText, source, timestamp, micSuppression);
+      storeMeetingDiarizationSegment(finalText, source, timestamp, micSuppression, timelineSeconds);
 
       if (segment.dictionaryCorrections?.length) {
         debugLogger.debug(
@@ -6071,10 +6088,11 @@ class IPCHandlers {
       return removed;
     };
 
-    const queuePendingMicFinal = ({ text, timestamp, micSuppression, holdbackMs, emit }) => {
+    const queuePendingMicFinal = ({ text, timestamp, timelineSeconds, micSuppression, holdbackMs, emit }) => {
       meetingPendingMicFinals.push({
         text,
         timestamp,
+        timelineSeconds,
         micSuppression,
         holdbackMs,
         releaseAt: Date.now() + holdbackMs,
@@ -6327,15 +6345,16 @@ class IPCHandlers {
 
           const retracted = removeRacingMicEntriesFor(latestSegment, timestamp);
           for (const stale of retracted) {
-            send(
-              "meeting-transcription-segment",
-              buildMeetingSegment({
-                text: stale.text,
-                source: "mic",
-                type: "retract",
-                timestamp: stale.timestamp,
-              })
-            );
+            const staleSegment = buildMeetingSegment({
+              text: stale.text,
+              source: "mic",
+              type: "retract",
+              timestamp: stale.timestamp,
+            });
+            // The renderer matched the live segment on its authoritative
+            // timeline stamp — the retract must reference the same value.
+            if (stale.timelineSeconds != null) staleSegment.timelineSeconds = stale.timelineSeconds;
+            send("meeting-transcription-segment", staleSegment);
           }
         }
 
@@ -6356,6 +6375,7 @@ class IPCHandlers {
             reason: micSuppression?.reason,
             hasBleedEvidence: micSuppression?.hasBleedEvidence,
           });
+          const segTimelineSeconds = meetingTimelineSecondsNow();
           send(
             "meeting-transcription-segment",
             buildMeetingSegment({ text: "", source, type: "partial" })
@@ -6363,6 +6383,7 @@ class IPCHandlers {
           queuePendingMicFinal({
             text: latestSegment,
             timestamp,
+            timelineSeconds: segTimelineSeconds,
             micSuppression,
             holdbackMs: STREAMING_RISKY_MIC_SEGMENT_HOLDBACK_MS,
             emit: () =>
@@ -6370,6 +6391,7 @@ class IPCHandlers {
                 text: latestSegment,
                 source,
                 timestamp,
+                timelineSeconds: segTimelineSeconds,
                 micSuppression,
                 send,
               }),
@@ -6381,6 +6403,7 @@ class IPCHandlers {
           text: latestSegment,
           source,
           timestamp,
+          timelineSeconds: meetingTimelineSecondsNow(),
           micSuppression,
           send,
         });
@@ -7220,6 +7243,7 @@ class IPCHandlers {
         if (result?.success && result.text?.trim()) {
           const text = result.text.trim();
           const segTimestamp = Date.now();
+          const segTimelineSeconds = meetingTimelineSecondsNow();
           let micSuppression = null;
           if (source === "mic") {
             const chunkDurationMs = (pcm24k.length / 2 / 24000) * 1000;
@@ -7277,15 +7301,15 @@ class IPCHandlers {
             const retracted = removeRacingMicEntriesFor(text, segTimestamp);
             for (const stale of retracted) {
               if (meetingLocalWin && !meetingLocalWin.isDestroyed()) {
-                meetingLocalWin.webContents.send(
-                  "meeting-transcription-segment",
-                  buildMeetingSegment({
-                    text: stale.text,
-                    source: "mic",
-                    type: "retract",
-                    timestamp: stale.timestamp,
-                  })
-                );
+                const staleSegment = buildMeetingSegment({
+                  text: stale.text,
+                  source: "mic",
+                  type: "retract",
+                  timestamp: stale.timestamp,
+                });
+                if (stale.timelineSeconds != null)
+                  staleSegment.timelineSeconds = stale.timelineSeconds;
+                meetingLocalWin.webContents.send("meeting-transcription-segment", staleSegment);
               }
             }
           }
@@ -7310,6 +7334,7 @@ class IPCHandlers {
             queuePendingMicFinal({
               text,
               timestamp: segTimestamp,
+              timelineSeconds: segTimelineSeconds,
               micSuppression,
               holdbackMs: LOCAL_RISKY_MIC_SEGMENT_HOLDBACK_MS,
               emit: () =>
@@ -7317,6 +7342,7 @@ class IPCHandlers {
                   text,
                   source,
                   timestamp: segTimestamp,
+                  timelineSeconds: segTimelineSeconds,
                   micSuppression,
                   send: sendLocalSegment,
                   includeInLocalTranscript: true,
@@ -7329,6 +7355,7 @@ class IPCHandlers {
             text,
             source,
             timestamp: segTimestamp,
+            timelineSeconds: segTimelineSeconds,
             micSuppression,
             send: sendLocalSegment,
             includeInLocalTranscript: true,

@@ -267,7 +267,7 @@ test("slicePolishContext keeps the closest neighbours on BOTH sides", () => {
 });
 
 test("context and note caps scale with the selection, bounded by the maxima", () => {
-  assert.equal(polishContextCharCap(50), 600, "floor keeps minimal disambiguation context");
+  assert.equal(polishContextCharCap(50), 400, "floor keeps minimal disambiguation context");
   assert.equal(polishContextCharCap(100000), TRANSCRIPT_POLISH_MAX_CONTEXT_CHARS);
   assert.equal(polishNoteCharCap(50), 300);
   assert.equal(polishNoteCharCap(100000), TRANSCRIPT_POLISH_MAX_NOTE_CHARS);

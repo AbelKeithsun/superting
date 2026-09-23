@@ -6,6 +6,7 @@ import {
   offsetAppendedTranscriptSegments,
   repairLegacyCentisecondTimestamps,
   resolveNoteActionTranscript,
+  resolveLiveSegmentTimelineSeconds,
   resolveTranscriptTimestampUnit,
   timelineSecondsForUnit,
   toTranscriptTimelineSeconds,
@@ -157,4 +158,37 @@ test("persisting a resumed session is idempotent once live segments carry the of
   // The 30s autosave re-runs the offset against an updated seed; the anchor
   // must not drift, otherwise resumed lines march away from the audio.
   assert.equal(second[1].timestamp, 169);
+});
+
+test("resolveLiveSegmentTimelineSeconds prefers the authoritative monotonic stamp", () => {
+  const origin = 1_790_000_000_000;
+  // Authoritative value wins even when the epoch conversion would be wrong.
+  assert.equal(
+    resolveLiveSegmentTimelineSeconds(
+      { timelineSeconds: 12.4, timestamp: origin + 9_999_999_000, provider: "funasr" },
+      origin,
+      0
+    ),
+    12.4
+  );
+  // Resume offset is already included — do not shift it again.
+  assert.equal(
+    resolveLiveSegmentTimelineSeconds({ timelineSeconds: 905 }, origin, 900),
+    905
+  );
+  // Legacy payloads (no timelineSeconds) keep the epoch-ms conversion.
+  assert.equal(
+    resolveLiveSegmentTimelineSeconds(
+      { timestamp: origin + 5000, provider: "funasr" },
+      origin,
+      0
+    ),
+    5
+  );
+  // Negative authoritative values clamp to 0; non-finite falls back.
+  assert.equal(resolveLiveSegmentTimelineSeconds({ timelineSeconds: -3 }, origin, 0), 0);
+  assert.equal(
+    resolveLiveSegmentTimelineSeconds({ timelineSeconds: null, timestamp: 42 }, origin, 0),
+    42
+  );
 });

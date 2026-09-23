@@ -2116,6 +2116,7 @@
       "retryChunk": "Réessayer ce bloc",
       "polishDone": "{{count}} segments appliqués",
       "polishDoneAuto": "{{count}} segments appliqués automatiquement en arrière-plan",
+      "polishDiscard": "Ignorer les changements",
       "actionRunning": "« {{name}} » en cours…",
       "actionDone": "Terminé — écrit dans la note",
       "navAwayConfirm": "Une opération IA est encore en cours.\n\nOK : quitter — elle se terminera en arrière-plan et appliquera tout automatiquement.\nAnnuler : rester sur cette note jusqu'à la fin."

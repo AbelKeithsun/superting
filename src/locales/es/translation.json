@@ -2075,6 +2075,7 @@
       "retryChunk": "Reintentar bloque",
       "polishDone": "Se aplicaron cambios a {{count}} segmentos",
       "polishDoneAuto": "Cambios aplicados automáticamente a {{count}} segmentos en segundo plano",
+      "polishDiscard": "Descartar cambios",
       "actionRunning": "Ejecutando «{{name}}»…",
       "actionDone": "Hecho — escrito en la nota",
       "navAwayConfirm": "Una operación de IA sigue en curso.\n\nAceptar: salir ahora — terminará en segundo plano y aplicará todo automáticamente.\nCancelar: quedarse en esta nota hasta que termine."

@@ -49,18 +49,22 @@ export interface TranscriptPolishUpdate {
 }
 
 /**
- * A selection is meant to be reviewed before it is applied, so keep it small
- * enough that (a) the user can actually read the diff and (b) the answer always
- * fits well inside the output budget. 8k characters is roughly 3-4 minutes of
- * speech.
+ * A selection is meant to be reviewed before it is applied, so keep a cap — but
+ * a generous one: chunks run in parallel with per-chunk budgets, so 24k
+ * characters (roughly 10-12 minutes of speech) costs the latency of the slowest
+ * chunk, not the sum.
  */
-export const TRANSCRIPT_POLISH_MAX_SELECTION_CHARS = 8000;
-export const TRANSCRIPT_POLISH_MAX_SELECTION_SEGMENTS = 60;
-/** Read-only neighbours sent along so pronouns/homophones can be resolved. */
-export const TRANSCRIPT_POLISH_CONTEXT_SEGMENTS = 3;
-export const TRANSCRIPT_POLISH_MAX_CONTEXT_CHARS = 6000;
+export const TRANSCRIPT_POLISH_MAX_SELECTION_CHARS = 24000;
+export const TRANSCRIPT_POLISH_MAX_SELECTION_SEGMENTS = 120;
+/**
+ * Read-only neighbours sent along so pronouns/homophones can be resolved. Two
+ * per side is plenty — the model does not need to re-read the meeting to fix a
+ * line, and every context char costs reasoning tokens (latency).
+ */
+export const TRANSCRIPT_POLISH_CONTEXT_SEGMENTS = 2;
+export const TRANSCRIPT_POLISH_MAX_CONTEXT_CHARS = 2000;
 /** The note body is context only (terminology, names) — never rewritten. */
-export const TRANSCRIPT_POLISH_MAX_NOTE_CHARS = 2000;
+export const TRANSCRIPT_POLISH_MAX_NOTE_CHARS = 1500;
 
 /**
  * Chunking for the parallel runner: a selection bigger than this is split into
@@ -139,14 +143,11 @@ export function slicePolishContext(
  * caps. Floors keep enough neighbourhood for homophone disambiguation.
  */
 export function polishContextCharCap(selectionChars: number): number {
-  return Math.min(TRANSCRIPT_POLISH_MAX_CONTEXT_CHARS, Math.max(600, selectionChars * 3));
+  return Math.min(TRANSCRIPT_POLISH_MAX_CONTEXT_CHARS, Math.max(400, selectionChars * 2));
 }
 
 export function polishNoteCharCap(selectionChars: number): number {
-  return Math.min(
-    TRANSCRIPT_POLISH_MAX_NOTE_CHARS,
-    Math.max(300, Math.round(selectionChars * 1.5))
-  );
+  return Math.min(TRANSCRIPT_POLISH_MAX_NOTE_CHARS, Math.max(300, selectionChars));
 }
 
 const SYSTEM_RULES = `You are a transcript proofreader. You fix speech-to-text errors in the transcript segments you are given.

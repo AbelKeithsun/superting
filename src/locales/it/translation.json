@@ -2075,6 +2075,7 @@
       "retryChunk": "Riprova blocco",
       "polishDone": "Applicate modifiche a {{count}} segmenti",
       "polishDoneAuto": "Modifiche applicate automaticamente a {{count}} segmenti in background",
+      "polishDiscard": "Ignora modifiche",
       "actionRunning": "«{{name}}» in esecuzione…",
       "actionDone": "Fatto — scritto nella nota",
       "navAwayConfirm": "Un'operazione AI è ancora in corso.\n\nOK: esci — finirà in background e applicherà tutto automaticamente.\nAnnulla: resta su questa nota fino al completamento."

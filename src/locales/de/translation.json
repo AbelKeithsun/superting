@@ -2076,6 +2076,7 @@
       "retryChunk": "Block erneut versuchen",
       "polishDone": "{{count}} Segmente übernommen",
       "polishDoneAuto": "{{count}} Segmente im Hintergrund automatisch übernommen",
+      "polishDiscard": "Änderungen verwerfen",
       "actionRunning": "„{{name}}“ läuft…",
       "actionDone": "Fertig — in die Notiz geschrieben",
       "navAwayConfirm": "Ein KI-Vorgang läuft noch.\n\nOK: Notiz verlassen — er läuft im Hintergrund zu Ende und wendet alles automatisch an.\nAbbrechen: Auf dieser Notiz bleiben und warten."

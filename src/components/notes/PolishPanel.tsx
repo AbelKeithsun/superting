@@ -8,6 +8,7 @@ import StreamStatsBar from "./StreamStatsBar";
 import { Button } from "../ui/button";
 import {
   applyPolishUpdates,
+  clearNoteAiOperation,
   retryPolishChunk,
   startPolishOperation,
   type NoteAiOperation,
@@ -169,9 +170,12 @@ export default function PolishPanel({ op }: PolishPanelProps) {
           )}
 
           {result.updates.length === 0 ? (
-            <p className="py-6 text-center text-xs text-muted-foreground">
-              {t("notes.transcript.polish.empty")}
-            </p>
+            <div className="space-y-2 py-2 text-center">
+              <p className="text-xs text-muted-foreground">{t("notes.transcript.polish.empty")}</p>
+              <Button variant="ghost" size="sm" onClick={() => clearNoteAiOperation(noteId)}>
+                {t("notes.aiDrawer.close")}
+              </Button>
+            </div>
           ) : (
             <>
               <p className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
@@ -218,18 +222,27 @@ export default function PolishPanel({ op }: PolishPanelProps) {
                   );
                 })}
               </div>
-              <Button
-                className="w-full"
-                disabled={acceptedUpdates.length === 0}
-                onClick={() =>
-                  void applyPolishUpdates(
-                    noteId,
-                    acceptedUpdates.map((update) => ({ id: update.id, text: update.text }))
-                  )
-                }
-              >
-                {t("notes.transcript.polish.apply", { count: acceptedUpdates.length })}
-              </Button>
+              <div className="flex gap-2">
+                <Button
+                  variant="ghost"
+                  className="flex-1 text-muted-foreground"
+                  onClick={() => clearNoteAiOperation(noteId)}
+                >
+                  {t("notes.aiDrawer.polishDiscard")}
+                </Button>
+                <Button
+                  className="flex-1"
+                  disabled={acceptedUpdates.length === 0}
+                  onClick={() =>
+                    void applyPolishUpdates(
+                      noteId,
+                      acceptedUpdates.map((update) => ({ id: update.id, text: update.text }))
+                    )
+                  }
+                >
+                  {t("notes.transcript.polish.apply", { count: acceptedUpdates.length })}
+                </Button>
+              </div>
             </>
           )}
         </div>

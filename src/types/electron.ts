@@ -1803,6 +1803,12 @@ declare global {
           source: "mic" | "system";
           type: "partial" | "final" | "retract";
           timestamp?: number;
+          /**
+           * Authoritative note-timeline position from the main process's
+           * monotonic session clock (resume offset included). Preferred over
+           * the epoch-ms `timestamp` conversion when present.
+           */
+          timelineSeconds?: number | null;
           /** Provider that stamped `timestamp`; selects the unit at ingest. */
           provider?: string | null;
         }) => void
