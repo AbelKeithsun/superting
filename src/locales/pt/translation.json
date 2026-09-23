@@ -2059,6 +2059,30 @@
       "newRecordingsOnly": "As alterações de qualidade afetam apenas novas gravações; as existentes não são recodificadas."
     },
     "transcript": {
+    "polish": {
+      "title": "Polir a transcrição com IA",
+      "subtitle": "Selecionados: {{count}} · apenas os segmentos selecionados são substituídos",
+      "loading": "Polindo…",
+      "include": "Aplicar este segmento",
+      "empty": "O modelo não encontrou nada para alterar",
+      "missing": "Não retornados, mantidos como estão: {{count}}",
+      "apply": "Aplicar alterações ({{count}})",
+      "retry": "Tentar novamente",
+      "cancel": "Cancelar",
+      "selectedCount": "Selecionados: {{count}}",
+      "run": "Polir com IA",
+      "clearSelection": "Limpar seleção",
+      "select": "Selecionar este segmento",
+      "error": {
+        "no-selection": "Selecione primeiro os segmentos da transcrição que deseja polir",
+        "non-contiguous": "Só é possível polir uma sequência contígua de segmentos",
+        "selection-too-large": "A seleção é muito longa (máx. {{max}} caracteres) — selecione um intervalo menor",
+        "selection-too-many": "Segmentos selecionados demais (máx. {{max}}) — selecione um intervalo menor",
+        "empty-response": "O modelo não retornou conteúdo — tente novamente",
+        "unparsed-response": "O modelo não retornou uma linha por segmento — tente novamente ou selecione menos segmentos",
+        "generic": "Falha ao polir: {{message}}"
+      }
+    },
     "inlineEdit": {
       "title": "Editar este segmento",
       "hint": "Ao perder o foco ou ⌘/Ctrl+Enter para enviar · Esc para sair"

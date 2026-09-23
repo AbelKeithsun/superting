@@ -1,12 +1,8 @@
 import reasoningService from "../services/ReasoningService";
-import type { ReasoningConfig } from "../services/BaseReasoningService";
 import type { ActionItem, NoteItem } from "../types/electron";
 import { applyMeetingTimeFallback, buildMeetingTimeRange } from "./meetingTimeContext";
-import {
-  getSettings,
-  selectIsCloudNoteFormattingMode,
-  selectResolvedNoteFormatting,
-} from "./settingsStore";
+import { getSettings } from "./settingsStore";
+import { resolveNoteFormattingRequest } from "./noteFormattingRequest";
 import { buildNoteActionSystemPrompt } from "./noteActionPrompt";
 import {
   computeNoteActionMaxTokens,
@@ -84,9 +80,6 @@ export async function runNoteActionOnce({
   }
 
   const settings = getSettings();
-  const resolvedFormatting = selectResolvedNoteFormatting(settings);
-  const isHostedMode = isCloudMode || selectIsCloudNoteFormattingMode(settings);
-  const selectedModel = modelId || resolvedFormatting.model;
   const meetingTimeRange = buildMeetingTimeRange(note);
   const systemPrompt = buildNoteActionSystemPrompt(action.prompt, {
     isMeetingNote: actionInput.isMeetingNote,
@@ -95,38 +88,27 @@ export async function runNoteActionOnce({
     meetingTimeContext: meetingTimeRange ?? undefined,
   });
 
-  const reasoningConfig: ReasoningConfig = {
-    systemPrompt,
-    temperature: 0.3,
-    disableThinking: settings.noteFormattingDisableThinking,
-    // The output cap is shared with hidden reasoning on thinking models, and a
-    // rewrite-style action (优化转录文本) re-emits the whole transcript, so the
-    // budget scales with the input size — with a per-provider ceiling, because
-    // a cap above the model's own limit is rejected outright.
-    maxTokens: computeNoteActionMaxTokens(
-      actionInput.content.length,
-      noteActionMaxTokensCeiling(resolvedFormatting.provider)
-    ),
-    // A bigger budget makes the request run longer: the provider default (90s)
-    // aborted long rewrites mid-generation.
-    timeoutMs: NOTE_ACTION_REQUEST_TIMEOUT_MS,
-    failOnEmptyResponse: true,
-  };
+  // The output cap is shared with hidden reasoning on thinking models, and a
+  // rewrite-style action (优化转录文本) re-emits the whole transcript, so the
+  // budget scales with the input size — with a per-provider ceiling, because a
+  // cap above the model's own limit is rejected outright. A bigger budget also
+  // makes the request run longer: the provider default (90s) aborted long
+  // rewrites mid-generation.
+  const { selectedModel, reasoningConfig, resolvedFormatting, isHostedMode, hasModel } =
+    resolveNoteFormattingRequest({
+      settings,
+      modelId,
+      systemPrompt,
+      isCloudMode,
+      maxTokensForProvider: (provider) =>
+        computeNoteActionMaxTokens(
+          actionInput.content.length,
+          noteActionMaxTokensCeiling(provider)
+        ),
+      timeoutMs: NOTE_ACTION_REQUEST_TIMEOUT_MS,
+    });
 
-  if (isHostedMode) {
-    throw new Error("Hosted note actions are not available in this build.");
-  } else if (resolvedFormatting.mode === "self-hosted" && resolvedFormatting.remoteUrl) {
-    reasoningConfig.lanUrl = resolvedFormatting.remoteUrl;
-  } else if (resolvedFormatting.mode === "providers" || resolvedFormatting.mode === "enterprise") {
-    reasoningConfig.provider = resolvedFormatting.provider || undefined;
-  }
-
-  if (resolvedFormatting.provider === "custom") {
-    reasoningConfig.baseUrl = resolvedFormatting.cloudBaseUrl;
-    reasoningConfig.customApiKey = settings.noteFormattingCustomApiKey;
-  }
-
-  if (!selectedModel && !reasoningConfig.lanUrl) {
+  if (!hasModel) {
     logNoteAction(
       "NOTE_ACTION_NO_MODEL",
       {

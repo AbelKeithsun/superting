@@ -2059,6 +2059,30 @@
       "newRecordingsOnly": "音質設定僅對新錄音生效，歷史錄音不會重新編碼。"
     },
     "transcript": {
+    "polish": {
+      "title": "AI 潤色轉錄",
+      "subtitle": "已選 {{count}} · 只替換選取的段落",
+      "loading": "潤色中…",
+      "include": "套用此段落",
+      "empty": "模型沒有找到需要修改的地方",
+      "missing": "未回傳，保持原樣：{{count}}",
+      "apply": "套用變更（{{count}}）",
+      "retry": "重試",
+      "cancel": "取消",
+      "selectedCount": "已選 {{count}}",
+      "run": "AI 潤色",
+      "clearSelection": "清除選取",
+      "select": "選取此段落",
+      "error": {
+        "no-selection": "請先選取要潤色的轉錄段落",
+        "non-contiguous": "只能潤色連續的段落",
+        "selection-too-large": "選取內容過長（最多 {{max}} 個字元）— 請選取更小的範圍",
+        "selection-too-many": "選取的段落過多（最多 {{max}} 個）— 請選取更小的範圍",
+        "empty-response": "模型沒有回傳內容 — 請重試",
+        "unparsed-response": "模型沒有依段落逐行回傳 — 請重試或減少選取的段落",
+        "generic": "潤色失敗：{{message}}"
+      }
+    },
     "inlineEdit": {
       "title": "編輯這段文字",
       "hint": "失焦或 ⌘/Ctrl+Enter 提交 · Esc 退出"

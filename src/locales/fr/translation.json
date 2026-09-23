@@ -2100,6 +2100,30 @@
       "newRecordingsOnly": "Les changements de qualité ne s'appliquent qu'aux nouveaux enregistrements ; les existants ne sont pas réencodés."
     },
     "transcript": {
+    "polish": {
+      "title": "Peaufiner la transcription avec l’IA",
+      "subtitle": "Sélection : {{count}} · seuls les segments sélectionnés sont remplacés",
+      "loading": "Peaufinage…",
+      "include": "Appliquer ce segment",
+      "empty": "Le modèle n'a rien trouvé à modifier",
+      "missing": "Non renvoyés, conservés tels quels : {{count}}",
+      "apply": "Appliquer les modifications ({{count}})",
+      "retry": "Réessayer",
+      "cancel": "Annuler",
+      "selectedCount": "Sélection : {{count}}",
+      "run": "Peaufiner avec l’IA",
+      "clearSelection": "Effacer la sélection",
+      "select": "Sélectionner ce segment",
+      "error": {
+        "no-selection": "Sélectionnez d'abord les segments de la transcription à peaufiner",
+        "non-contiguous": "Seule une suite contiguë de segments peut être peaufinée",
+        "selection-too-large": "Sélection trop longue (max {{max}} caractères) — sélectionnez une plage plus petite",
+        "selection-too-many": "Trop de segments sélectionnés (max {{max}}) — sélectionnez une plage plus petite",
+        "empty-response": "Le modèle n'a renvoyé aucun contenu — réessayez",
+        "unparsed-response": "Le modèle n'a pas renvoyé une ligne par segment — réessayez ou sélectionnez moins de segments",
+        "generic": "Échec du peaufinage : {{message}}"
+      }
+    },
     "inlineEdit": {
       "title": "Modifier ce segment",
       "hint": "Perte de focus ou ⌘/Ctrl+Entrée pour valider · Échap pour quitter"

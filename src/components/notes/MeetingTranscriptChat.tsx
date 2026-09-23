@@ -1,7 +1,8 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
-import { Check, Loader2, Pencil, X } from "lucide-react";
+import { Check, ListChecks, Loader2, Pencil, Sparkles, X } from "lucide-react";
 import { Popover, PopoverTrigger, PopoverContent } from "../ui/popover";
+import { Button } from "../ui/button";
 import { cn } from "../lib/utils";
 import type { TranscriptSegment } from "../../stores/meetingRecordingStore";
 import {
@@ -17,7 +18,7 @@ import {
 } from "../../utils/currentPageFind";
 import { formatTranscriptTimestamp } from "../../utils/recordingTime";
 import { buildLiveTranscriptItems } from "../../utils/liveTranscriptStream";
-import { buildTranscriptSpeakerBlocks } from "../../utils/speakerAssignment";
+import { buildTranscriptSpeakerBlocks, type TranscriptSpeakerBlock } from "../../utils/speakerAssignment";
 
 const SPEAKER_COLORS = [
   "text-sky-500",
@@ -618,6 +619,12 @@ interface MeetingTranscriptChatProps {
    * view (after recording, or between two recording sessions of the note).
    */
   onSegmentEditCommit?: (segmentId: string, text: string) => void;
+  /**
+   * Run AI polish over a contiguous run of transcript segments (read-only view
+   * only). The parent owns the model call, the confirm dialog and the write-back,
+   * so nothing is committed from here.
+   */
+  onPolishSegments?: (segmentIds: string[]) => void;
   emptyMessage?: string;
 }
 
@@ -648,6 +655,7 @@ export function MeetingTranscriptChat({
   onSeekToSegment,
   onLiveSegmentEdit,
   onSegmentEditCommit,
+  onPolishSegments,
   emptyMessage,
 }: MeetingTranscriptChatProps) {
   const { t } = useTranslation();
@@ -663,6 +671,11 @@ export function MeetingTranscriptChat({
   // always commits against a single segment id.
   const [inlineEditingBlockId, setInlineEditingBlockId] = useState<string | null>(null);
   const [inlineDrafts, setInlineDrafts] = useState<Record<string, string>>({});
+  // 选段润色: selection is tracked at speaker-block level — the unit the user
+  // actually clicks — and expanded to its segments only when the action runs, so
+  // the model call and the write-back stay segment-scoped.
+  const [selectedBlockIds, setSelectedBlockIds] = useState<string[]>([]);
+  const [selectionAnchorId, setSelectionAnchorId] = useState<string | null>(null);
 
   const hasContent = segments.length > 0 || micPartial || systemPartial;
 
@@ -765,6 +778,58 @@ export function MeetingTranscriptChat({
   // Read-only view + a commit handler = inline editing is available. While
   // recording, the live editor above owns the interaction instead.
   const canEditInlineSegments = !isEditing && !isRecording && !!onSegmentEditCommit;
+  // Polish rides the same gate: nothing to confirm or write back while recording.
+  const canPolishSegments = !isEditing && !isRecording && !!onPolishSegments;
+
+  // Both render shapes (a single segment, or a speaker block) carry an id.
+  const blockIdOf = (item: TranscriptSegment | TranscriptSpeakerBlock<TranscriptSegment>) => item.id;
+
+  const selectedBlockIdSet = useMemo(() => new Set(selectedBlockIds), [selectedBlockIds]);
+
+  const selectedSegmentIds = useMemo(
+    () =>
+      speakerBlocks.flatMap((item) => {
+        if (!selectedBlockIdSet.has(blockIdOf(item))) return [];
+        const blockSegments = "segments" in item ? item.segments : [item];
+        return blockSegments.map((blockSegment) => blockSegment.id);
+      }),
+    [selectedBlockIdSet, speakerBlocks]
+  );
+
+  const toggleBlockSelection = (blockId: string, extend: boolean) => {
+    if (!canPolishSegments) return;
+    const ids = speakerBlocks.map(blockIdOf);
+    if (extend && selectionAnchorId) {
+      const anchor = ids.indexOf(selectionAnchorId);
+      const target = ids.indexOf(blockId);
+      if (anchor >= 0 && target >= 0) {
+        const [from, to] = anchor <= target ? [anchor, target] : [target, anchor];
+        setSelectedBlockIds((prev) => Array.from(new Set([...prev, ...ids.slice(from, to + 1)])));
+        return;
+      }
+    }
+    setSelectionAnchorId(blockId);
+    setSelectedBlockIds((prev) =>
+      prev.includes(blockId) ? prev.filter((id) => id !== blockId) : [...prev, blockId]
+    );
+  };
+
+  const clearSegmentSelection = () => {
+    setSelectedBlockIds([]);
+    setSelectionAnchorId(null);
+  };
+
+  // The transcript keeps growing while a note is live, and blocks get merged or
+  // relabelled; drop anything that is no longer on screen so the selection can
+  // never point at a segment that has moved.
+  useEffect(() => {
+    if (selectedBlockIds.length === 0) return;
+    const live = new Set(speakerBlocks.map(blockIdOf));
+    setSelectedBlockIds((prev) => {
+      const next = prev.filter((id) => live.has(id));
+      return next.length === prev.length ? prev : next;
+    });
+  }, [speakerBlocks, selectedBlockIds.length]);
 
   const startInlineBlockEdit = (blockId: string, blockSegments: TranscriptSegment[]) => {
     if (!canEditInlineSegments) return;
@@ -1028,6 +1093,7 @@ export function MeetingTranscriptChat({
                   ? t("notes.speaker.label", { n: 1 })
                   : t("notes.speaker.them");
             const blockId = "segments" in item ? item.id : segment.id;
+            const isBlockSelected = selectedBlockIdSet.has(blockId);
             const isActiveSegment =
               activeSegmentId === blockId ||
               blockSegments.some(
@@ -1099,7 +1165,8 @@ export function MeetingTranscriptChat({
                 className={cn(
                   "group grid grid-cols-[10px_minmax(0,1fr)] gap-3 border-l-2 border-transparent px-2 py-1 transition-colors",
                   onSeekToSegment && "cursor-pointer hover:bg-slate-50/80",
-                  isActiveSegment && "border-l-indigo-500 bg-indigo-50/70"
+                  isActiveSegment && "border-l-indigo-500 bg-indigo-50/70",
+                  isBlockSelected && "border-l-indigo-400 bg-indigo-50/40"
                 )}
                 onClick={() => onSeekToSegment?.(seekTarget)}
                 style={{ animation: "agent-message-in 200ms ease-out both" }}
@@ -1229,6 +1296,28 @@ export function MeetingTranscriptChat({
                           <Pencil size={11} />
                         </button>
                       )}
+                      {canPolishSegments && (
+                        <button
+                          type="button"
+                          data-polish-select-button={blockId}
+                          aria-pressed={isBlockSelected}
+                          aria-label={t("notes.transcript.polish.select")}
+                          title={t("notes.transcript.polish.select")}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            toggleBlockSelection(blockId, event.shiftKey);
+                          }}
+                          className={cn(
+                            "absolute -top-1 h-6 w-6 items-center justify-center rounded-md border border-border/60 bg-background/95 shadow-sm transition-colors hover:text-foreground",
+                            isBlockSelected
+                              ? "flex border-indigo-300 text-indigo-600"
+                              : "hidden text-muted-foreground group-hover/segment:flex",
+                            canEditInlineSegments ? "right-8" : "right-0"
+                          )}
+                        >
+                          <ListChecks size={11} />
+                        </button>
+                      )}
                     </div>
                   )}
                 </div>
@@ -1237,6 +1326,29 @@ export function MeetingTranscriptChat({
           })}
         </div>
       </div>
+      {canPolishSegments && selectedSegmentIds.length > 0 && (
+        <div
+          data-transcript-polish-bar="true"
+          className="absolute bottom-4 left-1/2 z-20 flex -translate-x-1/2 items-center gap-2 rounded-lg border border-border bg-background/95 px-3 py-1.5 shadow-md backdrop-blur"
+        >
+          <span className="whitespace-nowrap text-xs text-muted-foreground">
+            {t("notes.transcript.polish.selectedCount", { count: selectedSegmentIds.length })}
+          </span>
+          <Button size="sm" onClick={() => onPolishSegments?.(selectedSegmentIds)}>
+            <Sparkles size={12} className="mr-1" />
+            {t("notes.transcript.polish.run")}
+          </Button>
+          <button
+            type="button"
+            aria-label={t("notes.transcript.polish.clearSelection")}
+            title={t("notes.transcript.polish.clearSelection")}
+            onClick={clearSegmentSelection}
+            className="text-muted-foreground transition-colors hover:text-foreground"
+          >
+            <X size={13} />
+          </button>
+        </div>
+      )}
     </div>
   );
 }

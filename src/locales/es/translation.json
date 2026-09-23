@@ -2059,6 +2059,30 @@
       "newRecordingsOnly": "Los cambios de calidad solo afectan a grabaciones nuevas; las existentes no se recodifican."
     },
     "transcript": {
+    "polish": {
+      "title": "Pulir transcripción con IA",
+      "subtitle": "Seleccionados: {{count}} · solo se reemplazan los segmentos seleccionados",
+      "loading": "Puliendo…",
+      "include": "Aplicar este segmento",
+      "empty": "El modelo no encontró nada que cambiar",
+      "missing": "No devueltos, se mantienen tal cual: {{count}}",
+      "apply": "Aplicar cambios ({{count}})",
+      "retry": "Reintentar",
+      "cancel": "Cancelar",
+      "selectedCount": "Seleccionados: {{count}}",
+      "run": "Pulir con IA",
+      "clearSelection": "Borrar selección",
+      "select": "Seleccionar este segmento",
+      "error": {
+        "no-selection": "Selecciona primero los segmentos de la transcripción que quieres pulir",
+        "non-contiguous": "Solo se puede pulir una secuencia contigua de segmentos",
+        "selection-too-large": "La selección es demasiado larga (máx. {{max}} caracteres) — selecciona un rango más pequeño",
+        "selection-too-many": "Demasiados segmentos seleccionados (máx. {{max}}) — selecciona un rango más pequeño",
+        "empty-response": "El modelo no devolvió contenido — inténtalo de nuevo",
+        "unparsed-response": "El modelo no devolvió una línea por segmento — reinténtalo o selecciona menos segmentos",
+        "generic": "Error al pulir: {{message}}"
+      }
+    },
     "inlineEdit": {
       "title": "Editar este segmento",
       "hint": "Al perder el foco o ⌘/Ctrl+Enter para enviar · Esc para salir"

@@ -2059,6 +2059,30 @@
       "newRecordingsOnly": "Le modifiche di qualità valgono solo per le nuove registrazioni; quelle esistenti non vengono ricodificate."
     },
     "transcript": {
+    "polish": {
+      "title": "Rifinisci la trascrizione con IA",
+      "subtitle": "Selezionati: {{count}} · vengono sostituiti solo i segmenti selezionati",
+      "loading": "Rifinitura…",
+      "include": "Applica questo segmento",
+      "empty": "Il modello non ha trovato nulla da modificare",
+      "missing": "Non restituiti, mantenuti così: {{count}}",
+      "apply": "Applica modifiche ({{count}})",
+      "retry": "Riprova",
+      "cancel": "Annulla",
+      "selectedCount": "Selezionati: {{count}}",
+      "run": "Rifinisci con IA",
+      "clearSelection": "Cancella selezione",
+      "select": "Seleziona questo segmento",
+      "error": {
+        "no-selection": "Seleziona prima i segmenti della trascrizione da rifinire",
+        "non-contiguous": "Si può rifinire solo una sequenza contigua di segmenti",
+        "selection-too-large": "Selezione troppo lunga (max {{max}} caratteri) — seleziona un intervallo più piccolo",
+        "selection-too-many": "Troppi segmenti selezionati (max {{max}}) — seleziona un intervallo più piccolo",
+        "empty-response": "Il modello non ha restituito contenuto — riprova",
+        "unparsed-response": "Il modello non ha restituito una riga per segmento — riprova o seleziona meno segmenti",
+        "generic": "Rifinitura non riuscita: {{message}}"
+      }
+    },
     "inlineEdit": {
       "title": "Modifica questo segmento",
       "hint": "Perdi il focus o ⌘/Ctrl+Invio per inviare · Esc per uscire"

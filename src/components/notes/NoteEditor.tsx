@@ -30,6 +30,8 @@ import { MarkdownSourceEditor } from "../ui/MarkdownSourceEditor";
 import type { Editor } from "@tiptap/react";
 import { MeetingTranscriptChat, type TranscriptSeekTarget } from "./MeetingTranscriptChat";
 import CorrectionSubmitDialog from "./CorrectionSubmitDialog";
+import TranscriptPolishDialog from "./TranscriptPolishDialog";
+import { buildPolishLines, applyTranscriptPolishUpdates } from "../../stores/transcriptPolishCore";
 import VoiceprintSlotDialog from "./VoiceprintSlotDialog";
 import type { TranscriptSegment } from "../../stores/meetingRecordingStore";
 import {
@@ -1011,6 +1013,20 @@ export default function NoteEditor({
   useEffect(() => {
     displaySegmentsRef.current = displaySegments;
   }, [displaySegments]);
+
+  // 选段润色: the transcript view reports a contiguous selection, the dialog
+  // confirms the rewrite per segment, and only the accepted rows land back in the
+  // transcript (never in the note body, and never through the correction learner
+  // — an AI rewrite is not a 错→对 pair).
+  const [polishSegmentIds, setPolishSegmentIds] = useState<string[] | null>(null);
+  const polishLines = useMemo(
+    () =>
+      buildPolishLines(displaySegments, {
+        you: t("notes.speaker.you"),
+        them: t("notes.speaker.them"),
+      }),
+    [displaySegments, t]
+  );
 
   const hasChatSegments = displaySegments.length > 0;
   const transcriptIsStructured = hasChatSegments;
@@ -2531,6 +2547,15 @@ export default function NoteEditor({
     [getCorrectionBaseline, persistDisplaySegments, reportSegmentCorrection]
   );
 
+  const handleTranscriptPolishApply = useCallback(
+    (updates: Array<{ id: string; text: string }>) => {
+      if (updates.length === 0) return;
+      const nextSegments = applyTranscriptPolishUpdates(displaySegmentsRef.current, updates);
+      void persistDisplaySegments(nextSegments, true);
+    },
+    [persistDisplaySegments]
+  );
+
   // Quiet learning receipt: an in-note toast with undo instead of the
   // dictation overlay popping up mid-meeting.
   const [quietLearnedPairs, setQuietLearnedPairs] = useState<
@@ -2865,6 +2890,17 @@ export default function NoteEditor({
             title: t("notes.transcript.correction.savedTitle", { count }),
           });
         }}
+      />
+      <TranscriptPolishDialog
+        open={!!polishSegmentIds && polishSegmentIds.length > 0}
+        onOpenChange={(open) => {
+          if (!open) setPolishSegmentIds(null);
+        }}
+        noteId={note.id}
+        lines={polishLines}
+        selectedIds={polishSegmentIds ?? []}
+        noteContent={note.content}
+        onApply={handleTranscriptPolishApply}
       />
       <VoiceprintSlotDialog
         open={!!voiceprintSlotPrompt}
@@ -3599,6 +3635,11 @@ export default function NoteEditor({
                 onLiveSegmentEdit={isRecording ? handleLiveSegmentEdit : undefined}
                 onSegmentEditCommit={
                   isRecording || isTranscriptEditing ? undefined : handleSegmentTextEdit
+                }
+                onPolishSegments={
+                  isRecording || isTranscriptEditing
+                    ? undefined
+                    : (segmentIds) => setPolishSegmentIds(segmentIds)
                 }
                 searchTerm={findText}
                 ignoreCase={ignoreCase}

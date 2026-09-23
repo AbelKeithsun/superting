@@ -2101,6 +2101,30 @@
       "newRecordingsOnly": "Quality changes affect new recordings only; existing recordings are not re-encoded."
     },
     "transcript": {
+    "polish": {
+      "title": "AI polish transcript",
+      "subtitle": "Selected: {{count}} · only the selected segments are replaced",
+      "loading": "Polishing…",
+      "include": "Apply this segment",
+      "empty": "The model found nothing to change",
+      "missing": "Not returned, kept as-is: {{count}}",
+      "apply": "Apply changes ({{count}})",
+      "retry": "Try again",
+      "cancel": "Cancel",
+      "selectedCount": "Selected: {{count}}",
+      "run": "AI polish",
+      "clearSelection": "Clear selection",
+      "select": "Select this segment",
+      "error": {
+        "no-selection": "Select the transcript segments to polish first",
+        "non-contiguous": "Only a contiguous run of segments can be polished",
+        "selection-too-large": "Selection is too long (max {{max}} characters) — select a smaller range",
+        "selection-too-many": "Too many segments selected (max {{max}}) — select a smaller range",
+        "empty-response": "The model returned no content — try again",
+        "unparsed-response": "The model did not return one line per segment — try again or select fewer segments",
+        "generic": "Polish failed: {{message}}"
+      }
+    },
     "inlineEdit": {
       "title": "Edit this segment",
       "hint": "Blur or ⌘/Ctrl+Enter to submit · Esc to exit"

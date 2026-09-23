@@ -2060,6 +2060,30 @@
       "newRecordingsOnly": "Qualitätsänderungen wirken sich nur auf neue Aufnahmen aus; bestehende Aufnahmen werden nicht neu kodiert."
     },
     "transcript": {
+    "polish": {
+      "title": "Transkript mit KI überarbeiten",
+      "subtitle": "Ausgewählt: {{count}} · nur die ausgewählten Segmente werden ersetzt",
+      "loading": "Überarbeitung läuft…",
+      "include": "Dieses Segment übernehmen",
+      "empty": "Das Modell hat nichts zu ändern gefunden",
+      "missing": "Nicht zurückgegeben, unverändert übernommen: {{count}}",
+      "apply": "Änderungen übernehmen ({{count}})",
+      "retry": "Erneut versuchen",
+      "cancel": "Abbrechen",
+      "selectedCount": "Ausgewählt: {{count}}",
+      "run": "KI-Überarbeitung",
+      "clearSelection": "Auswahl aufheben",
+      "select": "Dieses Segment auswählen",
+      "error": {
+        "no-selection": "Wähle zuerst die zu überarbeitenden Transkriptsegmente aus",
+        "non-contiguous": "Nur eine zusammenhängende Folge von Segmenten kann überarbeitet werden",
+        "selection-too-large": "Auswahl ist zu lang (max. {{max}} Zeichen) — wähle einen kleineren Bereich",
+        "selection-too-many": "Zu viele Segmente ausgewählt (max. {{max}}) — wähle einen kleineren Bereich",
+        "empty-response": "Das Modell hat keinen Inhalt zurückgegeben — versuche es erneut",
+        "unparsed-response": "Das Modell hat nicht pro Segment eine Zeile zurückgegeben — versuche es erneut oder wähle weniger Segmente",
+        "generic": "Überarbeitung fehlgeschlagen: {{message}}"
+      }
+    },
     "inlineEdit": {
       "title": "Dieses Segment bearbeiten",
       "hint": "Fokus verlassen oder ⌘/Ctrl+Enter zum Speichern · Esc zum Verlassen"

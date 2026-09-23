@@ -2059,6 +2059,30 @@
       "newRecordingsOnly": "品質設定は新しい録音にのみ適用され、既存の録音は再エンコードされません。"
     },
     "transcript": {
+    "polish": {
+      "title": "AI で文字起こしを校正",
+      "subtitle": "選択中: {{count}} · 選択したセグメントのみ置き換えます",
+      "loading": "校正中…",
+      "include": "このセグメントを適用",
+      "empty": "モデルが修正箇所を見つけられませんでした",
+      "missing": "未返却のためそのまま保持: {{count}}",
+      "apply": "変更を適用（{{count}}）",
+      "retry": "再試行",
+      "cancel": "キャンセル",
+      "selectedCount": "選択中: {{count}}",
+      "run": "AI 校正",
+      "clearSelection": "選択を解除",
+      "select": "このセグメントを選択",
+      "error": {
+        "no-selection": "先に校正する文字起こしのセグメントを選択してください",
+        "non-contiguous": "校正できるのは連続したセグメントのみです",
+        "selection-too-large": "選択範囲が長すぎます（最大 {{max}} 文字）— 範囲を狭めてください",
+        "selection-too-many": "選択したセグメントが多すぎます（最大 {{max}}）— 範囲を狭めてください",
+        "empty-response": "モデルから内容が返されませんでした — もう一度お試しください",
+        "unparsed-response": "セグメントごとに 1 行ずつ返されませんでした — 再試行するか、選択を減らしてください",
+        "generic": "校正に失敗しました: {{message}}"
+      }
+    },
     "inlineEdit": {
       "title": "このセグメントを編集",
       "hint": "フォーカス外または ⌘/Ctrl+Enter で送信 · Esc で終了"
