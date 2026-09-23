@@ -2114,6 +2114,9 @@
       "run": "Peaufiner avec l’IA",
       "clearSelection": "Effacer la sélection",
       "select": "Sélectionner ce segment",
+      "progress": "Polissage… {{done}}/{{total}}",
+      "dictionaryHint": "Cliquez sur une modification surlignée pour l'enregistrer dans le dictionnaire de correction",
+      "pairTitle": "Enregistrer dans le dictionnaire de correction",
       "error": {
         "no-selection": "Sélectionnez d'abord les segments de la transcription à peaufiner",
         "non-contiguous": "Seule une suite contiguë de segments peut être peaufinée",

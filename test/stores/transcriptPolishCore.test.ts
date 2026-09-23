@@ -6,7 +6,14 @@ import {
   buildTranscriptPolishMessages,
   buildTranscriptPolishSystemPrompt,
   buildTranscriptPolishUpdates,
+  chunkPolishTargets,
   parseTranscriptPolishResponse,
+  polishContextCharCap,
+  polishNoteCharCap,
+  slicePolishContext,
+  TRANSCRIPT_POLISH_CHUNK_CHARS,
+  TRANSCRIPT_POLISH_CHUNK_SEGMENTS,
+  TRANSCRIPT_POLISH_MAX_CONTEXT_CHARS,
   TRANSCRIPT_POLISH_MAX_NOTE_CHARS,
   type PolishLine,
 } from "../../src/stores/transcriptPolishCore.ts";
@@ -201,4 +208,77 @@ test("an update is trimmed and can never blank a segment", () => {
     applyTranscriptPolishUpdates(segments, [{ id: "s1", text: "  润色后  " }])[0].text,
     "润色后"
   );
+});
+
+test("chunkPolishTargets keeps a small selection in one chunk", () => {
+  assert.equal(chunkPolishTargets(targets).length, 1);
+  assert.deepEqual(chunkPolishTargets([]), []);
+});
+
+test("chunkPolishTargets splits on segment count, then on characters", () => {
+  const many = Array.from({ length: TRANSCRIPT_POLISH_CHUNK_SEGMENTS * 2 + 1 }, (_, i) => ({
+    id: `s${i}`,
+    text: "短句",
+    label: "你",
+  }));
+  const byCount = chunkPolishTargets(many);
+  assert.equal(byCount.length, 3);
+  assert.equal(byCount[0].length, TRANSCRIPT_POLISH_CHUNK_SEGMENTS);
+  assert.equal(byCount[2].length, 1);
+  // Order is fully preserved across chunks.
+  assert.deepEqual(byCount.flat().map((line) => line.id), many.map((line) => line.id));
+
+  const long = Array.from({ length: 4 }, (_, i) => ({
+    id: `l${i}`,
+    text: "长".repeat(TRANSCRIPT_POLISH_CHUNK_CHARS - 100),
+    label: "你",
+  }));
+  const byChars = chunkPolishTargets(long);
+  assert.equal(byChars.length, 4, "each oversize segment starts a new chunk");
+  assert.ok(byChars.every((chunk) => chunk.length === 1));
+});
+
+test("slicePolishContext keeps the closest neighbours on BOTH sides", () => {
+  const lines: PolishLine[] = [
+    { id: "far-before", text: "远".repeat(500), label: "你" },
+    { id: "near-before", text: "近一点", label: "你" },
+    { id: "t1", text: "目标一", label: "你" },
+    { id: "t2", text: "目标二", label: "你" },
+    { id: "near-after", text: "紧随其后的下文", label: "对方" },
+    { id: "far-after", text: "远".repeat(500), label: "对方" },
+  ];
+  // A char cap that fits the near neighbours but not the far ones.
+  const { before, after } = slicePolishContext(lines, 2, 3, 100, 5);
+  assert.deepEqual(before.map((line) => line.id), ["near-before"]);
+  assert.deepEqual(
+    after.map((line) => line.id),
+    ["near-after"],
+    "after side must keep the CLOSEST lines, not the furthest"
+  );
+
+  // Segment cap applies before the char cap.
+  const capped = slicePolishContext(lines, 2, 3, 99999, 1);
+  assert.deepEqual(capped.before.map((line) => line.id), ["near-before"]);
+  assert.deepEqual(capped.after.map((line) => line.id), ["near-after"]);
+
+  // Edges: no neighbours available.
+  assert.deepEqual(slicePolishContext(lines, 0, lines.length - 1).before, []);
+  assert.deepEqual(slicePolishContext(lines, 0, lines.length - 1).after, []);
+});
+
+test("context and note caps scale with the selection, bounded by the maxima", () => {
+  assert.equal(polishContextCharCap(50), 600, "floor keeps minimal disambiguation context");
+  assert.equal(polishContextCharCap(100000), TRANSCRIPT_POLISH_MAX_CONTEXT_CHARS);
+  assert.equal(polishNoteCharCap(50), 300);
+  assert.equal(polishNoteCharCap(100000), TRANSCRIPT_POLISH_MAX_NOTE_CHARS);
+});
+
+test("maxNoteChars override tightens the note window per request", () => {
+  const { userMessage } = buildTranscriptPolishMessages({
+    targets,
+    noteContent: "备".repeat(TRANSCRIPT_POLISH_MAX_NOTE_CHARS + 5000),
+    maxNoteChars: 300,
+  });
+  const noteSection = userMessage.split("## Note")[1] ?? "";
+  assert.ok(noteSection.length < 500, `${noteSection.length}`);
 });

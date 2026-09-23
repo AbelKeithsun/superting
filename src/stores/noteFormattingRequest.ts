@@ -18,6 +18,13 @@ export interface NoteFormattingRequestOptions {
   maxTokensForProvider: (provider: string) => number;
   timeoutMs?: number;
   temperature?: number;
+  /**
+   * Override the scope's disable-thinking setting. Interactive features
+   * (transcript polish) pass true: on reasoning models the low-effort hint is
+   * the single biggest latency lever, and a proofreading pass does not need
+   * deep thought. Providers that reject the hint retry without it.
+   */
+  disableThinking?: boolean;
   isCloudMode?: boolean;
   /**
    * When true (default) an empty/unparseable response throws instead of echoing
@@ -52,6 +59,7 @@ export function resolveNoteFormattingRequest({
   maxTokensForProvider,
   timeoutMs,
   temperature = 0.3,
+  disableThinking,
   isCloudMode = false,
   failOnEmptyResponse = true,
 }: NoteFormattingRequestOptions): NoteFormattingRequest {
@@ -63,7 +71,7 @@ export function resolveNoteFormattingRequest({
   const reasoningConfig: ReasoningConfig = {
     systemPrompt,
     temperature,
-    disableThinking: current.noteFormattingDisableThinking,
+    disableThinking: disableThinking ?? current.noteFormattingDisableThinking,
     maxTokens: maxTokensForProvider(resolvedFormatting.provider),
     timeoutMs,
     failOnEmptyResponse,

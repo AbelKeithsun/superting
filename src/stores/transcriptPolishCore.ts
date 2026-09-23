@@ -62,6 +62,93 @@ export const TRANSCRIPT_POLISH_MAX_CONTEXT_CHARS = 6000;
 /** The note body is context only (terminology, names) — never rewritten. */
 export const TRANSCRIPT_POLISH_MAX_NOTE_CHARS = 2000;
 
+/**
+ * Chunking for the parallel runner: a selection bigger than this is split into
+ * independent requests that run concurrently, so polishing N blocks costs the
+ * latency of the slowest chunk instead of the sum. Kept above one speaker
+ * block (≤60s / ≤420 chars) so a single block is always one request.
+ */
+export const TRANSCRIPT_POLISH_CHUNK_SEGMENTS = 8;
+export const TRANSCRIPT_POLISH_CHUNK_CHARS = 1500;
+export const TRANSCRIPT_POLISH_PARALLELISM = 3;
+
+/**
+ * Split a validated selection into request-sized chunks, in order. A segment
+ * is never split; only oversize *selections* are.
+ */
+export function chunkPolishTargets(
+  targets: PolishLine[],
+  maxSegments = TRANSCRIPT_POLISH_CHUNK_SEGMENTS,
+  maxChars = TRANSCRIPT_POLISH_CHUNK_CHARS
+): PolishLine[][] {
+  const chunks: PolishLine[][] = [];
+  let current: PolishLine[] = [];
+  let chars = 0;
+  for (const target of targets) {
+    const length = target.text.length;
+    if (current.length > 0 && (current.length >= maxSegments || chars + length > maxChars)) {
+      chunks.push(current);
+      current = [];
+      chars = 0;
+    }
+    current.push(target);
+    chars += length;
+  }
+  if (current.length > 0) chunks.push(current);
+  return chunks;
+}
+
+/**
+ * Read-only neighbours of lines[startIndex..endIndex], capped per side. Both
+ * sides keep the lines *closest* to the selection when the char cap binds
+ * (the after side walks forward, the before side walks backward).
+ */
+export function slicePolishContext(
+  lines: PolishLine[],
+  startIndex: number,
+  endIndex: number,
+  maxChars = TRANSCRIPT_POLISH_MAX_CONTEXT_CHARS,
+  maxSegments = TRANSCRIPT_POLISH_CONTEXT_SEGMENTS
+): { before: PolishLine[]; after: PolishLine[] } {
+  const beforeAll = lines.slice(Math.max(0, startIndex - maxSegments), startIndex);
+  const before: PolishLine[] = [];
+  let total = 0;
+  for (let i = beforeAll.length - 1; i >= 0; i -= 1) {
+    const length = beforeAll[i].text.length;
+    if (total + length > maxChars) break;
+    total += length;
+    before.unshift(beforeAll[i]);
+  }
+
+  const afterAll = lines.slice(endIndex + 1, endIndex + 1 + maxSegments);
+  const after: PolishLine[] = [];
+  total = 0;
+  for (const line of afterAll) {
+    const length = line.text.length;
+    if (total + length > maxChars) break;
+    total += length;
+    after.push(line);
+  }
+
+  return { before, after };
+}
+
+/**
+ * Latency scales with input size (reasoning tokens ≈ input chars), so a small
+ * selection gets a proportionally small context window instead of the full
+ * caps. Floors keep enough neighbourhood for homophone disambiguation.
+ */
+export function polishContextCharCap(selectionChars: number): number {
+  return Math.min(TRANSCRIPT_POLISH_MAX_CONTEXT_CHARS, Math.max(600, selectionChars * 3));
+}
+
+export function polishNoteCharCap(selectionChars: number): number {
+  return Math.min(
+    TRANSCRIPT_POLISH_MAX_NOTE_CHARS,
+    Math.max(300, Math.round(selectionChars * 1.5))
+  );
+}
+
 const SYSTEM_RULES = `You are a transcript proofreader. You fix speech-to-text errors in the transcript segments you are given.
 
 ABSOLUTE OUTPUT RULES:
@@ -149,6 +236,8 @@ export interface BuildTranscriptPolishMessagesInput {
   /** Note body used as terminology context only. */
   noteContent?: string | null;
   customDictionary?: string[];
+  /** Per-request note cap; defaults to TRANSCRIPT_POLISH_MAX_NOTE_CHARS. */
+  maxNoteChars?: number;
 }
 
 export function buildTranscriptPolishMessages({
@@ -157,6 +246,7 @@ export function buildTranscriptPolishMessages({
   after = [],
   noteContent,
   customDictionary,
+  maxNoteChars,
 }: BuildTranscriptPolishMessagesInput): TranscriptPolishMessages {
   const sections: string[] = [];
 
@@ -182,7 +272,10 @@ export function buildTranscriptPolishMessages({
     );
   }
 
-  const note = collapse(noteContent ?? "").slice(0, TRANSCRIPT_POLISH_MAX_NOTE_CHARS);
+  const note = collapse(noteContent ?? "").slice(
+    0,
+    maxNoteChars ?? TRANSCRIPT_POLISH_MAX_NOTE_CHARS
+  );
   if (note) {
     sections.push(
       [

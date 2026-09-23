@@ -2073,6 +2073,9 @@
       "run": "Rifinisci con IA",
       "clearSelection": "Cancella selezione",
       "select": "Seleziona questo segmento",
+      "progress": "Perfezionamento… {{done}}/{{total}}",
+      "dictionaryHint": "Fai clic su una modifica evidenziata per salvarla nel dizionario delle correzioni",
+      "pairTitle": "Salva nel dizionario delle correzioni",
       "error": {
         "no-selection": "Seleziona prima i segmenti della trascrizione da rifinire",
         "non-contiguous": "Si può rifinire solo una sequenza contigua di segmenti",

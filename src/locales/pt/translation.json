@@ -2073,6 +2073,9 @@
       "run": "Polir com IA",
       "clearSelection": "Limpar seleção",
       "select": "Selecionar este segmento",
+      "progress": "Aperfeiçoando… {{done}}/{{total}}",
+      "dictionaryHint": "Clique numa alteração realçada para a guardar no dicionário de correções",
+      "pairTitle": "Guardar no dicionário de correções",
       "error": {
         "no-selection": "Selecione primeiro os segmentos da transcrição que deseja polir",
         "non-contiguous": "Só é possível polir uma sequência contígua de segmentos",

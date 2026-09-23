@@ -2073,6 +2073,9 @@
       "run": "AI 校正",
       "clearSelection": "選択を解除",
       "select": "このセグメントを選択",
+      "progress": "ポリッシュ中… {{done}}/{{total}}",
+      "dictionaryHint": "ハイライトされた変更をクリックすると修正辞書に保存できます",
+      "pairTitle": "修正辞書に保存",
       "error": {
         "no-selection": "先に校正する文字起こしのセグメントを選択してください",
         "non-contiguous": "校正できるのは連続したセグメントのみです",

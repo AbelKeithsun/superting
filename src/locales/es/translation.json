@@ -2073,6 +2073,9 @@
       "run": "Pulir con IA",
       "clearSelection": "Borrar selección",
       "select": "Seleccionar este segmento",
+      "progress": "Puliendo… {{done}}/{{total}}",
+      "dictionaryHint": "Haz clic en un cambio resaltado para guardarlo en el diccionario de correcciones",
+      "pairTitle": "Guardar en el diccionario de correcciones",
       "error": {
         "no-selection": "Selecciona primero los segmentos de la transcripción que quieres pulir",
         "non-contiguous": "Solo se puede pulir una secuencia contigua de segmentos",

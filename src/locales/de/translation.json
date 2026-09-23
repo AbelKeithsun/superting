@@ -2074,6 +2074,9 @@
       "run": "KI-Überarbeitung",
       "clearSelection": "Auswahl aufheben",
       "select": "Dieses Segment auswählen",
+      "progress": "Optimierung läuft… {{done}}/{{total}}",
+      "dictionaryHint": "Klicken Sie auf eine hervorgehobene Änderung, um sie im Korrekturwörterbuch zu speichern",
+      "pairTitle": "Im Korrekturwörterbuch speichern",
       "error": {
         "no-selection": "Wähle zuerst die zu überarbeitenden Transkriptsegmente aus",
         "non-contiguous": "Nur eine zusammenhängende Folge von Segmenten kann überarbeitet werden",

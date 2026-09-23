@@ -2073,6 +2073,9 @@
       "run": "AI 潤色",
       "clearSelection": "清除選取",
       "select": "選取此段落",
+      "progress": "潤飾中… {{done}}/{{total}}",
+      "dictionaryHint": "點擊反白的改動，存入糾錯詞典",
+      "pairTitle": "存入糾錯詞典",
       "error": {
         "no-selection": "請先選取要潤色的轉錄段落",
         "non-contiguous": "只能潤色連續的段落",

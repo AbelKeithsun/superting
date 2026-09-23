@@ -35,8 +35,12 @@ export default function CorrectionSubmitDialog({
   onSaved,
 }: CorrectionSubmitDialogProps) {
   const { t } = useTranslation();
-  const { customDictionary, customDictionaryAliases, setCustomDictionary, setCustomDictionaryAliases } =
-    useSettings();
+  const {
+    customDictionary,
+    customDictionaryAliases,
+    setCustomDictionary,
+    setCustomDictionaryAliases,
+  } = useSettings();
   const [rows, setRows] = useState<CorrectionSubmitDraft[]>(drafts);
 
   useEffect(() => {
@@ -73,6 +77,16 @@ export default function CorrectionSubmitDialog({
 
     setCustomDictionary(nextDictionary);
     setCustomDictionaryAliases(nextAliases);
+    // Persist to SQLite as well — the store write above is localStorage-only,
+    // and the main-process pipelines (ASR prompt, replacement aliases, agent
+    // CLI/MCP dictionary) read the database. The broadcasts refresh the store
+    // with the same values, so this is idempotent.
+    try {
+      void window.electronAPI?.setDictionary?.(nextDictionary);
+      void window.electronAPI?.setDictionaryAliases?.(nextAliases);
+    } catch {
+      // Bridge unavailable (browser dev) — the store write still applies.
+    }
     onSaved?.(valid.length);
     onOpenChange(false);
   }, [

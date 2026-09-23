@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { AlertTriangle, Check, Loader2, Sparkles } from "lucide-react";
+import { AlertTriangle, BookPlus, Check, Loader2, Sparkles } from "lucide-react";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "../ui/dialog";
 import { Button } from "../ui/button";
+import InlineDiffText from "./InlineDiffText";
+import CorrectionSubmitDialog, { type CorrectionSubmitDraft } from "./CorrectionSubmitDialog";
 import {
   runTranscriptPolish,
   TranscriptPolishError,
@@ -52,6 +54,9 @@ export default function TranscriptPolishDialog({
   const [errorReason, setErrorReason] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState("");
   const [excluded, setExcluded] = useState<Record<string, boolean>>({});
+  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
+  const [correctionDrafts, setCorrectionDrafts] = useState<CorrectionSubmitDraft[]>([]);
+  const [correctionOpen, setCorrectionOpen] = useState(false);
   const selectionKey = selectedIds.join("\u0000");
 
   const lineById = useMemo(() => new Map(lines.map((line) => [line.id ?? "", line])), [lines]);
@@ -62,6 +67,7 @@ export default function TranscriptPolishDialog({
     setErrorMessage("");
     setResult(null);
     setExcluded({});
+    setProgress(null);
     try {
       const next = await runTranscriptPolish({
         lines,
@@ -70,6 +76,7 @@ export default function TranscriptPolishDialog({
         modelId,
         isCloudMode,
         noteId,
+        onProgress: (done, total) => setProgress({ done, total }),
       });
       setResult(next);
       setStatus("ready");
@@ -113,103 +120,129 @@ export default function TranscriptPolishDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Sparkles size={15} />
-            {t("notes.transcript.polish.title")}
-          </DialogTitle>
-        </DialogHeader>
+    <>
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent className="max-w-3xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Sparkles size={15} />
+              {t("notes.transcript.polish.title")}
+            </DialogTitle>
+          </DialogHeader>
 
-        <p className="text-xs text-muted-foreground">
-          {t("notes.transcript.polish.subtitle", { count: selectedIds.length })}
-        </p>
+          <p className="text-xs text-muted-foreground">
+            {t("notes.transcript.polish.subtitle", { count: selectedIds.length })}
+          </p>
 
-        {status === "loading" && (
-          <div className="flex items-center gap-2 py-10 text-sm text-muted-foreground">
-            <Loader2 size={14} className="animate-spin" />
-            {t("notes.transcript.polish.loading")}
-          </div>
-        )}
-
-        {status === "error" && (
-          <div className="flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive">
-            <AlertTriangle size={13} className="mt-0.5 shrink-0" />
-            <span>{errorText}</span>
-          </div>
-        )}
-
-        {status === "ready" && result && (
-          <div className="space-y-3">
-            {result.updates.length === 0 ? (
-              <p className="py-6 text-center text-sm text-muted-foreground">
-                {t("notes.transcript.polish.empty")}
-              </p>
-            ) : (
-              <>
-                {result.missingIds.length > 0 && (
-                  <div className="flex items-start gap-2 rounded-md border border-amber-300/60 bg-amber-50/70 px-3 py-2 text-xs text-amber-900">
-                    <AlertTriangle size={13} className="mt-0.5 shrink-0" />
-                    <span>
-                      {t("notes.transcript.polish.missing", { count: result.missingIds.length })}
-                    </span>
-                  </div>
-                )}
-                <div className="max-h-[52vh] space-y-2 overflow-y-auto pr-1">
-                  {result.updates.map((update) => {
-                    const included = !excluded[update.id];
-                    return (
-                      <div
-                        key={update.id}
-                        className="rounded-md border border-border/60 px-3 py-2 text-[13px] leading-6"
-                      >
-                        <div className="mb-1 flex items-center justify-between gap-2">
-                          <span className="text-[11px] tabular-nums text-muted-foreground/70">
-                            {lineById.get(update.id)?.label ?? ""}
-                          </span>
-                          <button
-                            type="button"
-                            aria-pressed={included}
-                            onClick={() =>
-                              setExcluded((prev) => ({ ...prev, [update.id]: included }))
-                            }
-                            className="inline-flex items-center gap-1 rounded-md border border-border/60 px-2 py-0.5 text-[11px] text-muted-foreground transition-colors hover:text-foreground"
-                          >
-                            <Check
-                              size={11}
-                              className={included ? "text-emerald-600" : "text-muted-foreground/30"}
-                            />
-                            {t("notes.transcript.polish.include")}
-                          </button>
-                        </div>
-                        <p className="whitespace-pre-wrap text-muted-foreground line-through decoration-muted-foreground/30">
-                          {update.previousText}
-                        </p>
-                        <p className="whitespace-pre-wrap text-slate-950">{update.text}</p>
-                      </div>
-                    );
-                  })}
-                </div>
-              </>
-            )}
-          </div>
-        )}
-
-        <DialogFooter className="gap-2">
-          {status === "error" && (
-            <Button variant="outline" onClick={() => void run()}>
-              {t("notes.transcript.polish.retry")}
-            </Button>
+          {status === "loading" && (
+            <div className="flex items-center gap-2 py-10 text-sm text-muted-foreground">
+              <Loader2 size={14} className="animate-spin" />
+              {progress && progress.total > 1
+                ? t("notes.transcript.polish.progress", {
+                    done: progress.done,
+                    total: progress.total,
+                  })
+                : t("notes.transcript.polish.loading")}
+            </div>
           )}
-          <Button variant="ghost" onClick={() => onOpenChange(false)}>
-            {t("notes.transcript.polish.cancel")}
-          </Button>
-          <Button disabled={status !== "ready" || acceptedUpdates.length === 0} onClick={handleApply}>
-            {t("notes.transcript.polish.apply", { count: acceptedUpdates.length })}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+
+          {status === "error" && (
+            <div className="flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive">
+              <AlertTriangle size={13} className="mt-0.5 shrink-0" />
+              <span>{errorText}</span>
+            </div>
+          )}
+
+          {status === "ready" && result && (
+            <div className="space-y-3">
+              {result.updates.length === 0 ? (
+                <p className="py-6 text-center text-sm text-muted-foreground">
+                  {t("notes.transcript.polish.empty")}
+                </p>
+              ) : (
+                <>
+                  {result.missingIds.length > 0 && (
+                    <div className="flex items-start gap-2 rounded-md border border-amber-300/60 bg-amber-50/70 px-3 py-2 text-xs text-amber-900">
+                      <AlertTriangle size={13} className="mt-0.5 shrink-0" />
+                      <span>
+                        {t("notes.transcript.polish.missing", { count: result.missingIds.length })}
+                      </span>
+                    </div>
+                  )}
+                  <p className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                    <BookPlus size={12} className="shrink-0" />
+                    {t("notes.transcript.polish.dictionaryHint")}
+                  </p>
+                  <div className="max-h-[52vh] space-y-2 overflow-y-auto pr-1">
+                    {result.updates.map((update) => {
+                      const included = !excluded[update.id];
+                      return (
+                        <div
+                          key={update.id}
+                          className="rounded-md border border-border/60 px-3 py-2 text-[13px] leading-6"
+                        >
+                          <div className="mb-1 flex items-center justify-between gap-2">
+                            <span className="text-[11px] tabular-nums text-muted-foreground/70">
+                              {lineById.get(update.id)?.label ?? ""}
+                            </span>
+                            <button
+                              type="button"
+                              aria-pressed={included}
+                              onClick={() =>
+                                setExcluded((prev) => ({ ...prev, [update.id]: included }))
+                              }
+                              className="inline-flex items-center gap-1 rounded-md border border-border/60 px-2 py-0.5 text-[11px] text-muted-foreground transition-colors hover:text-foreground"
+                            >
+                              <Check
+                                size={11}
+                                className={
+                                  included ? "text-emerald-600" : "text-muted-foreground/30"
+                                }
+                              />
+                              {t("notes.transcript.polish.include")}
+                            </button>
+                          </div>
+                          <InlineDiffText
+                            oldText={update.previousText}
+                            newText={update.text}
+                            className="text-[13px] text-slate-950 dark:text-foreground"
+                            onCorrectionClick={(from, to) => {
+                              setCorrectionDrafts([{ from, to }]);
+                              setCorrectionOpen(true);
+                            }}
+                          />
+                        </div>
+                      );
+                    })}
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+
+          <DialogFooter className="gap-2">
+            {status === "error" && (
+              <Button variant="outline" onClick={() => void run()}>
+                {t("notes.transcript.polish.retry")}
+              </Button>
+            )}
+            <Button variant="ghost" onClick={() => onOpenChange(false)}>
+              {t("notes.transcript.polish.cancel")}
+            </Button>
+            <Button
+              disabled={status !== "ready" || acceptedUpdates.length === 0}
+              onClick={handleApply}
+            >
+              {t("notes.transcript.polish.apply", { count: acceptedUpdates.length })}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      <CorrectionSubmitDialog
+        open={correctionOpen}
+        onOpenChange={setCorrectionOpen}
+        drafts={correctionDrafts}
+      />
+    </>
   );
 }

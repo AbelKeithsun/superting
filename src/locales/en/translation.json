@@ -2115,6 +2115,9 @@
       "run": "AI polish",
       "clearSelection": "Clear selection",
       "select": "Select this segment",
+      "progress": "Polishing… {{done}}/{{total}}",
+      "dictionaryHint": "Click a highlighted change to save it to the correction dictionary",
+      "pairTitle": "Save to correction dictionary",
       "error": {
         "no-selection": "Select the transcript segments to polish first",
         "non-contiguous": "Only a contiguous run of segments can be polished",

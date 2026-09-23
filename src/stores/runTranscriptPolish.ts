@@ -3,12 +3,16 @@ import { getSettings } from "./settingsStore";
 import { resolveNoteFormattingRequest } from "./noteFormattingRequest";
 import {
   buildTranscriptPolishMessages,
+  buildTranscriptPolishSystemPrompt,
   buildTranscriptPolishUpdates,
+  chunkPolishTargets,
   parseTranscriptPolishResponse,
-  TRANSCRIPT_POLISH_CONTEXT_SEGMENTS,
-  TRANSCRIPT_POLISH_MAX_CONTEXT_CHARS,
+  polishContextCharCap,
+  polishNoteCharCap,
+  slicePolishContext,
   TRANSCRIPT_POLISH_MAX_SELECTION_CHARS,
   TRANSCRIPT_POLISH_MAX_SELECTION_SEGMENTS,
+  TRANSCRIPT_POLISH_PARALLELISM,
   type PolishLine,
   type TranscriptPolishUpdate,
 } from "./transcriptPolishCore";
@@ -48,6 +52,8 @@ export interface RunTranscriptPolishInput {
   modelId?: string;
   isCloudMode?: boolean;
   noteId?: number;
+  /** Progress for multi-chunk runs: (completed chunks, total chunks). */
+  onProgress?: (done: number, total: number) => void;
 }
 
 export interface RunTranscriptPolishResult {
@@ -58,30 +64,23 @@ export interface RunTranscriptPolishResult {
   selectionChars: number;
 }
 
-function sliceContext(
-  lines: PolishLine[],
-  startIndex: number,
-  endIndex: number
-): { before: PolishLine[]; after: PolishLine[] } {
-  const before = lines.slice(
-    Math.max(0, startIndex - TRANSCRIPT_POLISH_CONTEXT_SEGMENTS),
-    startIndex
-  );
-  const after = lines.slice(endIndex + 1, endIndex + 1 + TRANSCRIPT_POLISH_CONTEXT_SEGMENTS);
-  const cap = (list: PolishLine[]): PolishLine[] => {
-    let total = 0;
-    const kept: PolishLine[] = [];
-    // Keep the neighbours closest to the selection when the context is long.
-    for (let i = list.length - 1; i >= 0; i -= 1) {
-      const line = list[i];
-      const length = line.text.length;
-      if (total + length > TRANSCRIPT_POLISH_MAX_CONTEXT_CHARS) break;
-      total += length;
-      kept.unshift(line);
+/** Run `fn` over `items` with at most `limit` in flight, preserving order. */
+async function mapPool<T, R>(
+  items: T[],
+  limit: number,
+  fn: (item: T, index: number) => Promise<R>
+): Promise<R[]> {
+  const results = new Array<R>(items.length);
+  let cursor = 0;
+  const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (cursor < items.length) {
+      const index = cursor;
+      cursor += 1;
+      results[index] = await fn(items[index], index);
     }
-    return kept;
-  };
-  return { before: cap(before), after: cap(after) };
+  });
+  await Promise.all(workers);
+  return results;
 }
 
 /**
@@ -91,6 +90,14 @@ function sliceContext(
  * budget scales with the *selection*, so a long meeting never runs into the
  * output ceiling that made the whole-transcript "优化转录文本" action fail, and
  * nothing outside the selection can be touched.
+ *
+ * Latency levers (interactive UX — the user is staring at a spinner):
+ * - reasoning effort is pinned low (disableThinking) — a proofreading pass
+ *   does not need deep thought, and on deepseek-flash the default effort was
+ *   the dominant cost;
+ * - context/note windows scale with the selection instead of maxing out;
+ * - a multi-block selection is chunked and the chunks run in parallel, so
+ *   wall-clock ≈ the slowest chunk instead of the sum.
  */
 export async function runTranscriptPolish({
   lines,
@@ -99,6 +106,7 @@ export async function runTranscriptPolish({
   modelId,
   isCloudMode = false,
   noteId,
+  onProgress,
 }: RunTranscriptPolishInput): Promise<RunTranscriptPolishResult> {
   const operationId = `note-${noteId ?? -1}-transcript-polish-${Date.now()}`;
   const selected = new Set(selectedIds);
@@ -134,29 +142,41 @@ export async function runTranscriptPolish({
     );
   }
 
-  const { before, after } = sliceContext(lines, startIndex, endIndex);
-  const { systemPrompt, userMessage } = buildTranscriptPolishMessages({
-    targets,
-    before,
-    after,
-    noteContent,
-    customDictionary: getSettings().customDictionary,
-  });
+  const customDictionary = getSettings().customDictionary;
+  const chunks = chunkPolishTargets(targets);
+  // Each chunk's offset within `targets`, so its context slice can be located
+  // in the full `lines` array.
+  const chunkStartOffsets: number[] = [];
+  {
+    let offset = 0;
+    for (const chunk of chunks) {
+      chunkStartOffsets.push(offset);
+      offset += chunk.length;
+    }
+  }
 
-  const { selectedModel, reasoningConfig, resolvedFormatting, hasModel } =
+  const resolveChunk = (chunk: PolishLine[], chunkChars: number, systemPrompt: string) =>
     resolveNoteFormattingRequest({
       modelId,
       systemPrompt,
       isCloudMode,
-      // Only the selected segments are re-emitted, so the budget follows the
-      // selection size rather than the whole transcript.
+      // Only the chunk's segments are re-emitted, so the budget follows the
+      // chunk size rather than the whole selection.
       maxTokensForProvider: (provider) =>
-        computeNoteActionMaxTokens(selectionChars, noteActionMaxTokensCeiling(provider)),
+        computeNoteActionMaxTokens(chunkChars, noteActionMaxTokensCeiling(provider)),
       timeoutMs: NOTE_ACTION_REQUEST_TIMEOUT_MS,
       temperature: 0.2,
+      disableThinking: true,
     });
 
-  if (!hasModel) {
+  // Fail fast on "no model configured" before firing any request.
+  const firstChunkChars = chunks[0].reduce((total, line) => total + line.text.length, 0);
+  const probe = resolveChunk(
+    chunks[0],
+    firstChunkChars,
+    buildTranscriptPolishSystemPrompt(customDictionary)
+  );
+  if (!probe.hasModel) {
     throw new Error("No AI model selected");
   }
 
@@ -165,45 +185,86 @@ export async function runTranscriptPolish({
     noteId: noteId ?? -1,
     segmentCount: targets.length,
     selectionChars,
-    contextBefore: before.length,
-    contextAfter: after.length,
-    selectedModel,
-    resolvedMode: resolvedFormatting.mode,
-    provider: resolvedFormatting.provider || null,
+    chunkCount: chunks.length,
+    selectedModel: probe.selectedModel,
+    resolvedMode: probe.resolvedFormatting.mode,
+    provider: probe.resolvedFormatting.provider || null,
   });
 
-  const raw = await reasoningService.processText(userMessage, selectedModel, null, reasoningConfig);
+  onProgress?.(0, chunks.length);
+  let done = 0;
 
-  const parsed = parseTranscriptPolishResponse(raw, targets);
-  if (parsed.entries.length === 0) {
-    logNoteAction(
-      "TRANSCRIPT_POLISH_UNPARSED",
-      {
-        operationId,
-        noteId: noteId ?? -1,
-        segmentCount: targets.length,
+  const results = await mapPool(
+    chunks,
+    TRANSCRIPT_POLISH_PARALLELISM,
+    async (chunk, chunkIndex) => {
+      const chunkChars = chunk.reduce((total, line) => total + line.text.length, 0);
+      const offset = chunkStartOffsets[chunkIndex];
+      const { before, after } = slicePolishContext(
+        lines,
+        startIndex + offset,
+        startIndex + offset + chunk.length - 1,
+        polishContextCharCap(chunkChars)
+      );
+      const { systemPrompt, userMessage } = buildTranscriptPolishMessages({
+        targets: chunk,
+        before,
+        after,
+        noteContent,
+        customDictionary,
+        maxNoteChars: polishNoteCharCap(chunkChars),
+      });
+      const { selectedModel, reasoningConfig } = resolveChunk(chunk, chunkChars, systemPrompt);
+
+      const raw = await reasoningService.processText(
+        userMessage,
         selectedModel,
-        responseLength: String(raw ?? "").length,
-        responseHead: String(raw ?? "").slice(0, 300),
-      },
-      "error"
-    );
-    throw new TranscriptPolishError(
-      "unparsed-response",
-      "The model did not return one line per selected segment"
-    );
-  }
+        null,
+        reasoningConfig
+      );
 
-  const { updates, missingIds } = buildTranscriptPolishUpdates(targets, parsed);
+      const parsed = parseTranscriptPolishResponse(raw, chunk);
+      if (parsed.entries.length === 0) {
+        logNoteAction(
+          "TRANSCRIPT_POLISH_UNPARSED",
+          {
+            operationId,
+            noteId: noteId ?? -1,
+            chunkIndex,
+            segmentCount: chunk.length,
+            selectedModel,
+            responseLength: String(raw ?? "").length,
+            responseHead: String(raw ?? "").slice(0, 300),
+          },
+          "error"
+        );
+        throw new TranscriptPolishError(
+          "unparsed-response",
+          "The model did not return one line per selected segment"
+        );
+      }
+
+      done += 1;
+      onProgress?.(done, chunks.length);
+      return { ...buildTranscriptPolishUpdates(chunk, parsed), mode: parsed.mode };
+    }
+  );
+
+  const updates = results.flatMap((result) => result.updates);
+  const missingIds = results.flatMap((result) => result.missingIds);
+  const mode = results.every((result) => result.mode === "ordered-lines")
+    ? "ordered-lines"
+    : "numbered";
+
   logNoteAction("TRANSCRIPT_POLISH_RESULT", {
     operationId,
     noteId: noteId ?? -1,
     segmentCount: targets.length,
+    chunkCount: chunks.length,
     changedCount: updates.length,
     missingCount: missingIds.length,
-    mode: parsed.mode,
-    duplicated: parsed.duplicated,
+    mode,
   });
 
-  return { updates, missingIds, mode: parsed.mode, selectionChars };
+  return { updates, missingIds, mode, selectionChars };
 }

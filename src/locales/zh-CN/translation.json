@@ -2077,6 +2077,9 @@
       "run": "AI 润色",
       "clearSelection": "清除选择",
       "select": "选择此段落",
+      "progress": "润色中… {{done}}/{{total}}",
+      "dictionaryHint": "点击高亮的改动，存入纠错词典",
+      "pairTitle": "存入纠错词典",
       "error": {
         "no-selection": "请先选择要润色的转录段落",
         "non-contiguous": "只能润色连续的段落",
