@@ -22,6 +22,7 @@ import {
   NOTE_ACTION_REQUEST_TIMEOUT_MS,
 } from "./noteActionBudget.js";
 import { logNoteAction } from "./noteActionLogger";
+import { baseSegmentIdForDisplayChunk } from "../utils/speakerAssignment";
 
 export type TranscriptPolishErrorReason =
   | "no-selection"
@@ -109,7 +110,10 @@ export async function runTranscriptPolish({
   onProgress,
 }: RunTranscriptPolishInput): Promise<RunTranscriptPolishResult> {
   const operationId = `note-${noteId ?? -1}-transcript-polish-${Date.now()}`;
-  const selected = new Set(selectedIds);
+  // Defensive: the transcript view splits long segments into display-only
+  // chunks with synthetic `:part-N` ids. Normalise back to real segment ids so
+  // a continuation block can never miss every line and read as "no selection".
+  const selected = new Set(selectedIds.map(baseSegmentIdForDisplayChunk));
   const indices = lines
     .map((line, index) => (line.id && selected.has(line.id) ? index : -1))
     .filter((index) => index >= 0);

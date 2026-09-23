@@ -18,7 +18,11 @@ import {
 } from "../../utils/currentPageFind";
 import { formatTranscriptTimestamp } from "../../utils/recordingTime";
 import { buildLiveTranscriptItems } from "../../utils/liveTranscriptStream";
-import { buildTranscriptSpeakerBlocks, type TranscriptSpeakerBlock } from "../../utils/speakerAssignment";
+import {
+  baseSegmentIdForDisplayChunk,
+  buildTranscriptSpeakerBlocks,
+  type TranscriptSpeakerBlock,
+} from "../../utils/speakerAssignment";
 
 const SPEAKER_COLORS = [
   "text-sky-500",
@@ -342,13 +346,14 @@ function SpeakerPicker({ speakerProfiles, participants, onSelectName, t }: Speak
               <button
                 key={p.personId != null ? `person-${p.personId}` : `email-${p.email ?? ""}`}
                 onClick={() =>
-                  onSelectName(p.displayName || (p.email ? p.email.split("@")[0] : ""), p.email ?? null)
+                  onSelectName(
+                    p.displayName || (p.email ? p.email.split("@")[0] : ""),
+                    p.email ?? null
+                  )
                 }
                 className="flex items-center gap-2 w-full px-2 py-1.5 rounded-md text-xs text-foreground/70 hover:bg-foreground/5 transition-colors cursor-pointer"
               >
-                <span className="truncate flex-1 text-left">
-                  {p.displayName || p.email}
-                </span>
+                <span className="truncate flex-1 text-left">{p.displayName || p.email}</span>
                 {p.displayName && p.email && (
                   <span className="text-foreground/30 truncate text-[11px]">{p.email}</span>
                 )}
@@ -504,7 +509,7 @@ function SpeakerLabel({
     mappedName ||
     (isOriginallyYou
       ? t("notes.speaker.you")
-      : fallbackLabel ?? t("notes.speaker.label", { n: getSpeakerNumber(speakerId) }));
+      : (fallbackLabel ?? t("notes.speaker.label", { n: getSpeakerNumber(speakerId) })));
   const isUnmapped = !mappedName && !segment.speakerName;
 
   return (
@@ -782,19 +787,21 @@ export function MeetingTranscriptChat({
   const canPolishSegments = !isEditing && !isRecording && !!onPolishSegments;
 
   // Both render shapes (a single segment, or a speaker block) carry an id.
-  const blockIdOf = (item: TranscriptSegment | TranscriptSpeakerBlock<TranscriptSegment>) => item.id;
+  const blockIdOf = (item: TranscriptSegment | TranscriptSpeakerBlock<TranscriptSegment>) =>
+    item.id;
 
   const selectedBlockIdSet = useMemo(() => new Set(selectedBlockIds), [selectedBlockIds]);
 
-  const selectedSegmentIds = useMemo(
-    () =>
-      speakerBlocks.flatMap((item) => {
-        if (!selectedBlockIdSet.has(blockIdOf(item))) return [];
-        const blockSegments = "segments" in item ? item.segments : [item];
-        return blockSegments.map((blockSegment) => blockSegment.id);
-      }),
-    [selectedBlockIdSet, speakerBlocks]
-  );
+  const selectedSegmentIds = useMemo(() => {
+    const ids = speakerBlocks.flatMap((item) => {
+      if (!selectedBlockIdSet.has(blockIdOf(item))) return [];
+      const blockSegments = "segments" in item ? item.segments : [item];
+      // Display chunks of one long segment carry synthetic `:part-N` ids —
+      // collapse them to the real segment id the polish pipeline matches on.
+      return blockSegments.map((blockSegment) => baseSegmentIdForDisplayChunk(blockSegment.id));
+    });
+    return Array.from(new Set(ids));
+  }, [selectedBlockIdSet, speakerBlocks]);
 
   const toggleBlockSelection = (blockId: string, extend: boolean) => {
     if (!canPolishSegments) return;
@@ -834,9 +841,7 @@ export function MeetingTranscriptChat({
   const startInlineBlockEdit = (blockId: string, blockSegments: TranscriptSegment[]) => {
     if (!canEditInlineSegments) return;
     setInlineEditingBlockId(blockId);
-    setInlineDrafts(
-      Object.fromEntries(blockSegments.map((segment) => [segment.id, segment.text]))
-    );
+    setInlineDrafts(Object.fromEntries(blockSegments.map((segment) => [segment.id, segment.text])));
   };
 
   const commitInlineDraft = (segmentId: string) => {
@@ -963,10 +968,7 @@ export function MeetingTranscriptChat({
                         if (event.key === "Escape") {
                           event.preventDefault();
                           cancelLiveEdit();
-                        } else if (
-                          event.key === "Enter" &&
-                          (event.metaKey || event.ctrlKey)
-                        ) {
+                        } else if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
                           event.preventDefault();
                           commitLiveEdit();
                         }
@@ -1082,10 +1084,7 @@ export function MeetingTranscriptChat({
               matchedProfile.id != null &&
               !matchedProfile.email &&
               !!onAttachSpeakerEmail;
-            const timestampLabel = formatTranscriptTimestamp(
-              segment.timestamp,
-              timelineStartedAt
-            );
+            const timestampLabel = formatTranscriptTimestamp(segment.timestamp, timelineStartedAt);
             const fallbackSpeakerLabel =
               segment.speakerMatchStatus === "unmatched"
                 ? t("notes.speaker.unmatchedSpeaker")
@@ -1096,9 +1095,7 @@ export function MeetingTranscriptChat({
             const isBlockSelected = selectedBlockIdSet.has(blockId);
             const isActiveSegment =
               activeSegmentId === blockId ||
-              blockSegments.some(
-              (blockSegment) => activeSegmentId === blockSegment.id
-            );
+              blockSegments.some((blockSegment) => activeSegmentId === blockSegment.id);
             const seekTarget = { id: blockId, timestamp: item.timestamp };
 
             const labelElement = (

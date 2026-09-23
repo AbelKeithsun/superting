@@ -117,7 +117,6 @@ const getTranscriptTimestampDeltaSeconds = (from: number, to: number) =>
 const splitTextForDisplay = (text: string, maxLength: number | null) => {
   const normalized = text.trim();
   if (!maxLength || normalized.length <= maxLength) return [normalized];
-
   const chunks: string[] = [];
   let remaining = normalized;
   while (remaining.length > maxLength) {
@@ -140,6 +139,14 @@ const splitTextForDisplay = (text: string, maxLength: number | null) => {
   if (remaining) chunks.push(remaining);
   return chunks.filter(Boolean);
 };
+
+/**
+ * A segment longer than the display cap is split into display-only chunks whose
+ * ids carry a `:part-N` suffix (see buildTranscriptSpeakerBlocks). Storage and
+ * the polish pipeline only know the real segment id — strip the suffix to map
+ * a display-chunk id back to its segment.
+ */
+export const baseSegmentIdForDisplayChunk = (id: string) => id.replace(/:part-\d+$/, "");
 
 const isUnresolvedProvisionalPlaceholder = (segment: AssignableTranscriptSegment) =>
   segment.speakerIsPlaceholder === true &&

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  baseSegmentIdForDisplayChunk,
   assignSegmentSpeakerName,
   assignSpeakerGroupName,
   buildTranscriptSpeakerBlocks,
@@ -562,4 +563,30 @@ test("session speaker list reports one labelled entry per speaker identity", () 
     { speakerId: "manual_stored-0", label: "王浩", named: true },
     { speakerId: "speaker_1", label: "发言者 2", named: false },
   ]);
+});
+
+test("baseSegmentIdForDisplayChunk maps synthetic chunk ids back to the segment id", () => {
+  assert.equal(baseSegmentIdForDisplayChunk("stored-5:part-2"), "stored-5");
+  assert.equal(baseSegmentIdForDisplayChunk("stored-5:part-12"), "stored-5");
+  assert.equal(baseSegmentIdForDisplayChunk("stored-5"), "stored-5");
+  assert.equal(baseSegmentIdForDisplayChunk("seg-with:colon"), "seg-with:colon");
+});
+
+test("display chunks of a long segment resolve to the real segment id for polish", () => {
+  const longText = "这段话很长。".repeat(80); // 480 chars > maxBlockTextLength
+  const segments = [{ id: "stored-7", text: longText, source: "mic" as const, timestamp: 10 }];
+
+  const blocks = buildTranscriptSpeakerBlocks(segments, {}, labels, {
+    maxBlockDurationSeconds: 60,
+    maxBlockTextLength: 420,
+  });
+
+  assert.ok(blocks.length > 1, "a long segment is split into several display blocks");
+  // Chunk 0 keeps the real id; continuation chunks carry synthetic ids — but
+  // every one of them must map back to "stored-7" for selection/polish.
+  assert.equal(blocks[0].id, "stored-7");
+  const resolved = blocks.flatMap((block) =>
+    block.segments.map((segment) => baseSegmentIdForDisplayChunk(segment.id))
+  );
+  assert.deepEqual(Array.from(new Set(resolved)), ["stored-7"]);
 });
