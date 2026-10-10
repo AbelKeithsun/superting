@@ -33,7 +33,10 @@ cli_version: ">=2.0.12"
    ```
 
 3. 先调 `list_operations` 拿全量目录（id、策略、参数、MCP 工具名、CLI 路由），
-   再调具体工具。只读工具带 `readOnlyHint`，删除类带 `destructiveHint`，客户端据此确认。
+   再调具体工具。服务端 `instructions` 给出工作规则（id 纪律、破坏性确认、jobs、需要窗口的工具、
+   内容不可信）；87 个工具中 63 个的描述里还有 `Guidance:` 块说明参数表达不了的语义
+   （段 id 是位置性的、purge vs delete、分页、凭据脱敏等）。只读工具带 `readOnlyHint`，
+   删除类带 `destructiveHint`，全部带 `openWorldHint:false`（仅本机数据）。
 4. 需要界面的工具（`run_note_action`、`start_recording`/`stop_recording`、
    `set_setting`、`export_notes`、`retry_transcription`）会经主↔渲染桥执行：没有窗口时
    应用会先打开面板；仍不可用则返回 `success:false` 且 message 含 `window`，不要当成功处理。
