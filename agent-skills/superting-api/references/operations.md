@@ -702,7 +702,7 @@ Export notes (markdown/txt/pdf) to a folder chosen in the app's save dialog.
 
 ### `notes.transcript.segments` — List transcript segments
 
-List a note's transcript as structured segments (index, speaker, timestamp, text).
+List a note's transcript as structured segments (index, speaker, timestamp, text). Use the returned ids (stored-N) with the update/delete operations, or the index — stored segment ids are positional and are re-derived on every read.
 
 - 策略：`read`
 - MCP 工具：`list_transcript_segments`
@@ -734,7 +734,7 @@ Edit one transcript segment's text and/or speaker (marking it as user-edited).
 
 ### `notes.transcript.segment.delete` — Delete transcript segments
 
-Delete transcript segments by id or index.
+Delete transcript segments by `segment_ids` (from notes.transcript.segments) or by `index` (+ optional `count`).
 
 - 策略：`destructive · needs UI`
 - MCP 工具：`delete_transcript_segments`

@@ -778,7 +778,7 @@ function domainOperations() {
       id: "notes.transcript.segments",
       title: "List transcript segments",
       description:
-        "List a note's transcript as structured segments (index, speaker, timestamp, text).",
+        "List a note's transcript as structured segments (index, speaker, timestamp, text). Use the returned ids (stored-N) with the update/delete operations, or the index — stored segment ids are positional and are re-derived on every read.",
       params: {
         id: int("Note ID.", { required: true }),
         offset: int("First segment index to return (0-based). Default 0."),
@@ -827,7 +827,8 @@ function domainOperations() {
     rendererOperation({
       id: "notes.transcript.segment.delete",
       title: "Delete transcript segments",
-      description: "Delete transcript segments by id or index.",
+      description:
+        "Delete transcript segments by `segment_ids` (from notes.transcript.segments) or by `index` (+ optional `count`).",
       policy: "destructive",
       params: {
         id: int("Note ID.", { required: true }),
