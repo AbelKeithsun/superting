@@ -101,11 +101,11 @@
 - ✅ **多发言人识别准确率优化**（speaker diarization 已实现，持续优化识别精度）
 - ✅ **UI 及交互性能持续改进**（多轮优化，持续迭代）
 - ✅ **接入国内模型生态**（DeepSeek、通义、智谱、月之暗面等已支持）
-- ✅ **MCP 对接本地 agent**（本地 MCP server 已实现，支持 Codex / Claude Desktop / Cursor）
+- ✅ **MCP 对接本地 agent**（本地 MCP server：86+ 工具，与 CLI 同源生成，支持 Codex / Claude Desktop / Cursor）
 - ✅ **Agent 查询个人数据中心**（`search_notes` 工具已实现，Qdrant + FTS5 双路召回）
 - ✅ **个人工作流自动总结能力**（周报、方案、文章、项目复盘、会议纪要已支持）
 - ✅ **个人知识库检索和问答**（本地向量索引 + 关键字搜索 + RRF 融合）
-- ✅ **Skill 机制封装常用工作流**（`agent-skills/` 目录，已实现两个 skill：`superting-api` + `superting-cli`（渐进式披露结构，`superting-skills` 安装器随版本发布））
+- ✅ **Skill 机制封装常用工作流**（`agent-skills/`：`superting-cli` + `superting-api`，渐进式披露结构；`superting-skills` 安装器随版本发布，支持 `--global` / `--project <dir>` / `--target <dir>`）
 - ✅ **对接本地 Codex、Claude 等 agent 系统**（本地 MCP server + LLM provider roster）
 
 **未来探索方向：**
@@ -172,18 +172,73 @@ SuperTing 可以把桌面上的语音输入变成文本、笔记和行动项。�
 
 ### 4. Agent 数据中心
 
-- 内置本地 MCP server（`@modelcontextprotocol/sdk`），把笔记、转录、搜索能力开放给任何 agent
-- **Agent CLI（`superting` 命令，推荐）**：零依赖本地客户端，直接读写听记笔记（查找替换/追加）、词典热词、热词替换规则等；每条命令一次本地回环 HTTP 调用，无 MCP 会话握手，响应快、开销低。`npm run install:cli` 安装，用法见 `agent-skills/superting-cli/SKILL.md`
-- **Agent Skills 一条命令安装**（与 CLI 同版本发布，渐进式披露结构）：
-  ```sh
-  npx -p https://github.com/AbelKeithsun/superting/releases/download/v<版本>/superting-skills-<版本>.tgz superting-skills --global   # 全局 ~/.agents/skills
-  npx -p <同一资产URL> superting-skills                 # 当前项目 ./.claude/skills
-  npx -p <同一资产URL> superting-skills --project <dir>  # 指定项目
-  npx -p <同一资产URL> superting-skills --check          # 检查版本
-  ```
-- 支持 Codex、Claude Desktop、Cursor 等 MCP 客户端
-- 配合自定义 LLM API（OpenAI / Anthropic / Gemini / DeepSeek / 通义 / 智谱 / Kimi）完成周报、纪要、复盘、问答
-- 本地 agent skill 封装常用工作流（`agent-skills/` 目录：`superting-cli` + `superting-api`）
+SuperTing 把**同一份能力**开放给外部 agent：本地 MCP server（给 Claude Desktop / Cursor / Codex 等 MCP 客户端）与本地 CLI（`superting`）。两者由主进程的同一份操作注册表生成（`src/helpers/appOperations/`），能力集合永远一致——当前 **87 项**，覆盖笔记、会议纪要动作、录音控制、音频文件、转录与段级编辑、联系人/声纹、说话人标注、词典、聊天记录、设置读写。
+
+#### MCP
+
+1. 应用内打开 **设置 → 集成 → 本地 MCP 访问**，启用后生成本地 URL 与 Bearer token（元数据在 `~/.superting/mcp-server.json`，可一键轮换 token；仅监听 127.0.0.1）。
+2. 把下面的配置粘进 MCP 客户端（以 `mcpServers` 为例；url 默认 `http://127.0.0.1:8220/mcp`，端口被占用时会自动顺延）：
+
+   ```json
+   {
+     "mcpServers": {
+       "superting": {
+         "type": "http",
+         "url": "http://127.0.0.1:8220/mcp",
+         "headers": { "Authorization": "Bearer <token>" }
+       }
+     }
+   }
+   ```
+
+3. 工具名与 CLI 能力一一对应（`list_notes`、`search_notes`、`run_note_action`、`list_jobs`、`update_transcript_segment`、`get_settings`…）。先调用 `list_operations` 拿到全量目录与参数。
+4. 需要界面的能力（运行笔记动作、录音启停、导出对话框、写设置）会自动唤起应用窗口；窗口仍不可用时返回明确错误（`renderer_unavailable`），**不会**用旧数据顶替。
+
+#### CLI
+
+```bash
+npm run install:cli          # 符号链接到 ~/.local/bin（SUPERTING_CLI_BIN_DIR 可改目录；只读检出加 --copy）
+superting health             # 应用需正在运行（bridge 由应用进程提供）
+superting ops list           # 列出全部 87 项能力：id / 策略 / CLI 路由 / MCP 工具名 / 参数
+superting call <operation.id> --json '{"…"}'   # 通用兜底：任何能力都能调，参数位置由能力目录决定
+
+superting notes list --limit 5
+superting notes search "funasr" --limit 5
+superting notes update 3 --find "Fun ASR" --replace "FunASR"
+superting notes purge 12                       # 清空回收站里的笔记（破坏性，需 --yes）
+superting transcript segments --id 47 --limit 20          # 分页看转录段落
+superting transcript segment-update --id 47 --json '{"index":0,"text":"改后的文本"}'
+superting actions list                         # 找到「生成会议纪要」的动作 id
+superting call actions.run --json '{"id":1,"note_id":47}'
+superting jobs list                            # 长任务（重新分离/批量压缩/音频转写）：wait=false 时返回 job_id
+superting jobs get <job_id>
+superting recording status / recording start --note-id 47 / recording stop
+superting settings get --key uiLanguage
+```
+
+退出码：0=成功、1=桥接或应用错误、2=用法错误；输出默认 JSON（`--format text` 更易读）；破坏性命令需 `--yes`。常用语义见 `agent-skills/superting-cli/SKILL.md`，全量目录见 `agent-skills/superting-api/references/operations.md`（由注册表生成，勿手改）。
+
+#### Skills（随版本发布的 agent 技能）
+
+`agent-skills/` 内含 `superting-cli`（操作 CLI）与 `superting-api`（HTTP / MCP 兜底），安装器 `superting-skills` 与 CLI 同版本，**支持全局安装或指定项目目录安装**：
+
+```bash
+npm run install:skills                              # 默认装到当前项目 ./.claude/skills
+npm run install:skills -- --global                  # 全局 ~/.agents/skills（SUPERTING_SKILLS_GLOBAL_DIR 可覆盖）
+npm run install:skills -- --project /path/to/repo   # 指定项目：<dir>/.claude/skills
+npm run install:skills -- --target /some/dir        # 逐字指定目录
+npm run install:skills -- --only cli                # 只装其中一个技能
+npm run install:skills -- --list                    # 查看内置技能、目标路径与行数自检
+npm run install:skills -- --check                   # 比对已安装版本
+npm run install:skills -- --remove                  # 卸载
+npm run install:skills -- --force                   # 覆盖本地修改过的技能
+
+# 远端一条命令（版本由 release 资产锁定）
+npx -p https://github.com/AbelKeithsun/superting/releases/download/v<版本>/superting-skills-<版本>.tgz superting-skills --global
+npx -p <同一资产URL> superting-skills --project <dir>
+```
+
+支持 Codex、Claude Desktop、Cursor 等 MCP 客户端；配合自定义 LLM API（OpenAI / Anthropic / Gemini / DeepSeek / 通义 / 智谱 / Kimi）完成周报、纪要、复盘、问答。
 
 ## 快速开始
 

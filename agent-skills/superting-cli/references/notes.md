@@ -59,3 +59,37 @@ superting transcriptions get <id>
 ```
 
 听写（dictation）的转写文本 + 音频元数据（不含音频本体）。
+
+## 转写段落（会议录音的结构化转录）
+
+会议笔记的 `transcript` 是结构化段落数组；下面的命令直接读写单段，用于改错别字、
+指定发言人、删除噪声段。**段 id 每次读取都由应用重派生为 `stored-<index>`**，
+所以要么用列表返回的 id，要么直接用 `index`，不要沿用自己写入的 id。
+
+```sh
+superting transcript segments --id 47 --limit 20          # {total, offset, count, has_more, segments[]}
+superting transcript segment-update --id 47 --json '{"index":0,"text":"修正后的文本"}'
+superting transcript segment-update --id 47 --json '{"index":3,"speaker_name":"张三","speaker":"manual_1","lock":true}'
+superting transcript segment-delete --id 47 --index 12 --count 2
+```
+
+- 改文本会标记 `edited_user: true` 并保留 `original_text`（与编辑器内联编辑一致）。
+- `lock: true` 表示锁定发言人，之后的自动分离不会再覆盖。
+- 纯文本转录（非结构化）会报错 `stores a plain-text transcript, not structured segments`，
+  此时改用 `notes update <id> --find/--replace`。
+- 列表默认 `limit 200`，长会议（上千段）务必分页，避免灌爆上下文。
+
+## 回收站与永久删除
+
+```sh
+superting notes delete <id>          # 软删除（进回收站）
+superting notes purge <id>           # 永久删除（清空回收站里的这一条，不可恢复）
+```
+
+## 导入与导出
+
+```sh
+superting notes import 47 --file-path /abs/path/notes.md --target note   # 或 --target transcript
+superting notes export 47 --format md        # 直接返回文本（无对话框）
+superting notes export-to-disk --json '{"note_ids":[47],"format":"md","fields":["content"]}'   # 走应用保存对话框
+```

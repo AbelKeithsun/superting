@@ -1,59 +1,68 @@
 ---
 name: superting-cli
-description: Operate the local SuperTing desktop app (listening notes 听记笔记, hotwords 词典热词, replacement rules 热词替换, transcriptions, folders, tags) through the `superting` CLI client. Use whenever a task should read or edit the user's local SuperTing data — faster than MCP, writes refresh the app UI live.
-cli_version: ">=2.0.3"
+description: Operate the local SuperTing desktop app (listening notes 听记笔记, meeting transcripts and segments, note actions such as 生成会议纪要, hotwords 词典热词, replacement rules, people/voiceprints, audio files, jobs, settings, recording) through the `superting` CLI client. Use whenever a task should read or edit the user's local SuperTing data — faster than MCP, writes refresh the app UI live.
+cli_version: ">=2.0.12"
 ---
 
 # SuperTing Agent CLI
 
 `superting` 是本机桌面应用的本地客户端：每条命令一次回环 HTTP 调用（无 MCP 握手），
-写入经应用广播，设置/笔记界面实时刷新。所有数据留在本机，无任何托管服务。
+写入经应用广播，界面实时刷新。所有数据留在本机，无任何托管服务。
 
 ## 严格禁止 (NEVER)
 
-- 有 CLI 命令时禁止用 MCP / curl / 裸 HTTP。
-- 禁止猜测任何 id —— id 只能从命令输出提取（`notes list` / `notes search` / `folders list`）。
-- 破坏性命令（`delete`、`dict|alias remove|replace`）必须先向用户确认，同意后才加 `--yes`。
+- 有专用命令时禁止用 MCP / curl / 裸 HTTP；没有专用命令时用 `superting call <operation.id>`，不要手写 HTTP。
+- 禁止猜测任何 id —— id 只能从命令输出提取（`notes list` / `notes search` / `actions list` / `people list`）。
+- 破坏性命令（`delete` / `purge` / `audio delete-all` / `transcriptions clear` / `dict|alias remove|replace` / `people delete|merge`）必须先向用户确认，同意后才加 `--yes`。
 
 ## 严格要求 (MUST)
 
-- 不确定应用是否在运行时，先 `superting health`。
-- 输出默认 JSON：解析它，不要目测。列表场景先用预览（默认截断 500 字），需要全文再 `notes get` / `--full`。
-- 做过编辑后，检查命令返回的最终内容再向用户汇报。
-
-## 前置条件
-
-1. SuperTing 桌面应用正在运行（启动时自动写 bridge 文件）。
-2. `superting` 在 PATH 上。报 `bridge_not_running` 时让用户启动应用，不要循环重试。
+- 不确定应用是否在运行时，先 `superting health`；报 `bridge_not_running` 就让用户启动应用，不要循环重试。
+- 先 `superting ops list` 确认能力与参数（87 项：id、策略、CLI 路由、MCP 工具名、参数位置），不确定的参数不要猜。
+- 输出默认 JSON：解析它。列表默认截断预览，需要全文用 `notes get <id> --full`。
+- 长任务（重新分离、合并音频、批量压缩、音频转写）加 `--wait false` 会立刻返回 `job_id`，再 `jobs get <job_id>` 轮询；不要同步干等几分钟。
+- 需要界面的能力（`actions run`、`recording *`、`settings set`、导出到磁盘、`transcriptions retry`）要求应用窗口存在；返回 `renderer_unavailable` 时提示用户打开应用窗口，不要重试循环。
 
 ## 命令速查
 
-| 领域             | 命令                                                                                    |
-| ---------------- | --------------------------------------------------------------------------------------- |
-| 健康             | `superting health`                                                                      |
-| 笔记             | `notes list / get <id> / search <q> / create / update <id> / append <id> / delete <id>` |
-| 文件夹           | `folders list`、`folders create --name <n>`                                             |
-| 转写             | `transcriptions list / get <id>`                                                        |
-| 标签             | `tags list`                                                                             |
-| 词典（热词）     | `dict list / add <词…> / remove <词…> / replace --words a,b`                            |
-| 替换规则（纠错） | `alias list / add <from> <to> / remove <from…> / replace --json '[{"from","to"}]'`      |
+| 领域     | 命令                                                                                                                                                   |
+| -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 发现     | `ops list`、`call <operation.id> --json '{…}'`（通用兜底）、`health`                                                                                   |
+| 笔记     | `notes list / get <id> [--full] / search <q> / create / update <id> [--find --replace] / append <id> / delete <id> / purge <id>`                       |
+| 转写段落 | `transcript segments --id <n> [--offset --limit]`、`transcript segment-update --id <n> --json '{…}'`、`transcript segment-delete --id <n> --index <i>` |
+| 笔记动作 | `actions list / get <id> / create / update / delete`、`actions run <id> --json '{"note_id":<n>}'`（即「生成会议纪要」）                                |
+| 长任务   | `jobs list`、`jobs get <job_id>`、`jobs cancel <job_id>`；各长命令加 `--wait false`                                                                    |
+| 音频     | `notes audio list --id <n>`、`notes audio compress / merge / rediarize`、`audio usage / retention / compress-all / delete-all`                         |
+| 转录     | `transcriptions list / get <id> / transcribe --file-path <f>`、`transcriptions retry <id>`、`transcriptions clear`                                     |
+| 录音     | `recording status`、`recording start --note-id <n>`、`recording stop`                                                                                  |
+| 联系人   | `people list / get <id> / create / update / delete / merge`、`contacts search <q> / upsert`                                                            |
+| 说话人   | `speakers profiles / names / mappings --id <n>`、`speakers assign`、`speakers name-add / name-delete / email-attach`                                   |
+| 声纹     | `voiceprints segments [--person-id <n>]`、`voiceprints delete-all [--person-id <n>]`                                                                   |
+| 聊天记录 | `chats list / messages <id> / for-note --id <n> / create / archive / delete`                                                                           |
+| 设置     | `settings get [--key <k>]`、`settings set --key <k> --value <v>`（凭据类键被拒绝，需在应用内改）                                                       |
+| 文件夹   | `folders list / create / rename / delete / reorder`                                                                                                    |
+| 标签     | `tags list`                                                                                                                                            |
+| 词典     | `dict list / add / remove / replace`、`dict groups list / create / rename / move / delete`                                                             |
+| 替换规则 | `alias list / add <from> <to> / remove <from…> / replace --json '[{"from","to"}]'`                                                                     |
+| 导入导出 | `notes import <id> --file-path <f>`、`notes export-to-disk --json '{"note_ids":[1],"format":"md"}'`、`notes export <id> --format md`                   |
 
-破坏性命令需 `--yes`；退出码 0=成功、1=桥接/应用错误、2=用法错误。
+破坏性命令需 `--yes`；退出码 0=成功、1=桥接/应用错误、2=用法错误；`--format text` 输出人类可读。
 
-## 常用三例
+## 常用四例
 
 ```sh
-superting notes search "funasr" --limit 5          # 找到 id 再操作
-superting notes update 3 --find "Fun ASR" --replace "FunASR"   # 字面量全量替换 content
-superting alias add "super ting" "SuperTing"       # 转写纠错规则，UI 实时生效
+superting notes search "funasr" --limit 5                     # 先找 id
+superting transcript segments --id 47 --limit 10              # 看段落（用返回的 stored-N 或 index）
+superting call actions.run --json '{"id":1,"note_id":47}'     # 跑「生成会议纪要」
+superting jobs list                                           # 长任务进度
 ```
 
 ## 按需加载的详细参考（references/）
 
 只在需要时读取，不要预读：
 
-- 笔记增删改查、find/replace 语义、tags、文件夹 → [references/notes.md](references/notes.md)
+- 笔记增删改查、find/replace 语义、tags、文件夹、转写段落 → [references/notes.md](references/notes.md)
 - 热词/替换规则的完整语义（去重、覆盖、全量替换、实时同步） → [references/dictionary.md](references/dictionary.md)
-- 报错处理、bridge 诊断、版本核对 → [references/troubleshooting.md](references/troubleshooting.md)
+- 报错处理、bridge 诊断、jobs 与 renderer_unavailable、版本核对 → [references/troubleshooting.md](references/troubleshooting.md)
 
-CLI 无对应命令时，回退到 `superting-api` skill 的裸路由（同一个 bridge）。
+全量能力目录：`superting ops list`；静态版本见 `agent-skills/superting-api/references/operations.md`（由注册表生成）。

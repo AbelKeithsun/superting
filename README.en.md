@@ -29,12 +29,12 @@ SuperTing turns your voice into text, notes, and actions from your desktop. Pres
 
 ## Download
 
-| Platform | Download |
-|----------|----------|
-| macOS (Apple Silicon) | [`.dmg`](https://github.com/sysusugan/superting/releases/latest) |
-| macOS (Intel) | [`.dmg`](https://github.com/sysusugan/superting/releases/latest) |
-| Windows | [`.exe`](https://github.com/sysusugan/superting/releases/latest) |
-| Linux | [`.AppImage`](https://github.com/sysusugan/superting/releases/latest) / [`.deb`](https://github.com/sysusugan/superting/releases/latest) / [`.rpm`](https://github.com/sysusugan/superting/releases/latest) |
+| Platform              | Download                                                                                                                                                                                                    |
+| --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| macOS (Apple Silicon) | [`.dmg`](https://github.com/sysusugan/superting/releases/latest)                                                                                                                                            |
+| macOS (Intel)         | [`.dmg`](https://github.com/sysusugan/superting/releases/latest)                                                                                                                                            |
+| Windows               | [`.exe`](https://github.com/sysusugan/superting/releases/latest)                                                                                                                                            |
+| Linux                 | [`.AppImage`](https://github.com/sysusugan/superting/releases/latest) / [`.deb`](https://github.com/sysusugan/superting/releases/latest) / [`.rpm`](https://github.com/sysusugan/superting/releases/latest) |
 
 ## Features
 
@@ -55,6 +55,79 @@ npm run dev
 ```
 
 Requires Node.js 24+. See this repository for setup guides, platform-specific instructions, and build details.
+
+## Agent access (MCP / CLI / Skills)
+
+The app exposes one capability surface, generated from a single main-process
+registry (`src/helpers/appOperations/`) and projected onto both machine
+interfaces — currently **87 capabilities**: notes, note actions (meeting
+minutes), recording control, audio files, transcription and transcript-segment
+editing, people/voiceprints, speaker labelling, dictionary, chat history,
+settings and more.
+
+### MCP
+
+1. In the app: **Settings → Integrations → Local MCP access** → enable. You get a
+   loopback URL and a bearer token (metadata in `~/.superting/mcp-server.json`,
+   token can be rotated; the server only binds 127.0.0.1).
+2. Paste this into your MCP client (`mcpServers`):
+
+   ```json
+   {
+     "mcpServers": {
+       "superting": {
+         "type": "http",
+         "url": "http://127.0.0.1:8220/mcp",
+         "headers": { "Authorization": "Bearer <token>" }
+       }
+     }
+   }
+   ```
+
+3. Tool names mirror the CLI capabilities (`list_notes`, `search_notes`,
+   `run_note_action`, `list_jobs`, `update_transcript_segment`, `get_settings`, …).
+   Call `list_operations` first for the full catalog with parameters.
+4. Capabilities that need the UI (running an action, recording, export dialog,
+   writing settings) wake the app window; if it is still unavailable the call
+   fails with `renderer_unavailable` instead of returning stale data.
+
+### CLI
+
+```bash
+npm run install:cli            # symlink into ~/.local/bin (SUPERTING_CLI_BIN_DIR, --copy)
+superting health               # the app must be running (the app serves the bridge)
+superting ops list             # all 87 capabilities: id / policy / route / MCP name / params
+superting call <operation.id> --json '{"…"}'   # generic escape hatch for any capability
+superting notes list --limit 5
+superting transcript segments --id 47 --limit 20
+superting actions list && superting call actions.run --json '{"id":1,"note_id":47}'
+superting jobs list            # long tasks; wait:false returns a job id to poll
+superting settings get --key uiLanguage
+```
+
+Exit codes: 0 ok, 1 bridge/app error, 2 usage. JSON by default (`--format text`
+for humans). Destructive commands require `--yes`.
+
+### Skills
+
+`agent-skills/` ships `superting-cli` (drive the CLI) and `superting-api`
+(HTTP/MCP fallback). The installer is released with the CLI and installs
+**globally or into a project directory**:
+
+```bash
+npm run install:skills                              # current project: ./.claude/skills
+npm run install:skills -- --global                  # ~/.agents/skills
+npm run install:skills -- --project /path/to/repo   # <dir>/.claude/skills
+npm run install:skills -- --target /some/dir        # verbatim directory
+npm run install:skills -- --only cli                # one skill
+npm run install:skills -- --list | --check | --remove | --force
+
+# single remote command (version pinned by the release asset)
+npx -p https://github.com/AbelKeithsun/superting/releases/download/v<ver>/superting-skills-<ver>.tgz superting-skills --global
+```
+
+Full capability reference (MCP tool names, CLI routes, parameters):
+`agent-skills/superting-api/references/operations.md`.
 
 ## Documentation
 
