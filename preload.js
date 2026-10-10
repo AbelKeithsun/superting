@@ -936,6 +936,13 @@ contextBridge.exposeInMainWorld("electronAPI", {
     (callback) => (_event, data) => callback(data)
   ),
 
+  // Main → renderer operation dispatch (see src/helpers/appOperations).
+  onAppOperationRequest: registerListener(
+    "app-operation-request",
+    (callback) => (_event, message) => callback(message)
+  ),
+  respondAppOperation: (message) => ipcRenderer.send("app-operation-response", message),
+
   onUpdateNotificationData: registerListener(
     "update-notification-data",
     (callback) => (_event, data) => callback(data)

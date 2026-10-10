@@ -10,7 +10,7 @@ const {
 } = require("@modelcontextprotocol/sdk/client/streamableHttp.js");
 const McpServerManager = require("../../src/helpers/mcpServerManager");
 
-const EXPECTED_TOOL_NAMES = [
+const LEGACY_TOOL_NAMES = [
   "health",
   "list_notes",
   "search_notes",
@@ -146,14 +146,18 @@ test("MCP server stays stopped until explicitly enabled", async (t) => {
   const homeDir = createTempHome(t);
   const manager = new McpServerManager(createIpcHandlers(), { homeDir, portRange: [18720, 18729] });
 
-  assert.deepEqual(manager.getStatus(), {
-    enabled: false,
-    running: false,
-    url: null,
-    port: null,
-    hasToken: false,
-    tools: EXPECTED_TOOL_NAMES.map((name) => ({ name })),
-  });
+  const status = manager.getStatus();
+  assert.deepEqual(
+    { enabled: status.enabled, running: status.running, url: status.url, port: status.port },
+    { enabled: false, running: false, url: null, port: null }
+  );
+  assert.equal(status.hasToken, false);
+  // The tool list is projected from the app-operations registry, so it only
+  // grows; the tools shipped before the registry existed must all remain.
+  const statusTools = status.tools.map((tool) => tool.name);
+  for (const name of LEGACY_TOOL_NAMES) {
+    assert.ok(statusTools.includes(name), `status must still list ${name}`);
+  }
   assert.equal(fs.existsSync(path.join(homeDir, ".superting", "mcp-server.json")), false);
 });
 
@@ -178,10 +182,14 @@ test("MCP server exposes authenticated tools over Streamable HTTP", async (t) =>
   t.after(async () => client.close());
 
   const tools = await client.listTools();
-  assert.deepEqual(
-    tools.tools.map((tool) => tool.name),
-    EXPECTED_TOOL_NAMES
-  );
+  const toolNames = tools.tools.map((tool) => tool.name);
+  for (const name of LEGACY_TOOL_NAMES) {
+    assert.ok(toolNames.includes(name), `MCP must still expose ${name}`);
+  }
+  // The registry added capabilities agents could not reach before.
+  for (const name of ["run_note_action", "set_dictionary", "export_note"]) {
+    assert.ok(toolNames.includes(name), `MCP should expose ${name}`);
+  }
   assert.equal(tools.tools.some((tool) => tool.name.startsWith("superting_")), false);
   assert.equal(tools.tools.some((tool) => tool.name.startsWith("openwhispr_")), false);
 
@@ -255,5 +263,7 @@ test("MCP server exposes note write tools", async (t) => {
     arguments: { id: created.data.id },
   });
   const deleted = JSON.parse(deleteResult.content[0].text);
-  assert.deepEqual(deleted, { success: true, data: { id: created.data.id } });
+  // `deleted: true` is the registry's shared payload, also returned by the CLI
+  // route and the generic `superting call notes.delete` escape hatch.
+  assert.deepEqual(deleted, { success: true, data: { id: created.data.id, deleted: true } });
 });

@@ -65,3 +65,5 @@ curl -sS -X POST \
   -d '{"from":"super ting","to":"SuperTing"}' \
   "${base_url}/v1/dictionary/aliases"
 ```
+
+> 全部机器能力（含 MCP 工具名与新增路由）见 `operations.md`，该文件由操作注册表生成，不可手改。

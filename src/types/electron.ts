@@ -2150,6 +2150,20 @@ declare global {
       onUpdateNotificationData?: (
         callback: (data: { version: string; releaseDate?: string }) => void
       ) => () => void;
+      /** Main-process operation dispatch (see src/helpers/appOperations). */
+      onAppOperationRequest?: (
+        callback: (message: {
+          id: string;
+          channel: string;
+          payload: Record<string, unknown>;
+        }) => void
+      ) => () => void;
+      respondAppOperation?: (message: {
+        id: string;
+        ok: boolean;
+        result?: unknown;
+        error?: string;
+      }) => void;
       getUpdateNotificationData?: () => Promise<{
         version: string;
         releaseDate?: string;

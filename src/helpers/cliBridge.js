@@ -6,6 +6,7 @@ const crypto = require("crypto");
 const debugLogger = require("./debugLogger");
 const { ensureMigratedPath } = require("./brandConfig");
 const { isPortAvailable } = require("../utils/serverUtils");
+const { createAppOperations } = require("./appOperations");
 
 const PORT_RANGE_START = 8200;
 const PORT_RANGE_END = 8219;
@@ -244,7 +245,7 @@ class CliBridge {
 
     try {
       const result = await route.handler({ params: route.params, query: url.searchParams, body });
-      if (result === NO_CONTENT) {
+      if (result === NO_CONTENT || route.noContent) {
         sendNoContent(res);
         return;
       }
@@ -264,6 +265,10 @@ class CliBridge {
       sendV1Error(res, 400, "validation_error", err.message);
       return;
     }
+    if (err.code === "UNAVAILABLE") {
+      sendV1Error(res, 503, "renderer_unavailable", err.message);
+      return;
+    }
     debugLogger.error("CLI bridge route error", { error: err.message }, "cli-bridge");
     sendV1Error(res, 500, "internal_error", err.message || "Internal server error");
   }
@@ -278,253 +283,11 @@ class CliBridge {
   }
 
   _buildRouteTable() {
-    const exact = (method, path, handler, status) => ({
-      method,
-      match: (p) => (p === path ? {} : null),
-      handler,
-      status,
-    });
-    const param = (method, prefix, suffix, paramName, handler, status) => ({
-      method,
-      match: (p) => {
-        if (!p.startsWith(prefix)) return null;
-        const rest = p.slice(prefix.length);
-        if (suffix) {
-          if (!rest.endsWith(suffix)) return null;
-          const value = rest.slice(0, rest.length - suffix.length);
-          if (!value || value.includes("/")) return null;
-          return { [paramName]: value };
-        }
-        if (rest.includes("/")) return null;
-        return { [paramName]: rest };
-      },
-      handler,
-      status,
-    });
-
-    const db = this.ipcHandlers.databaseManager;
-    const ipc = this.ipcHandlers;
-
-    const requireId = (params, label) => {
-      const id = parseIdParam(params.id);
-      if (id == null) {
-        const err = new Error(`Invalid ${label} id`);
-        err.code = "NOT_FOUND";
-        throw err;
-      }
-      return id;
-    };
-
-    const requireSuccess = (result, message) => {
-      if (!result?.success) {
-        const err = new Error(result?.error || message);
-        err.code = "NOT_FOUND";
-        throw err;
-      }
-    };
-
-    return [
-      exact("GET", "/v1/health", () => ({ data: { ok: true, version: 1 } })),
-      exact("GET", "/v1/notes/list", ({ query }) => {
-        const noteType = query.get("note_type") || null;
-        const limit = query.get("limit") ? Number(query.get("limit")) : 100;
-        const folderId = query.get("folder_id") ? Number(query.get("folder_id")) : null;
-        const notes = db.getNotes(noteType, limit, folderId);
-        return { data: notes, has_more: false, next_cursor: null };
-      }),
-      exact("GET", "/v1/notes/search", ({ query }) => {
-        const q = query.get("q") || "";
-        if (!q.trim()) {
-          const err = new Error("Search query is required");
-          err.code = "VALIDATION";
-          throw err;
-        }
-        const limit = query.get("limit") ? Number(query.get("limit")) : 20;
-        const notes = db.searchNotes(q, limit);
-        return { data: notes, has_more: false, next_cursor: null };
-      }),
-      param("GET", "/v1/notes/", "", "id", ({ params }) => {
-        const id = requireId(params, "note");
-        const note = db.getNote(id);
-        if (!note || note.deleted_at) {
-          const err = new Error(`Note ${id} not found`);
-          err.code = "NOT_FOUND";
-          throw err;
-        }
-        return { data: note };
-      }),
-      exact(
-        "POST",
-        "/v1/notes/create",
-        ({ body }) => {
-          const result = db.saveNote(
-            body.title ?? "Untitled Note",
-            body.content ?? "",
-            body.note_type ?? "personal",
-            body.source_file ?? null,
-            body.audio_duration_seconds ?? null,
-            body.folder_id ?? null,
-            null,
-            Array.isArray(body.tags) ? body.tags : []
-          );
-          const note = unwrapMutationResult(result, "note");
-          setImmediate(() => ipc.broadcastToWindows("note-added", note));
-          ipc._asyncVectorUpsert(note);
-          ipc._asyncMirrorWrite(note);
-          return { data: note };
-        },
-        201
-      ),
-      param("PATCH", "/v1/notes/", "", "id", ({ params, body }) => {
-        const id = requireId(params, "note");
-        const result = db.updateNote(id, body || {});
-        const note = unwrapMutationResult(result, "note");
-        setImmediate(() => ipc.broadcastToWindows("note-updated", note));
-        ipc._asyncVectorUpsert(note);
-        ipc._asyncMirrorWrite(note);
-        return { data: note };
-      }),
-      param("DELETE", "/v1/notes/", "", "id", ({ params }) => {
-        const id = requireId(params, "note");
-        const result = ipc.deleteNoteInternal(id);
-        requireSuccess(result, `Note ${id} not found`);
-        return NO_CONTENT;
-      }),
-      exact("GET", "/v1/folders/list", () => {
-        return { data: db.getFolders(), has_more: false, next_cursor: null };
-      }),
-      exact("GET", "/v1/dictionary", () => {
-        return { data: db.getDictionary() };
-      }),
-      exact("GET", "/v1/dictionary/aliases", () => {
-        return { data: db.getDictionaryAliases() };
-      }),
-      exact("PUT", "/v1/dictionary", ({ body }) => {
-        const words = parseWordList(body);
-        requireSuccess(db.setDictionary(words), "Failed to save dictionary");
-        const dictionary = db.getDictionary();
-        setImmediate(() => ipc.broadcastToWindows("dictionary-updated", dictionary));
-        return { data: dictionary };
-      }),
-      exact("POST", "/v1/dictionary/words", ({ body }) => {
-        const additions = parseWordList(body?.words ?? body);
-        const current = db.getDictionary();
-        const known = new Set(current.map((word) => word.toLowerCase()));
-        const added = [];
-        for (const word of additions) {
-          const key = word.toLowerCase();
-          if (known.has(key)) continue;
-          known.add(key);
-          current.push(word);
-          added.push(word);
-        }
-        if (added.length > 0) {
-          requireSuccess(db.setDictionary(current), "Failed to save dictionary");
-          setImmediate(() => ipc.broadcastToWindows("dictionary-updated", db.getDictionary()));
-        }
-        return { data: { added, dictionary: db.getDictionary() } };
-      }),
-      exact("DELETE", "/v1/dictionary/words", ({ query }) => {
-        const requested = query.getAll("word").map((word) => word.trim()).filter(Boolean);
-        if (requested.length === 0) {
-          throw validationError("Provide at least one ?word= query parameter");
-        }
-        const removeSet = new Set(requested.map((word) => word.toLowerCase()));
-        const current = db.getDictionary();
-        const kept = current.filter((word) => !removeSet.has(word.toLowerCase()));
-        const removed = current.filter((word) => removeSet.has(word.toLowerCase()));
-        if (removed.length > 0) {
-          requireSuccess(db.setDictionary(kept), "Failed to save dictionary");
-          setImmediate(() => ipc.broadcastToWindows("dictionary-updated", db.getDictionary()));
-        }
-        return { data: { removed, dictionary: db.getDictionary() } };
-      }),
-      exact("PUT", "/v1/dictionary/aliases", ({ body }) => {
-        const aliases = parseAliasList(body);
-        requireSuccess(db.setDictionaryAliases(aliases), "Failed to save aliases");
-        const saved = db.getDictionaryAliases();
-        setImmediate(() => ipc.broadcastToWindows("dictionary-aliases-updated", saved));
-        return { data: saved };
-      }),
-      exact("POST", "/v1/dictionary/aliases", ({ body }) => {
-        const { from, to } = parseSingleAlias(body);
-        const current = db.getDictionaryAliases().filter(
-          (alias) => alias.from.toLowerCase() !== from.toLowerCase()
-        );
-        current.push({ from, to });
-        requireSuccess(db.setDictionaryAliases(current), "Failed to save aliases");
-        const saved = db.getDictionaryAliases();
-        setImmediate(() => ipc.broadcastToWindows("dictionary-aliases-updated", saved));
-        return { data: saved };
-      }),
-      exact("DELETE", "/v1/dictionary/aliases", ({ query }) => {
-        const requested = query.getAll("from").map((from) => from.trim()).filter(Boolean);
-        if (requested.length === 0) {
-          throw validationError("Provide at least one ?from= query parameter");
-        }
-        const removeSet = new Set(requested.map((from) => from.toLowerCase()));
-        const current = db.getDictionaryAliases();
-        const kept = current.filter((alias) => !removeSet.has(alias.from.toLowerCase()));
-        const removed = current.filter((alias) => removeSet.has(alias.from.toLowerCase()));
-        if (removed.length > 0) {
-          requireSuccess(db.setDictionaryAliases(kept), "Failed to save aliases");
-          setImmediate(() => ipc.broadcastToWindows("dictionary-aliases-updated", db.getDictionaryAliases()));
-        }
-        return { data: { removed, aliases: db.getDictionaryAliases() } };
-      }),
-      exact("GET", "/v1/tags", () => {
-        return { data: db.getTags(), has_more: false, next_cursor: null };
-      }),
-      exact(
-        "POST",
-        "/v1/folders/create",
-        ({ body }) => {
-          const result = db.createFolder(body?.name);
-          const folder = unwrapMutationResult(result, "folder");
-          setImmediate(() => ipc.broadcastToWindows("folder-created", folder));
-          return { data: folder };
-        },
-        201
-      ),
-      exact("GET", "/v1/transcriptions/list", ({ query }) => {
-        const limit = query.get("limit") ? Number(query.get("limit")) : 50;
-        return {
-          data: db.getTranscriptions(limit),
-          has_more: false,
-          next_cursor: null,
-        };
-      }),
-      param("GET", "/v1/transcriptions/", "", "id", ({ params }) => {
-        const id = requireId(params, "transcription");
-        const transcription = db.getTranscriptionById(id);
-        if (!transcription || transcription.deleted_at) {
-          const err = new Error(`Transcription ${id} not found`);
-          err.code = "NOT_FOUND";
-          throw err;
-        }
-        return { data: transcription };
-      }),
-      param("DELETE", "/v1/transcriptions/", "", "id", ({ params }) => {
-        const id = requireId(params, "transcription");
-        const result = ipc.deleteTranscriptionInternal(id);
-        requireSuccess(result, `Transcription ${id} not found`);
-        return NO_CONTENT;
-      }),
-      param("DELETE", "/v1/transcriptions/", "/audio", "id", ({ params }) => {
-        const id = requireId(params, "transcription");
-        const result = ipc.audioStorageManager.deleteAudio(id);
-        if (!result?.success) {
-          throw new Error(`Failed to delete audio for transcription ${id}`);
-        }
-        db.updateTranscriptionAudio(id, {
-          hasAudio: 0,
-          audioDurationMs: null,
-          provider: null,
-          model: null,
-        });
-        return NO_CONTENT;
-      }),
-    ];
+    // Every route is projected from the application operation registry — see
+    // src/helpers/appOperations/. Adding a capability there makes it available
+    // to the CLI, the MCP server and the renderer at once.
+    this.app = createAppOperations(this.ipcHandlers);
+    return this.app.cliRoutes;
   }
 }
 

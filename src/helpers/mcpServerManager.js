@@ -13,6 +13,11 @@ const debugLogger = require("./debugLogger");
 const { ensureMigratedPath } = require("./brandConfig");
 const { isPortAvailable } = require("../utils/serverUtils");
 const { version: APP_VERSION } = require("../../package.json");
+const {
+  createAppOperations,
+  listMcpToolNames,
+} = require("./appOperations");
+const { registerRegistryTools } = require("./appOperations/mcpAdapter");
 
 const HOST = "127.0.0.1";
 const DEFAULT_PORT_RANGE = [8220, 8239];
@@ -20,22 +25,7 @@ const METADATA_FILE_VERSION = 1;
 const LOOPBACK_ADDRESSES = new Set(["127.0.0.1", "::1", "::ffff:127.0.0.1"]);
 const JSON_HEADERS = { "Content-Type": "application/json; charset=utf-8" };
 const MAX_REQUEST_BODY_BYTES = 1 * 1024 * 1024;
-const MCP_TOOL_NAMES = [
-  "health",
-  "list_notes",
-  "search_notes",
-  "get_note",
-  "create_note",
-  "update_note",
-  "delete_note",
-  "list_folders",
-  "create_folder",
-  "list_transcriptions",
-  "get_transcription",
-  "get_dictionary",
-  "get_dictionary_aliases",
-  "list_tags",
-];
+const MCP_TOOL_NAMES = listMcpToolNames();
 
 function getMcpMetadataFilePath(homeDir = os.homedir()) {
   return path.join(ensureMigratedPath(homeDir, "config"), "mcp-server.json");
@@ -86,48 +76,8 @@ function readJsonBody(req) {
   });
 }
 
-function parsePositiveInteger(value, fallback) {
-  const number = Number(value);
-  return Number.isInteger(number) && number > 0 ? number : fallback;
-}
 
-function sanitizeNote(note, { full = false } = {}) {
-  if (!note) return null;
-  const content = note.enhanced_content || note.content || "";
-  return {
-    id: note.id,
-    title: note.title,
-    content: full ? content : content.slice(0, 500),
-    raw_content: full ? note.content || "" : undefined,
-    enhanced_content: full ? note.enhanced_content || "" : undefined,
-    transcript: full ? note.transcript || null : undefined,
-    note_type: note.note_type,
-    folder_id: note.folder_id ?? null,
-    tags: Array.isArray(note.tags) ? note.tags : [],
-    created_at: note.created_at,
-    updated_at: note.updated_at,
-    recorded_at: note.recorded_at ?? null,
-    has_audio: Boolean(note.source_file || note.audio_duration_seconds),
-    audio_duration_seconds: note.audio_duration_seconds ?? null,
-  };
-}
 
-function sanitizeTranscription(transcription) {
-  if (!transcription) return null;
-  return {
-    id: transcription.id,
-    text: transcription.text,
-    raw_text: transcription.raw_text ?? null,
-    status: transcription.status ?? "completed",
-    timestamp: transcription.timestamp ?? transcription.created_at ?? null,
-    provider: transcription.provider ?? null,
-    model: transcription.model ?? null,
-    language: transcription.language ?? null,
-    has_audio: Boolean(transcription.has_audio),
-    audio_duration_ms: transcription.audio_duration_ms ?? null,
-    warning: transcription.warning ?? null,
-  };
-}
 
 class McpServerManager {
   constructor(ipcHandlers, options = {}) {
@@ -152,7 +102,7 @@ class McpServerManager {
       url: this.url,
       port: this.port,
       hasToken: !!this.token,
-      tools: MCP_TOOL_NAMES.map((name) => ({ name })),
+      tools: listMcpToolNames().map((name) => ({ name })),
     };
   }
 
@@ -354,309 +304,16 @@ class McpServerManager {
   }
 
   _registerTools(server) {
-    const db = this.ipcHandlers.databaseManager;
-
-    const registerTool = (name, config, handler) => server.registerTool(name, config, handler);
-
-    registerTool(
-      "health",
-      {
-        title: "SuperTing health",
-        description: "Check whether the local SuperTing MCP server is available.",
-        inputSchema: {},
-        annotations: { readOnlyHint: true },
-      },
-      async () => sendMcpToolResult({ success: true, data: { ok: true, version: 1 } })
-    );
-
-    registerTool(
-      "list_notes",
-      {
-        title: "List SuperTing notes",
-        description: "List local SuperTing notes with text previews and audio metadata.",
-        inputSchema: {
-          limit: z.number().optional().describe("Maximum number of notes to return. Default 100."),
-          folder_id: z.number().optional().describe("Optional folder ID filter."),
-          note_type: z.string().optional().describe("Optional note type filter."),
-          tags: z.array(z.string()).optional().describe("Require all of these note tags."),
-        },
-        annotations: { readOnlyHint: true },
-      },
-      async ({ limit, folder_id, note_type, tags }) => {
-        const notes = db
-          .getNotes(
-            note_type || null,
-            parsePositiveInteger(limit, 100),
-            folder_id || null,
-            "updatedAt",
-            tags || []
-          )
-          .map((note) => sanitizeNote(note));
-        return sendMcpToolResult({ success: true, data: notes });
-      }
-    );
-
-    registerTool(
-      "search_notes",
-      {
-        title: "Search SuperTing notes",
-        description: "Search local SuperTing notes by keyword and return previews.",
-        inputSchema: {
-          query: z.string().describe("Search query."),
-          limit: z.number().optional().describe("Maximum number of results. Default 20."),
-          tags: z.array(z.string()).optional().describe("Require all of these note tags."),
-        },
-        annotations: { readOnlyHint: true },
-      },
-      async ({ query, limit, tags }) => {
-        const notes = db
-          .searchNotes(query, parsePositiveInteger(limit, 20), tags || [])
-          .map((note) => sanitizeNote(note));
-        return sendMcpToolResult({ success: true, data: notes });
-      }
-    );
-
-    registerTool(
-      "get_note",
-      {
-        title: "Get SuperTing note",
-        description: "Get the full text fields for a local SuperTing note.",
-        inputSchema: {
-          id: z.number().describe("Note ID."),
-        },
-        annotations: { readOnlyHint: true },
-      },
-      async ({ id }) => {
-        const note = db.getNote(id);
-        if (!note || note.deleted_at) {
-          return sendMcpToolResult({ success: false, error: `Note ${id} not found`, data: null });
-        }
-        return sendMcpToolResult({ success: true, data: sanitizeNote(note, { full: true }) });
-      }
-    );
-
-    registerTool(
-      "create_note",
-      {
-        title: "Create SuperTing note",
-        description: "Create a local SuperTing note.",
-        inputSchema: {
-          title: z.string().describe("Note title."),
-          content: z.string().describe("Note content."),
-          note_type: z.string().optional().describe("Note type. Default personal."),
-          folder_id: z.number().optional().describe("Optional folder ID."),
-          tags: z.array(z.string()).optional().describe("Optional note tags."),
-        },
-        annotations: { readOnlyHint: false, destructiveHint: false },
-      },
-      async ({ title, content, note_type, folder_id, tags }) => {
-        const result = db.saveNote(
-          title,
-          content,
-          note_type || "personal",
-          null,
-          null,
-          folder_id ?? null,
-          null,
-          tags || []
-        );
-        if (!result?.success || !result.note) {
-          return sendMcpToolResult({
-            success: false,
-            error: result?.error || "Failed to create note",
-          });
-        }
-        setImmediate(() => this.ipcHandlers.broadcastToWindows("note-added", result.note));
-        this.ipcHandlers._asyncVectorUpsert(result.note);
-        this.ipcHandlers._asyncMirrorWrite(result.note);
-        return sendMcpToolResult({
-          success: true,
-          data: sanitizeNote(result.note, { full: true }),
-        });
-      }
-    );
-
-    registerTool(
-      "update_note",
-      {
-        title: "Update SuperTing note",
-        description: "Update title, content, enhanced content, transcript, or folder for a note.",
-        inputSchema: {
-          id: z.number().describe("Note ID."),
-          title: z.string().optional().describe("New title."),
-          content: z.string().optional().describe("New note content."),
-          enhanced_content: z.string().optional().describe("New enhanced content."),
-          transcript: z
-            .string()
-            .optional()
-            .describe("New transcript text or serialized transcript JSON."),
-          folder_id: z.number().nullable().optional().describe("New folder ID."),
-          tags: z
-            .array(z.string())
-            .optional()
-            .describe("Replacement note tags. Empty clears tags."),
-        },
-        annotations: { readOnlyHint: false, destructiveHint: false },
-      },
-      async ({ id, title, content, enhanced_content, transcript, folder_id, tags }) => {
-        const updates = {};
-        if (title !== undefined) updates.title = title;
-        if (content !== undefined) updates.content = content;
-        if (enhanced_content !== undefined) updates.enhanced_content = enhanced_content;
-        if (transcript !== undefined) updates.transcript = transcript;
-        if (folder_id !== undefined) updates.folder_id = folder_id;
-        if (tags !== undefined) updates.tags = tags;
-        if (Object.keys(updates).length === 0) {
-          return sendMcpToolResult({ success: false, error: "No note updates provided" });
-        }
-        const result = db.updateNote(id, updates);
-        if (!result?.success || !result.note) {
-          return sendMcpToolResult({
-            success: false,
-            error: result?.error || `Note ${id} not found`,
-          });
-        }
-        setImmediate(() => this.ipcHandlers.broadcastToWindows("note-updated", result.note));
-        this.ipcHandlers._asyncVectorUpsert(result.note);
-        this.ipcHandlers._asyncMirrorWrite(result.note);
-        return sendMcpToolResult({
-          success: true,
-          data: sanitizeNote(result.note, { full: true }),
-        });
-      }
-    );
-
-    registerTool(
-      "delete_note",
-      {
-        title: "Delete SuperTing note",
-        description: "Delete a local SuperTing note and its retained audio references.",
-        inputSchema: {
-          id: z.number().describe("Note ID."),
-        },
-        annotations: { readOnlyHint: false, destructiveHint: true },
-      },
-      async ({ id }) => {
-        const result = this.ipcHandlers.deleteNoteInternal(id);
-        if (!result?.success) {
-          return sendMcpToolResult({
-            success: false,
-            error: result?.error || `Note ${id} not found`,
-          });
-        }
-        return sendMcpToolResult({ success: true, data: { id } });
-      }
-    );
-
-    registerTool(
-      "list_folders",
-      {
-        title: "List SuperTing folders",
-        description: "List local SuperTing folders.",
-        inputSchema: {},
-        annotations: { readOnlyHint: true },
-      },
-      async () => sendMcpToolResult({ success: true, data: db.getFolders() })
-    );
-
-    registerTool(
-      "create_folder",
-      {
-        title: "Create SuperTing folder",
-        description: "Create a local SuperTing folder.",
-        inputSchema: {
-          name: z.string().describe("Folder name."),
-        },
-        annotations: { readOnlyHint: false, destructiveHint: false },
-      },
-      async ({ name }) => {
-        const result = db.createFolder(name);
-        if (!result?.success || !result.folder) {
-          return sendMcpToolResult({
-            success: false,
-            error: result?.error || "Failed to create folder",
-          });
-        }
-        setImmediate(() => this.ipcHandlers.broadcastToWindows("folder-created", result.folder));
-        return sendMcpToolResult({ success: true, data: result.folder });
-      }
-    );
-
-    registerTool(
-      "list_transcriptions",
-      {
-        title: "List SuperTing transcriptions",
-        description: "List local transcription text records with audio metadata only.",
-        inputSchema: {
-          limit: z.number().optional().describe("Maximum number of transcriptions. Default 50."),
-        },
-        annotations: { readOnlyHint: true },
-      },
-      async ({ limit }) => {
-        const transcriptions = db
-          .getTranscriptions(parsePositiveInteger(limit, 50))
-          .filter((item) => !item.deleted_at)
-          .map(sanitizeTranscription);
-        return sendMcpToolResult({ success: true, data: transcriptions });
-      }
-    );
-
-    registerTool(
-      "get_transcription",
-      {
-        title: "Get SuperTing transcription",
-        description: "Get a local transcription text record with audio metadata only.",
-        inputSchema: {
-          id: z.number().describe("Transcription ID."),
-        },
-        annotations: { readOnlyHint: true },
-      },
-      async ({ id }) => {
-        const transcription = db.getTranscriptionById(id);
-        if (!transcription || transcription.deleted_at) {
-          return sendMcpToolResult({
-            success: false,
-            error: `Transcription ${id} not found`,
-            data: null,
-          });
-        }
-        return sendMcpToolResult({ success: true, data: sanitizeTranscription(transcription) });
-      }
-    );
-
-    registerTool(
-      "get_dictionary",
-      {
-        title: "Get SuperTing dictionary",
-        description: "Get custom dictionary words used by local transcription correction.",
-        inputSchema: {},
-        annotations: { readOnlyHint: true },
-      },
-      async () => sendMcpToolResult({ success: true, data: db.getDictionary() })
-    );
-
-    registerTool(
-      "get_dictionary_aliases",
-      {
-        title: "Get SuperTing dictionary aliases",
-        description:
-          "Get custom dictionary alias replacements used by local transcription correction.",
-        inputSchema: {},
-        annotations: { readOnlyHint: true },
-      },
-      async () => sendMcpToolResult({ success: true, data: db.getDictionaryAliases() })
-    );
-
-    registerTool(
-      "list_tags",
-      {
-        title: "List SuperTing note tags",
-        description: "List tags used by local SuperTing notes.",
-        inputSchema: {},
-        annotations: { readOnlyHint: true },
-      },
-      async () => sendMcpToolResult({ success: true, data: db.getTags() })
-    );
+    // Every MCP tool is projected from the application operation registry —
+    // see src/helpers/appOperations/. The CLI bridge serves the same
+    // operations, so the two surfaces can no longer drift apart.
+    const app = createAppOperations(this.ipcHandlers);
+    this.app = app;
+    registerRegistryTools(server, app.registry, {
+      z,
+      sendMcpToolResult,
+      context: app.context,
+    });
   }
 
   async _findAvailablePort() {

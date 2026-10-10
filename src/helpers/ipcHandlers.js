@@ -2197,48 +2197,7 @@ class IPCHandlers {
     });
 
     ipcMain.handle("db-semantic-search-notes", async (event, query, limit = 5) => {
-      const vectorIndex = require("./vectorIndex");
-      if (!vectorIndex.isReady()) {
-        return this.databaseManager.searchNotes(query, limit);
-      }
-
-      try {
-        const [ftsResults, vectorResults] = await Promise.all([
-          this.databaseManager.searchNotes(query, limit * 2),
-          vectorIndex.search(query, limit * 2),
-        ]);
-
-        // Filter low-confidence semantic matches before RRF
-        const filteredVectorResults = vectorResults.filter(({ score }) => score > 0.3);
-
-        // Reciprocal Rank Fusion (K=60, matching cloud implementation)
-        const scores = new Map();
-        ftsResults.forEach((note, i) => {
-          scores.set(note.id, (scores.get(note.id) || 0) + 1 / (60 + i));
-        });
-        filteredVectorResults.forEach(({ noteId }, i) => {
-          scores.set(noteId, (scores.get(noteId) || 0) + 1 / (60 + i));
-        });
-
-        const rankedIds = [...scores.entries()]
-          .sort((a, b) => b[1] - a[1])
-          .slice(0, limit)
-          .map(([id]) => id);
-
-        const noteMap = new Map();
-        ftsResults.forEach((n) => noteMap.set(n.id, n));
-        for (const id of rankedIds) {
-          if (!noteMap.has(id)) {
-            const note = this.databaseManager.getNote(id);
-            if (note) noteMap.set(id, note);
-          }
-        }
-
-        return rankedIds.map((id) => noteMap.get(id)).filter(Boolean);
-      } catch (error) {
-        debugLogger.error("Semantic search failed, falling back to FTS5", { error: error.message });
-        return this.databaseManager.searchNotes(query, limit);
-      }
+      return this.semanticSearchNotes(query, limit);
     });
 
     ipcMain.handle("db-semantic-reindex-all", async () => {
@@ -10940,6 +10899,56 @@ class IPCHandlers {
       this._asyncMirrorDelete(id);
     }
     return result;
+  }
+
+  /**
+   * Hybrid (FTS5 + Qdrant RRF) note search. Shared by the renderer IPC channel
+   * and by the MCP/CLI surfaces through the app-operations registry, so agents
+   * rank notes exactly like the in-app agent does.
+   */
+  async semanticSearchNotes(query, limit = 5) {
+    const vectorIndex = require("./vectorIndex");
+    if (!vectorIndex.isReady()) {
+      return this.databaseManager.searchNotes(query, limit);
+    }
+
+    try {
+      const [ftsResults, vectorResults] = await Promise.all([
+        this.databaseManager.searchNotes(query, limit * 2),
+        vectorIndex.search(query, limit * 2),
+      ]);
+
+      // Filter low-confidence semantic matches before RRF
+      const filteredVectorResults = vectorResults.filter(({ score }) => score > 0.3);
+
+      // Reciprocal Rank Fusion (K=60, matching cloud implementation)
+      const scores = new Map();
+      ftsResults.forEach((note, i) => {
+        scores.set(note.id, (scores.get(note.id) || 0) + 1 / (60 + i));
+      });
+      filteredVectorResults.forEach(({ noteId }, i) => {
+        scores.set(noteId, (scores.get(noteId) || 0) + 1 / (60 + i));
+      });
+
+      const rankedIds = [...scores.entries()]
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, limit)
+        .map(([id]) => id);
+
+      const noteMap = new Map();
+      ftsResults.forEach((n) => noteMap.set(n.id, n));
+      for (const id of rankedIds) {
+        if (!noteMap.has(id)) {
+          const note = this.databaseManager.getNote(id);
+          if (note) noteMap.set(id, note);
+        }
+      }
+
+      return rankedIds.map((id) => noteMap.get(id)).filter(Boolean);
+    } catch (error) {
+      debugLogger.error("Semantic search failed, falling back to FTS5", { error: error.message });
+      return this.databaseManager.searchNotes(query, limit);
+    }
   }
 
   broadcastToWindows(channel, payload) {

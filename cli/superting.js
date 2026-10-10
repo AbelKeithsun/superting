@@ -283,6 +283,90 @@ function buildCommandRegistry() {
     commands.set(name, { name, description, usage, destructive, run });
   };
 
+  command("ops list", {
+    description: "List every capability the app exposes to agents (MCP tool + CLI route + params).",
+    usage: "superting ops list",
+    run: async ({ bridge }) => bridgeRequest(bridge, "GET", "/v1/operations"),
+  });
+
+  // Generic escape hatch: every registered operation is reachable, including
+  // ones added after this CLI shipped. Parameter placement (path/query/body) is
+  // read from the app's own capability catalog, never guessed here.
+  command("call", {
+    description:
+      "Call any app operation by id (see `ops list`); pass params as --name value or --json '{...}'.",
+    usage: "superting call <operation.id> [--json '{...}'] [--param value ...] [--yes]",
+    run: async ({ bridge, flags, cliFlags, positional }) => {
+      const operationId = positional[0];
+      if (!operationId) throw new ArgError("An operation id is required (see: superting ops list)");
+
+      const catalog = await bridgeRequest(bridge, "GET", "/v1/operations");
+      const operation = (catalog?.data ?? []).find((item) => item.id === operationId);
+      if (!operation) {
+        throw new ArgError(`Unknown operation "${operationId}". Run: superting ops list`);
+      }
+      if (operation.policy === "destructive") {
+        requireYes(cliFlags, `Running ${operationId}`);
+      }
+
+      let params = {};
+      const jsonArg = last(flags, "json");
+      if (jsonArg !== undefined) {
+        try {
+          const parsed = JSON.parse(jsonArg);
+          if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+            throw new Error("expected a JSON object");
+          }
+          params = { ...parsed };
+        } catch (err) {
+          throw new ArgError(`--json must be a JSON object: ${err.message}`);
+        }
+      }
+
+      for (const [name, spec] of Object.entries(operation.params ?? {})) {
+        const values = flags.get(name);
+        if (!values || values.length === 0) continue;
+        if (spec.type === "array") {
+          params[name] =
+            values.length > 1
+              ? values
+              : String(values[0])
+                  .split(",")
+                  .map((item) => item.trim())
+                  .filter(Boolean);
+        } else {
+          params[name] = values[values.length - 1];
+        }
+      }
+
+      const locations = operation.cli?.params ?? {};
+      let route = operation.cli?.path ?? "";
+      const query = {};
+      const body = {};
+      for (const [name, value] of Object.entries(params)) {
+        const location = locations[name];
+        if (location === "path") {
+          route = route.replace(`:${name}`, encodeURIComponent(String(value)));
+        } else if (location === "query") {
+          query[name] = value;
+        } else {
+          body[name] = value;
+        }
+      }
+      if (route.includes(":")) {
+        const missing = route
+          .split("/")
+          .filter((part) => part.startsWith(":"))
+          .map((part) => part.slice(1));
+        throw new ArgError(`Missing required parameter(s): ${missing.join(", ")}`);
+      }
+
+      const method = operation.cli?.method ?? "GET";
+      const hasBody = method !== "GET" && method !== "DELETE";
+      return bridgeRequest(bridge, method, route, { query, body: hasBody ? body : undefined });
+    },
+  });
+
   command("health", {
     description: "Check whether the SuperTing desktop app bridge is reachable.",
     usage: "superting health",
