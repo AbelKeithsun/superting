@@ -779,14 +779,18 @@ function domainOperations() {
       title: "List transcript segments",
       description:
         "List a note's transcript as structured segments (index, speaker, timestamp, text).",
-      params: { id: int("Note ID.", { required: true }) },
+      params: {
+        id: int("Note ID.", { required: true }),
+        offset: int("First segment index to return (0-based). Default 0."),
+        limit: int("Maximum segments to return. Default 200."),
+      },
       channel: "notes.transcript.segments",
       mcp: "list_transcript_segments",
       cli: {
         method: "GET",
         path: "/v1/notes/:id/transcript/segments",
         command: "transcript segments",
-        params: { id: "path" },
+        params: { id: "path", offset: "query", limit: "query" },
       },
     }),
     rendererOperation({

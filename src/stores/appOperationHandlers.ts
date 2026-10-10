@@ -259,10 +259,20 @@ const handlers: Record<string, AppOperationHandler> = {
     const noteId = Number(payload?.id);
     if (!Number.isFinite(noteId)) throw new Error("notes.transcript.segments requires id");
     const { segments } = await loadSegments(noteId);
+    const offset = Number(payload?.offset);
+    const limit = Number(payload?.limit);
+    const start = Number.isInteger(offset) && offset > 0 ? offset : 0;
+    // Long meetings can carry thousands of segments; never dump them all into
+    // an agent's context by accident.
+    const max = Number.isInteger(limit) && limit > 0 ? limit : 200;
+    const page = segments.slice(start, start + max);
     return {
       note_id: noteId,
-      count: segments.length,
-      segments: segments.map(toSegmentView),
+      total: segments.length,
+      offset: start,
+      count: page.length,
+      has_more: start + page.length < segments.length,
+      segments: page.map((segment, i) => toSegmentView(segment, start + i)),
     };
   },
 

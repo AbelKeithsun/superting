@@ -711,6 +711,8 @@ List a note's transcript as structured segments (index, speaker, timestamp, text
 | 参数 | 类型 | 必填 | 说明 |
 | --- | --- | --- | --- |
 | `id` | number | 是 | Note ID. |
+| `offset` | number | 否 | First segment index to return (0-based). Default 0. |
+| `limit` | number | 否 | Maximum segments to return. Default 200. |
 
 ### `notes.transcript.segment.update` — Update a transcript segment
 
