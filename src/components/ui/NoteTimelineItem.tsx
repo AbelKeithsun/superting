@@ -103,18 +103,20 @@ export default function NoteTimelineItem({ note, folderName, onOpen }: NoteTimel
 
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
-            {/* Type icon + label as one chip: a bare 70%-opacity icon read as
-                grey noise next to the title. */}
-            <span className="shrink-0 inline-flex items-center gap-1 rounded bg-accent/15 px-1.5 py-px text-[10px] font-semibold text-accent">
+            {/* Type icon + label as one solid chip. `text-accent` was the bug:
+                in light mode accent is the pale tint (#dceaff), so the label was
+                nearly invisible. `bg-accent` + `text-accent-foreground` is the
+                app's own badge pairing and reads ~8:1 in light mode. */}
+            <span className="shrink-0 inline-flex items-center gap-1 rounded bg-accent px-1.5 py-px text-[10px] font-semibold text-accent-foreground">
               <Icon size={11} className="shrink-0" aria-hidden />
               {t(meta.badgeKey)}
             </span>
             {folderName && (
               <span
                 title={folderName}
-                className="shrink-0 inline-flex max-w-28 items-center gap-1 rounded bg-muted/70 px-1.5 py-px text-[10px] font-medium text-muted-foreground dark:bg-white/[0.06]"
+                className="shrink-0 inline-flex max-w-28 items-center gap-1 rounded bg-muted px-1.5 py-px text-[10px] font-medium text-foreground/70 dark:bg-white/[0.08]"
               >
-                <FolderOpen size={10} className="shrink-0 text-muted-foreground/70" />
+                <FolderOpen size={10} className="shrink-0 text-foreground/50" />
                 <span className="truncate">{folderName}</span>
               </span>
             )}
