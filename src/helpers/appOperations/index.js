@@ -3,6 +3,7 @@
 const { createRegistry } = require("./registry");
 const { coreOperations } = require("./coreOperations");
 const { actionOperations } = require("./actionOperations");
+const { domainOperations } = require("./domainOperations");
 const { RendererBridge } = require("./rendererBridge");
 const { buildCliRoutes } = require("./cliAdapter");
 
@@ -18,7 +19,7 @@ const { buildCliRoutes } = require("./cliAdapter");
 let cached = null;
 
 function buildOperationList() {
-  return [...coreOperations(), ...actionOperations()];
+  return [...coreOperations(), ...actionOperations(), ...domainOperations()];
 }
 
 function buildContext(ipcHandlers, renderer) {

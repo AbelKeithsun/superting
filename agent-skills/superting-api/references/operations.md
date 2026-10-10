@@ -2,7 +2,7 @@
 
 # 全部机器能力（MCP 工具与 CLI 路由）
 
-共 39 项能力。每一行都由主进程的操作注册表
+共 79 项能力。每一行都由主进程的操作注册表
 （`src/helpers/appOperations/`）生成：同一份定义同时投影为 MCP 工具与
 CLI 路由，因此两边的能力集合不再可能不一致。
 
@@ -94,6 +94,152 @@ Run a note action (for example 生成会议纪要) on a note. Requires the Super
 | --- | --- | --- | --- |
 | `id` | number | 是 | Action ID. |
 | `note_id` | number | 是 | Note to run the action on. |
+
+## audio
+
+### `audio.usage` — Audio storage usage
+
+Report how much disk the retained audio uses.
+
+- 策略：`read`
+- MCP 工具：`get_audio_storage_usage`
+- CLI 路由：`GET /v1/audio/usage`（CLI：`superting audio usage`）
+
+_No parameters._
+
+### `audio.retention.set` — Set audio retention
+
+Set how many days retained audio is kept, then run cleanup.
+
+- 策略：`write`
+- MCP 工具：`set_audio_retention_days`
+- CLI 路由：`PUT /v1/audio/retention`（CLI：`superting audio retention`）
+
+| 参数 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| `days` | number | 是 | Retention in days. |
+
+### `audio.compress_all` — Compress all audio
+
+Compress every retained audio file to Opus-in-WebM.
+
+- 策略：`write`
+- MCP 工具：`compress_all_audio`
+- CLI 路由：`POST /v1/audio/compress`（CLI：`superting audio compress-all`）
+
+_No parameters._
+
+### `audio.delete_all` — Delete all audio
+
+Delete every retained audio file (transcripts are kept).
+
+- 策略：`destructive`
+- MCP 工具：`delete_all_audio`
+- CLI 路由：`DELETE /v1/audio`（CLI：`superting audio delete-all`）
+
+_No parameters._
+
+## chats
+
+### `chats.list` — List chats
+
+List agent conversations.
+
+- 策略：`read`
+- MCP 工具：`list_chats`
+- CLI 路由：`GET /v1/chats`（CLI：`superting chats list`）
+
+| 参数 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| `limit` | number | 否 | Maximum conversations. |
+
+### `chats.messages` — Get chat messages
+
+Get the messages of one conversation.
+
+- 策略：`read`
+- MCP 工具：`get_chat_messages`
+- CLI 路由：`GET /v1/chats/:id/messages`（CLI：`superting chats messages`）
+
+| 参数 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| `id` | number | 是 | Conversation ID. |
+
+### `chats.for_note` — List a note's chats
+
+List the conversations attached to a note.
+
+- 策略：`read`
+- MCP 工具：`list_note_chats`
+- CLI 路由：`GET /v1/notes/:id/chats`（CLI：`superting chats for-note`）
+
+| 参数 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| `id` | number | 是 | Note ID. |
+| `limit` | number | 否 | Maximum conversations. |
+
+### `chats.create` — Create chat
+
+Create an agent conversation, optionally attached to a note.
+
+- 策略：`write`
+- MCP 工具：`create_chat`
+- CLI 路由：`POST /v1/chats`（CLI：`superting chats create`）
+
+| 参数 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| `title` | string | 否 | Conversation title. |
+| `note_id` | number | 否 | Optional note ID. |
+
+### `chats.archive` — Archive chat
+
+Archive a conversation.
+
+- 策略：`write`
+- MCP 工具：`archive_chat`
+- CLI 路由：`POST /v1/chats/:id/archive`（CLI：`superting chats archive`）
+
+| 参数 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| `id` | number | 是 | Conversation ID. |
+
+### `chats.delete` — Delete chat
+
+Permanently delete a conversation.
+
+- 策略：`destructive`
+- MCP 工具：`delete_chat`
+- CLI 路由：`DELETE /v1/chats/:id`（CLI：`superting chats delete`）
+
+| 参数 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| `id` | number | 是 | Conversation ID. |
+
+## contacts
+
+### `contacts.search` — Search contacts
+
+Search contact records by name or email.
+
+- 策略：`read`
+- MCP 工具：`search_contacts`
+- CLI 路由：`GET /v1/contacts/search`（CLI：`superting contacts search`）
+
+| 参数 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| `query` | string | 是 | Search text. |
+
+### `contacts.upsert` — Upsert contact record
+
+Create or update a contact record by email or name.
+
+- 策略：`write`
+- MCP 工具：`upsert_contact`
+- CLI 路由：`POST /v1/contacts`（CLI：`superting contacts upsert`）
+
+| 参数 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| `contact` | object | 是 | Contact fields. |
 
 ## dictionary
 
@@ -432,6 +578,319 @@ Render a note to text without opening a save dialog (markdown, txt, json).
 | `format` | md\|txt\|json | 否 | Export format. Default md. |
 | `fields` | array<string> | 否 | Subset of: transcript, notes, enhanced. Default all present fields. |
 
+### `notes.audio.list` — List note audio
+
+List the retained audio files of a note with size metadata.
+
+- 策略：`read`
+- MCP 工具：`list_note_audio`
+- CLI 路由：`GET /v1/notes/:id/audio`（CLI：`superting notes audio list`）
+
+| 参数 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| `id` | number | 是 | Note ID. |
+
+### `notes.audio.compress` — Compress note audio
+
+Compress a note's retained audio to Opus-in-WebM.
+
+- 策略：`write`
+- MCP 工具：`compress_note_audio`
+- CLI 路由：`POST /v1/notes/:id/audio/compress`（CLI：`superting notes audio compress`）
+
+| 参数 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| `id` | number | 是 | Note ID. |
+| `audio_file_id` | number | 否 | Specific audio file ID. Defaults to the note's audio. |
+
+### `notes.audio.merge` — Merge note audio
+
+Merge a note's audio segments into one file (removes the segments).
+
+- 策略：`destructive`
+- MCP 工具：`merge_note_audio`
+- CLI 路由：`POST /v1/notes/:id/audio/merge`（CLI：`superting notes audio merge`）
+
+| 参数 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| `id` | number | 是 | Note ID. |
+
+### `notes.audio.rediarize` — Re-run speaker diarization
+
+Re-identify speakers for a note's audio (runs in the background).
+
+- 策略：`write`
+- MCP 工具：`rediarize_note_audio`
+- CLI 路由：`POST /v1/notes/:id/audio/rediarize`（CLI：`superting notes audio rediarize`）
+
+| 参数 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| `id` | number | 是 | Note ID. |
+| `audio_file_id` | number | 否 | Specific audio file ID. |
+| `expected_count` | number | 否 | Expected speaker count (advanced). |
+
+### `notes.import` — Import a file into a note
+
+Import a .txt/.md/.docx file into a note's content or transcript.
+
+- 策略：`write`
+- MCP 工具：`import_note_file`
+- CLI 路由：`POST /v1/notes/:id/import`（CLI：`superting notes import`）
+
+| 参数 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| `id` | number | 是 | Note ID. |
+| `file_path` | string | 是 | Absolute path of the file to import. |
+| `target` | note\|transcript | 否 | `note` or `transcript`. |
+
+### `notes.export_files` — Export notes to disk
+
+Export notes (markdown/txt/pdf) to a folder chosen in the app's save dialog.
+
+- 策略：`write · needs UI`
+- MCP 工具：`export_notes`
+- CLI 路由：`POST /v1/notes/export`（CLI：`superting notes export-to-disk`）
+
+| 参数 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| `note_ids` | array<number> | 是 | Note IDs to export. |
+| `format` | md\|txt\|pdf | 否 | Export format. |
+| `fields` | array<string> | 否 | Subset of: transcript, content, enhanced_content. |
+
+## people
+
+### `people.list` — List contacts
+
+List contact profiles (跨会议人名表).
+
+- 策略：`read`
+- MCP 工具：`list_people`
+- CLI 路由：`GET /v1/people`（CLI：`superting people list`）
+
+| 参数 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| `query` | string | 否 | Optional name filter. |
+
+### `people.get` — Get contact
+
+Get one contact profile and its voiceprints.
+
+- 策略：`read`
+- MCP 工具：`get_person`
+- CLI 路由：`GET /v1/people/:id`（CLI：`superting people get`）
+
+| 参数 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| `id` | number | 是 | Person ID. |
+
+### `people.create` — Create contact
+
+Create a contact profile.
+
+- 策略：`write`
+- MCP 工具：`create_person`
+- CLI 路由：`POST /v1/people`（CLI：`superting people create`）
+
+| 参数 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| `display_name` | string | 否 | Contact display name. |
+| `email` | string | 否 | Email address. |
+| `phone` | string | 否 | Phone number. |
+| `organization` | string | 否 | Organisation. |
+| `notes` | string | 否 | Free-form notes. |
+
+### `people.update` — Update contact
+
+Update a contact profile's fields.
+
+- 策略：`write`
+- MCP 工具：`update_person`
+- CLI 路由：`PATCH /v1/people/:id`（CLI：`superting people update`）
+
+| 参数 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| `id` | number | 是 | Person ID. |
+| `display_name` | string | 否 | Contact display name. |
+| `email` | string | 否 | Email address. |
+| `phone` | string | 否 | Phone number. |
+| `organization` | string | 否 | Organisation. |
+| `notes` | string | 否 | Free-form notes. |
+
+### `people.delete` — Delete contact
+
+Delete a contact profile.
+
+- 策略：`destructive`
+- MCP 工具：`delete_person`
+- CLI 路由：`DELETE /v1/people/:id`（CLI：`superting people delete`）
+
+| 参数 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| `id` | number | 是 | Person ID. |
+
+### `people.merge` — Merge contacts
+
+Merge one contact into another.
+
+- 策略：`destructive`
+- MCP 工具：`merge_people`
+- CLI 路由：`POST /v1/people/merge`（CLI：`superting people merge`）
+
+| 参数 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| `keep_id` | number | 是 | Contact to keep. |
+| `remove_id` | number | 是 | Contact to merge into it and delete. |
+
+## recording
+
+### `recording.status` — Recording status
+
+Report whether a note or meeting recording is in progress.
+
+- 策略：`read`
+- MCP 工具：`get_recording_status`
+- CLI 路由：`GET /v1/recording`（CLI：`superting recording status`）
+
+_No parameters._
+
+### `recording.start` — Start recording
+
+Start recording into a note (same entry point as the editor's 开始录音).
+
+- 策略：`write · needs UI`
+- MCP 工具：`start_recording`
+- CLI 路由：`POST /v1/recording/start`（CLI：`superting recording start`）
+
+| 参数 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| `note_id` | number | 是 | Note to record into (a meeting or personal note). |
+
+### `recording.stop` — Stop recording
+
+Stop the running recording and finalize the note.
+
+- 策略：`write · needs UI`
+- MCP 工具：`stop_recording`
+- CLI 路由：`POST /v1/recording/stop`（CLI：`superting recording stop`）
+
+_No parameters._
+
+## settings
+
+### `settings.get` — Get settings
+
+Read the app's settings (or one setting by key).
+
+- 策略：`read`
+- MCP 工具：`get_settings`
+- CLI 路由：`GET /v1/settings`（CLI：`superting settings get`）
+
+| 参数 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| `key` | string | 否 | Optional setting key. |
+
+### `settings.set` — Update a setting
+
+Update one setting through the app's own setter (side effects included).
+
+- 策略：`write · needs UI`
+- MCP 工具：`set_setting`
+- CLI 路由：`PUT /v1/settings`（CLI：`superting settings set`）
+
+| 参数 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| `key` | string | 是 | Setting key, e.g. uiLanguage. |
+| `value` | string | 否 | New value (string, number or boolean as text). |
+| `json` | string | 否 | New value as JSON, for arrays/objects. |
+
+## speakers
+
+### `speakers.mappings` — Get speaker mappings
+
+Get the speaker→contact mappings recorded for a note.
+
+- 策略：`read`
+- MCP 工具：`get_speaker_mappings`
+- CLI 路由：`GET /v1/notes/:id/speakers`（CLI：`superting speakers mappings`）
+
+| 参数 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| `id` | number | 是 | Note ID. |
+
+### `speakers.profiles` — List speaker profiles
+
+List speaker profiles (marked names) across notes.
+
+- 策略：`read`
+- MCP 工具：`list_speaker_profiles`
+- CLI 路由：`GET /v1/speakers`（CLI：`superting speakers profiles`）
+
+_No parameters._
+
+### `speakers.names` — List speaker names
+
+List the speaker names known to the app.
+
+- 策略：`read`
+- MCP 工具：`list_speaker_names`
+- CLI 路由：`GET /v1/speakers/names`（CLI：`superting speakers names`）
+
+_No parameters._
+
+### `speakers.mapping.set` — Assign a speaker name
+
+Assign a name/contact to a speaker id in a note.
+
+- 策略：`write`
+- MCP 工具：`set_speaker_mapping`
+- CLI 路由：`POST /v1/notes/:id/speakers`（CLI：`superting speakers assign`）
+
+| 参数 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| `id` | number | 是 | Note ID. |
+| `speaker_id` | string | 是 | Speaker id from the transcript. |
+| `display_name` | string | 是 | Name to assign. |
+| `email` | string | 否 | Optional email to link. |
+| `profile_id` | number | 否 | Existing speaker profile ID. |
+
+### `speakers.name.upsert` — Upsert speaker name
+
+Create or update a speaker name (optionally with an email).
+
+- 策略：`write`
+- MCP 工具：`upsert_speaker_name`
+- CLI 路由：`POST /v1/speakers/names`（CLI：`superting speakers name-add`）
+
+| 参数 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| `display_name` | string | 是 | Speaker name. |
+| `email` | string | 否 | Optional email. |
+
+### `speakers.name.delete` — Delete speaker name
+
+Delete a speaker name by id.
+
+- 策略：`destructive`
+- MCP 工具：`delete_speaker_name`
+- CLI 路由：`DELETE /v1/speakers/names/:id`（CLI：`superting speakers name-delete`）
+
+| 参数 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| `id` | number | 是 | Speaker name ID. |
+
+### `speakers.email.attach` — Attach email to speaker
+
+Attach an email address to a speaker profile.
+
+- 策略：`write`
+- MCP 工具：`attach_speaker_email`
+- CLI 路由：`POST /v1/speakers/email`（CLI：`superting speakers email-attach`）
+
+| 参数 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| `profile_id` | number | 是 | Speaker profile ID. |
+| `email` | string | 是 | Email to attach. |
+
 ## system
 
 ### `system.health` — Health check
@@ -515,3 +974,51 @@ Delete only the stored audio for a transcription, keeping the text.
 | 参数 | 类型 | 必填 | 说明 |
 | --- | --- | --- | --- |
 | `id` | number | 是 | Transcription ID. |
+
+### `transcriptions.clear` — Clear transcription history
+
+Delete every transcription record and its audio.
+
+- 策略：`destructive`
+- MCP 工具：`clear_transcriptions`
+- CLI 路由：`DELETE /v1/transcriptions`（CLI：`superting transcriptions clear`）
+
+_No parameters._
+
+### `transcriptions.retry` — Retry transcription
+
+Re-transcribe a stored audio file using the app's current transcription settings.
+
+- 策略：`write · needs UI`
+- MCP 工具：`retry_transcription`
+- CLI 路由：`POST /v1/transcriptions/:id/retry`（CLI：`superting transcriptions retry`）
+
+| 参数 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| `id` | number | 是 | Transcription ID. |
+
+## voiceprints
+
+### `voiceprints.segments` — List voiceprint segments
+
+List the auditionable voiceprint segments of a person.
+
+- 策略：`read`
+- MCP 工具：`list_voiceprint_segments`
+- CLI 路由：`GET /v1/voiceprints/segments`（CLI：`superting voiceprints segments`）
+
+| 参数 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| `person_id` | number | 否 | Person ID. Omit for all people. |
+
+### `voiceprints.delete_all` — Delete voiceprints
+
+Delete one person's voiceprints, or every voiceprint.
+
+- 策略：`destructive`
+- MCP 工具：`delete_all_voiceprints`
+- CLI 路由：`DELETE /v1/voiceprints`（CLI：`superting voiceprints delete-all`）
+
+| 参数 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| `person_id` | number | 否 | Person ID. Omit to delete every voiceprint. |

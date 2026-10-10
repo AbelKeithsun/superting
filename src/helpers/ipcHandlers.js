@@ -1071,7 +1071,46 @@ class IPCHandlers {
     }
   }
 
+  /**
+   * Register every renderer IPC channel.
+   *
+   * While the ~390 registrations run, `ipcMain.handle` is wrapped so each
+   * handler is also recorded in `this.channelHandlers`. That map is what lets
+   * the app-operation registry (MCP tools / CLI routes) invoke the *same*
+   * implementation instead of re-implementing the feature, and is why
+   * "expose an existing app capability to agents" is now a few declarative
+   * lines in src/helpers/appOperations/domainOperations.js.
+   */
   setupHandlers() {
+    const originalHandle = ipcMain.handle;
+    this.channelHandlers = new Map();
+    ipcMain.handle = (channel, handler) => {
+      this.channelHandlers.set(channel, handler);
+      return originalHandle.call(ipcMain, channel, handler);
+    };
+    try {
+      this._registerAllHandlers();
+    } finally {
+      ipcMain.handle = originalHandle;
+    }
+  }
+
+  /**
+   * Invoke a registered renderer IPC handler from a non-renderer caller.
+   * The handler receives a stand-in event whose sender is inert, so
+   * progress/one-way sends become no-ops instead of throwing.
+   */
+  async invokeChannel(channel, ...args) {
+    const handler = this.channelHandlers?.get(channel);
+    if (!handler) throw new Error(`IPC channel "${channel}" is not registered`);
+    const event = {
+      sender: { send: () => {}, isDestroyed: () => true },
+      reply: () => {},
+    };
+    return handler(event, ...args);
+  }
+
+  _registerAllHandlers() {
     ipcMain.handle("window-minimize", () => {
       if (this.windowManager.controlPanelWindow) {
         this.windowManager.controlPanelWindow.minimize();

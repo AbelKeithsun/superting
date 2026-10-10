@@ -9,6 +9,7 @@ const z = require("zod/v4");
 const { createRegistry, normalizeParams, OperationError } = require("../../src/helpers/appOperations/registry");
 const { coreOperations } = require("../../src/helpers/appOperations/coreOperations");
 const { actionOperations } = require("../../src/helpers/appOperations/actionOperations");
+const { domainOperations } = require("../../src/helpers/appOperations/domainOperations");
 const { buildZodShape, annotationsFor } = require("../../src/helpers/appOperations/mcpAdapter");
 const { buildCliRoutes, collectParams, matchPath } = require("../../src/helpers/appOperations/cliAdapter");
 const { listMcpToolNames } = require("../../src/helpers/appOperations");
@@ -69,7 +70,7 @@ const LEGACY_CLI_ROUTES = [
 ];
 
 function buildRegistry() {
-  return createRegistry([...coreOperations(), ...actionOperations()]);
+  return createRegistry([...coreOperations(), ...actionOperations(), ...domainOperations()]);
 }
 
 test("every registered operation is exposed on both machine surfaces", () => {
@@ -274,4 +275,101 @@ test("the generated capability reference is up to date", () => {
     "agent-skills/superting-api/references/operations.md is stale — run `node scripts/generate-app-operations-docs.js`"
   );
   assert.ok(path.isAbsolute(OUTPUT_PATH) || OUTPUT_PATH.includes("operations.md"));
+});
+
+test("capabilities that need the UI are marked as such", () => {
+  const registry = buildRegistry();
+  const rendererOps = registry
+    .list()
+    .filter((operation) => operation.rendererRequired)
+    .map((operation) => operation.id)
+    .sort();
+
+  assert.deepEqual(rendererOps, [
+    "actions.run",
+    "notes.export_files",
+    "recording.start",
+    "recording.status",
+    "recording.stop",
+    "settings.get",
+    "settings.set",
+    "transcriptions.retry",
+  ]);
+  // A renderer-required capability must still exist on both machine surfaces so
+  // callers get a clear "renderer_unavailable" instead of a missing tool.
+  for (const operation of registry.list().filter((op) => op.rendererRequired)) {
+    assert.ok(operation.mcp && operation.cli, `${operation.id} must be on both surfaces`);
+  }
+});
+
+test("IPC-backed operations call the registered handler channel with mapped args", async () => {
+  const { unwrapIpcResult } = require("../../src/helpers/appOperations/domainOperations.js");
+  const registry = buildRegistry();
+
+  const calls = [];
+  const context = {
+    ipc: {
+      invokeChannel: async (channel, ...args) => {
+        calls.push([channel, ...args]);
+        if (channel === "people-list") return { success: true, people: [{ id: 1 }] };
+        if (channel === "db-hard-delete-conversation") return undefined;
+        if (channel === "compress-note-audio") return { success: true };
+        return { success: false, error: "boom" };
+      },
+    },
+    renderer: { invoke: async () => ({}) },
+    db: {},
+    broadcast: () => {},
+  };
+
+  const people = await registry.invoke("people.list", { query: "anna" }, context);
+  assert.deepEqual(calls[0], ["people-list", "anna"]);
+  assert.deepEqual(people.data, [{ id: 1 }]);
+
+  const audio = await registry.invoke(
+    "notes.audio.compress",
+    { id: 4, audio_file_id: 9 },
+    context
+  );
+  assert.deepEqual(calls[1], ["compress-note-audio", 4, 9]);
+  assert.deepEqual(audio.data, {});
+
+  // Handler-level failures become operation errors, not silent empty payloads.
+  await assert.rejects(
+    () => registry.invoke("audio.usage", {}, context),
+    /boom/
+  );
+
+  // Renderer-required operations go through the bridge with the mapped payload.
+  let rendererCall = null;
+  const rendererContext = {
+    renderer: {
+      invoke: async (channel, payload) => {
+        rendererCall = [channel, payload];
+        return { isRecording: false };
+      },
+    },
+  };
+  const status = await registry.invoke("recording.status", {}, rendererContext);
+  assert.deepEqual(rendererCall, ["recording.status", {}]);
+  assert.deepEqual(status.data, { isRecording: false });
+
+  // Envelopes are unwrapped consistently.
+  assert.deepEqual(unwrapIpcResult({ success: true, files: [1, 2] }), [1, 2]);
+  assert.deepEqual(unwrapIpcResult([1, 2]), [1, 2]);
+  assert.deepEqual(unwrapIpcResult({ success: true }), {});
+  assert.throws(() => unwrapIpcResult({ success: false, error: "nope" }), /nope/);
+});
+
+test("setting a credential from an agent surface is refused by design", () => {
+  const settingsOps = buildRegistry().get("settings.set");
+  assert.equal(settingsOps.policy, "write");
+  // The guard itself lives in the renderer handler; assert the contract here so
+  // a future rewrite cannot silently drop it.
+  const handlerSource = fs.readFileSync(
+    path.join(__dirname, "..", "..", "src", "stores", "appOperationHandlers.ts"),
+    "utf8"
+  );
+  assert.match(handlerSource, /holds a credential/);
+  assert.match(handlerSource, /SECRET_KEY_PATTERN/);
 });
