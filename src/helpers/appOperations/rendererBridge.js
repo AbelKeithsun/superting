@@ -21,15 +21,32 @@ const RESPONSE_CHANNEL = "app-operation-response";
 const DEFAULT_TIMEOUT_MS = 11 * 60 * 1000;
 
 class RendererBridge {
-  constructor({ timeoutMs = DEFAULT_TIMEOUT_MS } = {}) {
+  /**
+   * @param {object} [options]
+   * @param {number} [options.timeoutMs]
+   * @param {Function} [options.ensureWindow] Called once when no window is open,
+   *   so an agent-triggered operation can bring the app's panel up instead of
+   *   failing (the bridges only exist while the app process runs anyway).
+   */
+  constructor({ timeoutMs = DEFAULT_TIMEOUT_MS, ensureWindow = null } = {}) {
     this.timeoutMs = timeoutMs;
+    this.ensureWindow = ensureWindow;
     this.pending = new Map();
     this.sequence = 0;
     this.registered = false;
   }
 
+  /** True when we are running inside an Electron main process. */
+  static isAvailable() {
+    return typeof ipcMain !== "undefined" && !!ipcMain?.on;
+  }
+
   register() {
     if (this.registered) return;
+    if (!RendererBridge.isAvailable()) {
+      this.registered = true;
+      return;
+    }
     ipcMain.on(RESPONSE_CHANNEL, (_event, message) => {
       const id = message?.id;
       const entry = this.pending.get(id);
@@ -43,12 +60,29 @@ class RendererBridge {
   }
 
   isAvailable() {
-    return BrowserWindow.getAllWindows().some((win) => !win.isDestroyed());
+    return !!this._pickWindow();
+  }
+
+  _pickWindow() {
+    if (typeof BrowserWindow === "undefined" || !BrowserWindow?.getAllWindows) return null;
+    return BrowserWindow.getAllWindows().find((win) => !win.isDestroyed()) ?? null;
   }
 
   async invoke(channel, payload) {
     this.register();
-    const target = BrowserWindow.getAllWindows().find((win) => !win.isDestroyed());
+    let target = this._pickWindow();
+    if (!target && this.ensureWindow) {
+      try {
+        await this.ensureWindow();
+      } catch (error) {
+        debugLogger.warn(
+          "Failed to open a window for an app operation",
+          { channel, error: error.message },
+          "app-operations"
+        );
+      }
+      target = this._pickWindow();
+    }
     if (!target) {
       throw OperationError.unavailable(
         "This operation needs the SuperTing window, but none is open. Open the app and retry."

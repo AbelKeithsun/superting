@@ -34,7 +34,12 @@ function buildContext(ipcHandlers, renderer) {
 function createAppOperations(ipcHandlers) {
   if (cached && cached.ipcHandlers === ipcHandlers) return cached.app;
 
-  const renderer = new RendererBridge();
+  // If no window is open when an agent asks for a UI-bound capability, bring the
+  // app's panel up rather than failing: the bridges only exist while the app
+  // process runs, so a window is only ever "not yet open".
+  const renderer = new RendererBridge({
+    ensureWindow: () => ipcHandlers.windowManager?.createControlPanelWindow?.(),
+  });
   const context = buildContext(ipcHandlers, renderer);
   const registry = createRegistry(buildOperationList());
   context.registry = registry;

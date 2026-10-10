@@ -373,3 +373,14 @@ test("setting a credential from an agent surface is refused by design", () => {
   assert.match(handlerSource, /holds a credential/);
   assert.match(handlerSource, /SECRET_KEY_PATTERN/);
 });
+
+test("UI-bound operations fail cleanly outside Electron instead of crashing", async () => {
+  const { RendererBridge } = require("../../src/helpers/appOperations/rendererBridge.js");
+  assert.equal(RendererBridge.isAvailable(), false, "the test runner has no electron ipcMain");
+
+  const bridge = new RendererBridge();
+  await assert.rejects(
+    () => bridge.invoke("run_note_action", {}),
+    (error) => error.code === "UNAVAILABLE" && /window/i.test(error.message)
+  );
+});

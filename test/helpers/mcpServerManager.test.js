@@ -202,6 +202,24 @@ test("MCP server exposes authenticated tools over Streamable HTTP", async (t) =>
   assert.equal(payload.data[0].title, "Weekly plan");
 });
 
+test("renderer-bound MCP tools report a clear failure instead of crashing", async (t) => {
+  const homeDir = createTempHome(t);
+  const manager = new McpServerManager(createIpcHandlers(), { homeDir, portRange: [18750, 18759] });
+  await manager.setEnabled(true);
+  t.after(async () => manager.stop());
+
+  const metadata = JSON.parse(fs.readFileSync(manager.metadataFilePath, "utf8"));
+  const { client } = await createClient(manager.url, metadata.token);
+  t.after(async () => client.close());
+
+  // `settings.get` runs in the renderer; with no window/electron bridge in this
+  // test the tool must answer with a structured error, not throw.
+  const result = await client.callTool({ name: "get_settings", arguments: {} });
+  const payload = JSON.parse(result.content[0].text);
+  assert.equal(payload.success, false);
+  assert.match(payload.error, /window|renderer/i);
+});
+
 test("MCP server rejects requests without the bearer token", async (t) => {
   const homeDir = createTempHome(t);
   const manager = new McpServerManager(createIpcHandlers(), { homeDir, portRange: [18740, 18749] });
