@@ -347,6 +347,28 @@ function coreOperations() {
       },
     },
     {
+      id: "notes.purge",
+      title: "Permanently delete a note",
+      description: "Purge a note that is already in the trash (hard delete, not recoverable).",
+      policy: "destructive",
+      params: { id: { type: "number", required: true, description: "Note ID." } },
+      mcp: { name: "purge_note" },
+      cli: {
+        method: "DELETE",
+        path: "/v1/notes/:id/purge",
+        command: "notes purge",
+        params: { id: "path" },
+      },
+      handler: async ({ id }, { ipc }) => {
+        const noteId = requireId(id, "note");
+        const result = await ipc.invokeChannel("db-hard-delete-note", noteId);
+        if (result?.success === false) {
+          throw OperationError.notFound(result?.error || `Note ${noteId} not found`);
+        }
+        return { data: { id: noteId, purged: true } };
+      },
+    },
+    {
       id: "notes.export",
       title: "Export note as text",
       description: "Render a note to text without opening a save dialog (markdown, txt, json).",

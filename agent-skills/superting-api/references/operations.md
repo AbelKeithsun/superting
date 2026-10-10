@@ -2,7 +2,7 @@
 
 # 全部机器能力（MCP 工具与 CLI 路由）
 
-共 86 项能力。每一行都由主进程的操作注册表
+共 87 项能力。每一行都由主进程的操作注册表
 （`src/helpers/appOperations/`）生成：同一份定义同时投影为 MCP 工具与
 CLI 路由，因此两边的能力集合不再可能不一致。
 
@@ -600,6 +600,18 @@ Delete a note and its retained audio references.
 - 策略：`destructive`
 - MCP 工具：`delete_note`
 - CLI 路由：`DELETE /v1/notes/:id`（CLI：`superting notes delete`）
+
+| 参数 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| `id` | number | 是 | Note ID. |
+
+### `notes.purge` — Permanently delete a note
+
+Purge a note that is already in the trash (hard delete, not recoverable).
+
+- 策略：`destructive`
+- MCP 工具：`purge_note`
+- CLI 路由：`DELETE /v1/notes/:id/purge`（CLI：`superting notes purge`）
 
 | 参数 | 类型 | 必填 | 说明 |
 | --- | --- | --- | --- |
