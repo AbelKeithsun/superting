@@ -53,6 +53,7 @@ function ipcOperation({
   mcp,
   cli,
   label,
+  job = null,
 }) {
   if (!mcp || !cli) {
     throw new Error(`[appOperations] ${id}: IPC operations must be exposed on both surfaces`);
@@ -66,8 +67,19 @@ function ipcOperation({
     mcp: { name: mcp },
     cli,
     handler: async (values, ctx) => {
-      const result = await ctx.ipc.invokeChannel(channel, ...args(values));
-      return { data: unwrapIpcResult(result, label ?? title) };
+      const runOnce = () => ctx.ipc.invokeChannel(channel, ...args(values));
+      if (job && values.wait === false) {
+        if (!ctx.jobs) {
+          throw OperationError.unavailable("The job registry is not available in this process");
+        }
+        const record = ctx.jobs.start({
+          operation: id,
+          title: job.title ?? title,
+          run: async () => unwrapIpcResult(await runOnce(), label ?? title),
+        });
+        return { data: { job_id: record.id, status: record.status, operation: id } };
+      }
+      return { data: unwrapIpcResult(await runOnce(), label ?? title) };
     },
   };
 }
@@ -171,8 +183,12 @@ function domainOperations() {
       title: "Merge note audio",
       description: "Merge a note's audio segments into one file (removes the segments).",
       policy: "destructive",
-      params: { id: int("Note ID.", { required: true }) },
+      params: {
+        id: int("Note ID.", { required: true }),
+        wait: bool("Wait for the merge to finish (default true). Set false for a job id."),
+      },
       channel: "merge-note-audio-files",
+      job: { title: "Merge note audio" },
       args: ({ id }) => [id],
       mcp: "merge_note_audio",
       cli: {
@@ -191,8 +207,10 @@ function domainOperations() {
         id: int("Note ID.", { required: true }),
         audio_file_id: int("Specific audio file ID."),
         expected_count: int("Expected speaker count (advanced)."),
+        wait: bool("Wait for diarization to finish (default true). Set false for a job id."),
       },
       channel: "rediarize-note-audio",
+      job: { title: "Re-run speaker diarization" },
       args: ({ id, audio_file_id, expected_count }) => [
         id,
         audio_file_id ?? null,
@@ -235,7 +253,11 @@ function domainOperations() {
       title: "Compress all audio",
       description: "Compress every retained audio file to Opus-in-WebM.",
       policy: "write",
+      params: {
+        wait: bool("Wait for compression to finish (default true). Set false for a job id."),
+      },
       channel: "compress-all-audio",
+      job: { title: "Compress all audio" },
       mcp: "compress_all_audio",
       cli: { method: "POST", path: "/v1/audio/compress", command: "audio compress-all" },
     }),
@@ -270,8 +292,10 @@ function domainOperations() {
         provider: param("Local engine.", { enum: ["whisper", "nvidia", "funasr"] }),
         model: param("Model name for that engine."),
         language: param("Language code, or `auto`."),
+        wait: bool("Wait for the transcription to finish (default true). Set false for a job id."),
       },
       channel: "transcribe-audio-file",
+      job: { title: "Transcribe audio file" },
       args: ({ file_path, provider, model, language }) => [
         file_path,
         { provider, model, language },
@@ -746,6 +770,78 @@ function domainOperations() {
         command: "chats delete",
         params: { id: "path" },
         noContent: true,
+      },
+    }),
+
+    // ---------------------------------------------------- transcript segments
+    rendererOperation({
+      id: "notes.transcript.segments",
+      title: "List transcript segments",
+      description:
+        "List a note's transcript as structured segments (index, speaker, timestamp, text).",
+      params: { id: int("Note ID.", { required: true }) },
+      channel: "notes.transcript.segments",
+      mcp: "list_transcript_segments",
+      cli: {
+        method: "GET",
+        path: "/v1/notes/:id/transcript/segments",
+        command: "transcript segments",
+        params: { id: "path" },
+      },
+    }),
+    rendererOperation({
+      id: "notes.transcript.segment.update",
+      title: "Update a transcript segment",
+      description: "Edit one transcript segment's text and/or speaker (marking it as user-edited).",
+      policy: "write",
+      params: {
+        id: int("Note ID.", { required: true }),
+        segment_id: param("Segment id (preferred)."),
+        index: int("Segment index when the id is unknown (0-based)."),
+        text: param("Replacement text."),
+        speaker: param("Raw speaker id (e.g. you / system / manual_1)."),
+        speaker_name: param("Display name to assign to the segment."),
+        lock: bool("Lock the speaker so later diarization runs cannot overwrite it."),
+      },
+      channel: "notes.transcript.segment.update",
+      mcp: "update_transcript_segment",
+      cli: {
+        method: "PATCH",
+        path: "/v1/notes/:id/transcript/segments",
+        command: "transcript segment-update",
+        params: {
+          id: "path",
+          segment_id: "body",
+          index: "body",
+          text: "body",
+          speaker: "body",
+          speaker_name: "body",
+          lock: "body",
+        },
+      },
+    }),
+    rendererOperation({
+      id: "notes.transcript.segment.delete",
+      title: "Delete transcript segments",
+      description: "Delete transcript segments by id or index.",
+      policy: "destructive",
+      params: {
+        id: int("Note ID.", { required: true }),
+        segment_ids: {
+          type: "array",
+          items: "string",
+          description: "Segment ids to delete.",
+        },
+        index: int("Single segment index to delete (0-based)."),
+        count: int("With index: delete this many consecutive segments."),
+      },
+      channel: "notes.transcript.segment.delete",
+      mcp: "delete_transcript_segments",
+      cli: {
+        method: "DELETE",
+        path: "/v1/notes/:id/transcript/segments",
+        command: "transcript segment-delete",
+        params: { id: "path", segment_ids: "query", index: "query", count: "query" },
       },
     }),
 

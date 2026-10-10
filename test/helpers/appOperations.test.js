@@ -14,6 +14,7 @@ const {
 const { coreOperations } = require("../../src/helpers/appOperations/coreOperations");
 const { actionOperations } = require("../../src/helpers/appOperations/actionOperations");
 const { domainOperations } = require("../../src/helpers/appOperations/domainOperations");
+const { jobOperations } = require("../../src/helpers/appOperations/jobOperations");
 const { buildZodShape, annotationsFor } = require("../../src/helpers/appOperations/mcpAdapter");
 const {
   buildCliRoutes,
@@ -78,7 +79,12 @@ const LEGACY_CLI_ROUTES = [
 ];
 
 function buildRegistry() {
-  return createRegistry([...coreOperations(), ...actionOperations(), ...domainOperations()]);
+  return createRegistry([
+    ...coreOperations(),
+    ...actionOperations(),
+    ...domainOperations(),
+    ...jobOperations(),
+  ]);
 }
 
 test("every registered operation is exposed on both machine surfaces", () => {
@@ -303,6 +309,9 @@ test("capabilities that need the UI are marked as such", () => {
   assert.deepEqual(rendererOps, [
     "actions.run",
     "notes.export_files",
+    "notes.transcript.segment.delete",
+    "notes.transcript.segment.update",
+    "notes.transcript.segments",
     "recording.start",
     "recording.status",
     "recording.stop",
@@ -478,4 +487,57 @@ test("reading settings falls back to the mirror when no window is open", async (
     () => registry.invoke("settings.set", { key: "uiLanguage", value: "en" }, context),
     /no window/
   );
+});
+
+test("long operations can hand back a job handle instead of blocking", async () => {
+  const { OperationJobRegistry } = require("../../src/helpers/operationJobs.js");
+  const registry = buildRegistry();
+  const jobs = new OperationJobRegistry();
+  const context = {
+    jobs,
+    ipc: {
+      invokeChannel: async (channel) => {
+        assert.equal(channel, "compress-all-audio");
+        return { success: true, compressed: 4, affectedNotes: 2 };
+      },
+    },
+  };
+
+  const started = await registry.invoke("audio.compress_all", { wait: false }, context);
+  assert.match(started.data.job_id, /^job-/);
+  assert.equal(started.data.status, "running");
+  assert.equal(started.data.operation, "audio.compress_all");
+
+  await new Promise((resolve) => setImmediate(resolve));
+  await new Promise((resolve) => setImmediate(resolve));
+
+  const job = await registry.invoke("jobs.get", { id: started.data.job_id }, context);
+  assert.equal(job.data.status, "succeeded");
+  assert.deepEqual(job.data.result, { compressed: 4, affectedNotes: 2 });
+
+  const listed = await registry.invoke("jobs.list", {}, context);
+  assert.equal(listed.data[0].id, started.data.job_id);
+  assert.equal(listed.data[0].operation, "audio.compress_all");
+
+  // Default behaviour stays synchronous for callers that want the result.
+  const sync = await registry.invoke("audio.compress_all", {}, context);
+  assert.deepEqual(sync.data, { compressed: 4, affectedNotes: 2 });
+
+  await assert.rejects(() => registry.invoke("jobs.get", { id: "job-nope" }, context), /not found/);
+});
+
+test("transcript segment operations are defined on both surfaces", () => {
+  const registry = buildRegistry();
+  const list = registry.get("notes.transcript.segments");
+  assert.equal(list.policy, "read");
+  assert.equal(list.rendererRequired, true);
+  assert.equal(list.cli.path, "/v1/notes/:id/transcript/segments");
+
+  const update = registry.get("notes.transcript.segment.update");
+  assert.equal(update.policy, "write");
+  assert.ok(update.params.segment_id && update.params.text && update.params.speaker_name);
+
+  const remove = registry.get("notes.transcript.segment.delete");
+  assert.equal(remove.policy, "destructive");
+  assert.ok(remove.params.segment_ids && remove.params.index);
 });

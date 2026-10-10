@@ -16,6 +16,7 @@ const { createRegistry } = require("../src/helpers/appOperations/registry");
 const { coreOperations } = require("../src/helpers/appOperations/coreOperations");
 const { actionOperations } = require("../src/helpers/appOperations/actionOperations");
 const { domainOperations } = require("../src/helpers/appOperations/domainOperations");
+const { jobOperations } = require("../src/helpers/appOperations/jobOperations");
 
 const OUTPUT_PATH = path.join(
   __dirname,
@@ -27,7 +28,12 @@ const OUTPUT_PATH = path.join(
 );
 
 function listOperations() {
-  return createRegistry([...coreOperations(), ...actionOperations(), ...domainOperations()]).list();
+  return createRegistry([
+    ...coreOperations(),
+    ...actionOperations(),
+    ...domainOperations(),
+    ...jobOperations(),
+  ]).list();
 }
 
 function renderParamTable(operation) {

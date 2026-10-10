@@ -4,6 +4,8 @@ const { createRegistry } = require("./registry");
 const { coreOperations } = require("./coreOperations");
 const { actionOperations } = require("./actionOperations");
 const { domainOperations } = require("./domainOperations");
+const { jobOperations } = require("./jobOperations");
+const { OperationJobRegistry } = require("../operationJobs");
 const { RendererBridge } = require("./rendererBridge");
 const { buildCliRoutes } = require("./cliAdapter");
 
@@ -19,15 +21,16 @@ const { buildCliRoutes } = require("./cliAdapter");
 let cached = null;
 
 function buildOperationList() {
-  return [...coreOperations(), ...actionOperations(), ...domainOperations()];
+  return [...coreOperations(), ...actionOperations(), ...domainOperations(), ...jobOperations()];
 }
 
-function buildContext(ipcHandlers, renderer) {
+function buildContext(ipcHandlers, renderer, jobs) {
   return {
     ipc: ipcHandlers,
     db: ipcHandlers.databaseManager,
     broadcast: (channel, payload) => ipcHandlers.broadcastToWindows(channel, payload),
     renderer,
+    jobs,
   };
 }
 
@@ -40,7 +43,10 @@ function createAppOperations(ipcHandlers) {
   const renderer = new RendererBridge({
     ensureWindow: () => ipcHandlers.windowManager?.createControlPanelWindow?.(),
   });
-  const context = buildContext(ipcHandlers, renderer);
+  const jobs = new OperationJobRegistry({
+    broadcast: (channel, payload) => ipcHandlers.broadcastToWindows(channel, payload),
+  });
+  const context = buildContext(ipcHandlers, renderer, jobs);
   const registry = createRegistry(buildOperationList());
   context.registry = registry;
 
@@ -48,6 +54,7 @@ function createAppOperations(ipcHandlers) {
     registry,
     context,
     renderer,
+    jobs,
     operations: registry.list(),
     mcpToolNames: registry
       .list()

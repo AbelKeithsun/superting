@@ -1,7 +1,17 @@
 import { executeNoteAction } from "./actionProcessingStore";
 import { useSettingsStore } from "./settingsStore";
-import { useMeetingRecordingStore, startRecording, stopRecording } from "./meetingRecordingStore";
+import {
+  useMeetingRecordingStore,
+  startRecording,
+  stopRecording,
+  type TranscriptSegment,
+} from "./meetingRecordingStore";
 import { parseTranscriptSegments } from "../utils/parseTranscriptSegments";
+import {
+  applyTranscriptSpeakerPatch,
+  lockTranscriptSpeaker,
+  serializeTranscriptSegments,
+} from "../utils/transcriptSpeakerState";
 import type { ActionItem } from "../types/electron";
 
 /**
@@ -92,6 +102,72 @@ function coerceSettingValue(current: unknown, raw: unknown): unknown {
   return raw;
 }
 
+interface SegmentView {
+  index: number;
+  id: string | undefined;
+  timestamp: number | null;
+  end_time: number | null;
+  source: string;
+  speaker: string | null;
+  speaker_name: string | null;
+  speaker_status: string | null;
+  text: string;
+  edited_by_user: boolean;
+}
+
+function toSegmentView(segment: Record<string, unknown>, index: number): SegmentView {
+  return {
+    index,
+    id: typeof segment.id === "string" ? segment.id : undefined,
+    timestamp: typeof segment.timestamp === "number" ? segment.timestamp : null,
+    end_time: typeof segment.endTime === "number" ? segment.endTime : null,
+    source: typeof segment.source === "string" ? segment.source : "mic",
+    speaker: typeof segment.speaker === "string" ? segment.speaker : null,
+    speaker_name: typeof segment.speakerName === "string" ? segment.speakerName : null,
+    speaker_status: typeof segment.speakerStatus === "string" ? segment.speakerStatus : null,
+    text: typeof segment.text === "string" ? segment.text : "",
+    edited_by_user: !!segment.editedByUser,
+  };
+}
+
+/**
+ * Load a note's transcript as structured segments, using the app's own parser
+ * and the same timeline-duration repair the editor applies at ingest.
+ */
+async function loadSegments(noteId: number) {
+  const note = await window.electronAPI.getNote(noteId);
+  if (!note) throw new Error(`Note ${noteId} not found`);
+  const raw = note.transcript ?? "";
+  const segments = parseTranscriptSegments(raw, {
+    timelineDurationSeconds: note.audio_duration_seconds ?? null,
+  });
+  if (segments.length === 0) {
+    throw new Error(
+      raw.trim()
+        ? `Note ${noteId} stores a plain-text transcript, not structured segments`
+        : `Note ${noteId} has no transcript`
+    );
+  }
+  return { note, segments: segments as unknown as Array<Record<string, unknown>> };
+}
+
+function findSegmentIndex(
+  segments: Array<Record<string, unknown>>,
+  payload: Record<string, unknown>
+): number {
+  const segmentId = typeof payload.segment_id === "string" ? payload.segment_id : null;
+  if (segmentId) {
+    const found = segments.findIndex((segment) => segment.id === segmentId);
+    if (found < 0) throw new Error(`Segment "${segmentId}" not found`);
+    return found;
+  }
+  const index = Number(payload.index);
+  if (!Number.isInteger(index) || index < 0 || index >= segments.length) {
+    throw new Error(`segment_id or a valid index (0..${segments.length - 1}) is required`);
+  }
+  return index;
+}
+
 const handlers: Record<string, AppOperationHandler> = {
   run_note_action: async (payload) => {
     const actionId = Number(payload?.actionId);
@@ -177,6 +253,117 @@ const handlers: Record<string, AppOperationHandler> = {
     });
     if (!result?.success) throw new Error(result?.error ?? "Export failed");
     return result;
+  },
+
+  "notes.transcript.segments": async (payload) => {
+    const noteId = Number(payload?.id);
+    if (!Number.isFinite(noteId)) throw new Error("notes.transcript.segments requires id");
+    const { segments } = await loadSegments(noteId);
+    return {
+      note_id: noteId,
+      count: segments.length,
+      segments: segments.map(toSegmentView),
+    };
+  },
+
+  "notes.transcript.segment.update": async (payload) => {
+    const noteId = Number(payload?.id);
+    if (!Number.isFinite(noteId)) {
+      throw new Error("notes.transcript.segment.update requires id");
+    }
+    const { segments } = await loadSegments(noteId);
+    const target = findSegmentIndex(segments, payload);
+    const current = segments[target];
+
+    let next: TranscriptSegment = { ...(current as unknown as TranscriptSegment) };
+    let changed = false;
+
+    if (typeof payload?.text === "string") {
+      next = {
+        ...next,
+        text: payload.text,
+        editedByUser: true,
+        // Keep the pre-edit wording as the correction baseline, exactly like
+        // the editor's inline edit does.
+        originalText: typeof current.originalText === "string" ? current.originalText : next.text,
+      };
+      changed = true;
+    }
+
+    const speakerPatch: Record<string, unknown> = {};
+    if (typeof payload?.speaker === "string" && payload.speaker)
+      speakerPatch.speaker = payload.speaker;
+    if (typeof payload?.speaker_name === "string" && payload.speaker_name) {
+      speakerPatch.speakerName = payload.speaker_name;
+    }
+    if (Object.keys(speakerPatch).length > 0) {
+      next = payload?.lock
+        ? lockTranscriptSpeaker(next, speakerPatch)
+        : applyTranscriptSpeakerPatch(next, speakerPatch);
+      changed = true;
+    } else if (payload?.lock) {
+      next = lockTranscriptSpeaker(next);
+      changed = true;
+    }
+
+    if (!changed) {
+      throw new Error("Provide text, speaker, speaker_name or lock");
+    }
+
+    const updated = [...segments];
+    updated[target] = next as unknown as Record<string, unknown>;
+    const result = (await window.electronAPI.updateNote(noteId, {
+      transcript: serializeTranscriptSegments(updated as never),
+    })) as { success?: boolean; error?: string };
+    if (!result?.success) throw new Error(result?.error ?? "Failed to save the transcript");
+    return { note_id: noteId, segment: toSegmentView(next as never, target) };
+  },
+
+  "notes.transcript.segment.delete": async (payload) => {
+    const noteId = Number(payload?.id);
+    if (!Number.isFinite(noteId)) {
+      throw new Error("notes.transcript.segment.delete requires id");
+    }
+    const { segments } = await loadSegments(noteId);
+
+    const ids = Array.isArray(payload?.segment_ids)
+      ? payload.segment_ids.map(String).filter(Boolean)
+      : [];
+    const index = Number(payload?.index);
+    const count = Number(payload?.count);
+    const range =
+      Number.isInteger(index) && index >= 0
+        ? new Set(
+            Array.from(
+              { length: Number.isInteger(count) && count > 0 ? count : 1 },
+              (_, offset) => index + offset
+            )
+          )
+        : null;
+
+    if (ids.length === 0 && !range) {
+      throw new Error("Provide segment_ids or an index");
+    }
+
+    const kept: Array<Record<string, unknown>> = [];
+    const removed: number[] = [];
+    segments.forEach((segment, position) => {
+      const matchesId = typeof segment.id === "string" && ids.includes(segment.id);
+      const matchesRange = range?.has(position) ?? false;
+      if (matchesId || matchesRange) {
+        removed.push(position);
+        return;
+      }
+      kept.push(segment);
+    });
+
+    if (removed.length === 0) throw new Error("No matching segments to delete");
+
+    const result = (await window.electronAPI.updateNote(noteId, {
+      transcript: serializeTranscriptSegments(kept as never),
+    })) as { success?: boolean; error?: string };
+    if (!result?.success) throw new Error(result?.error ?? "Failed to save the transcript");
+    return { note_id: noteId, removed_indexes: removed, remaining: kept.length };
   },
 
   "recording.status": () => {

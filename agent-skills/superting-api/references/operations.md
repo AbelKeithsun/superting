@@ -2,7 +2,7 @@
 
 # 全部机器能力（MCP 工具与 CLI 路由）
 
-共 80 项能力。每一行都由主进程的操作注册表
+共 86 项能力。每一行都由主进程的操作注册表
 （`src/helpers/appOperations/`）生成：同一份定义同时投影为 MCP 工具与
 CLI 路由，因此两边的能力集合不再可能不一致。
 
@@ -127,7 +127,9 @@ Compress every retained audio file to Opus-in-WebM.
 - MCP 工具：`compress_all_audio`
 - CLI 路由：`POST /v1/audio/compress`（CLI：`superting audio compress-all`）
 
-_No parameters._
+| 参数 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| `wait` | boolean | 否 | Wait for compression to finish (default true). Set false for a job id. |
 
 ### `audio.delete_all` — Delete all audio
 
@@ -461,6 +463,45 @@ Persist a new folder order.
 | --- | --- | --- | --- |
 | `folder_ids` | array<number> | 是 | Folder IDs in the desired order. |
 
+## jobs
+
+### `jobs.list` — List operation jobs
+
+List recent long-running operation jobs (newest first).
+
+- 策略：`read`
+- MCP 工具：`list_jobs`
+- CLI 路由：`GET /v1/jobs`（CLI：`superting jobs list`）
+
+| 参数 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| `limit` | number | 否 | Maximum jobs to return. Default 20. |
+| `status` | running\|succeeded\|failed\|cancelled | 否 | Filter by status. |
+
+### `jobs.get` — Get operation job
+
+Get one job's status, progress and result.
+
+- 策略：`read`
+- MCP 工具：`get_job`
+- CLI 路由：`GET /v1/jobs/:id`（CLI：`superting jobs get`）
+
+| 参数 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| `id` | string | 是 | Job id. |
+
+### `jobs.cancel` — Cancel operation job
+
+Request cancellation of a running job. The underlying work is not abortable, so the result is discarded on completion.
+
+- 策略：`write`
+- MCP 工具：`cancel_job`
+- CLI 路由：`POST /v1/jobs/:id/cancel`（CLI：`superting jobs cancel`）
+
+| 参数 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| `id` | string | 是 | Job id. |
+
 ## notes
 
 ### `notes.list` — List notes
@@ -614,6 +655,7 @@ Merge a note's audio segments into one file (removes the segments).
 | 参数 | 类型 | 必填 | 说明 |
 | --- | --- | --- | --- |
 | `id` | number | 是 | Note ID. |
+| `wait` | boolean | 否 | Wait for the merge to finish (default true). Set false for a job id. |
 
 ### `notes.audio.rediarize` — Re-run speaker diarization
 
@@ -628,6 +670,7 @@ Re-identify speakers for a note's audio (runs in the background).
 | `id` | number | 是 | Note ID. |
 | `audio_file_id` | number | 否 | Specific audio file ID. |
 | `expected_count` | number | 否 | Expected speaker count (advanced). |
+| `wait` | boolean | 否 | Wait for diarization to finish (default true). Set false for a job id. |
 
 ### `notes.import` — Import a file into a note
 
@@ -656,6 +699,51 @@ Export notes (markdown/txt/pdf) to a folder chosen in the app's save dialog.
 | `note_ids` | array<number> | 是 | Note IDs to export. |
 | `format` | md\|txt\|pdf | 否 | Export format. |
 | `fields` | array<string> | 否 | Subset of: transcript, content, enhanced_content. |
+
+### `notes.transcript.segments` — List transcript segments
+
+List a note's transcript as structured segments (index, speaker, timestamp, text).
+
+- 策略：`read`
+- MCP 工具：`list_transcript_segments`
+- CLI 路由：`GET /v1/notes/:id/transcript/segments`（CLI：`superting transcript segments`）
+
+| 参数 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| `id` | number | 是 | Note ID. |
+
+### `notes.transcript.segment.update` — Update a transcript segment
+
+Edit one transcript segment's text and/or speaker (marking it as user-edited).
+
+- 策略：`write · needs UI`
+- MCP 工具：`update_transcript_segment`
+- CLI 路由：`PATCH /v1/notes/:id/transcript/segments`（CLI：`superting transcript segment-update`）
+
+| 参数 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| `id` | number | 是 | Note ID. |
+| `segment_id` | string | 否 | Segment id (preferred). |
+| `index` | number | 否 | Segment index when the id is unknown (0-based). |
+| `text` | string | 否 | Replacement text. |
+| `speaker` | string | 否 | Raw speaker id (e.g. you / system / manual_1). |
+| `speaker_name` | string | 否 | Display name to assign to the segment. |
+| `lock` | boolean | 否 | Lock the speaker so later diarization runs cannot overwrite it. |
+
+### `notes.transcript.segment.delete` — Delete transcript segments
+
+Delete transcript segments by id or index.
+
+- 策略：`destructive · needs UI`
+- MCP 工具：`delete_transcript_segments`
+- CLI 路由：`DELETE /v1/notes/:id/transcript/segments`（CLI：`superting transcript segment-delete`）
+
+| 参数 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| `id` | number | 是 | Note ID. |
+| `segment_ids` | array<string> | 否 | Segment ids to delete. |
+| `index` | number | 否 | Single segment index to delete (0-based). |
+| `count` | number | 否 | With index: delete this many consecutive segments. |
 
 ## people
 
@@ -999,6 +1087,7 @@ Transcribe a local audio file with an on-device engine (whisper / Parakeet / Fun
 | `provider` | whisper\|nvidia\|funasr | 否 | Local engine. |
 | `model` | string | 否 | Model name for that engine. |
 | `language` | string | 否 | Language code, or `auto`. |
+| `wait` | boolean | 否 | Wait for the transcription to finish (default true). Set false for a job id. |
 
 ### `transcriptions.retry` — Retry transcription
 
