@@ -1914,7 +1914,9 @@
       },
       "errors": {
         "noModel": "Kein KI-Modell ausgewählt. Konfigurieren Sie eins in den Einstellungen.",
-        "actionFailed": "Aktion fehlgeschlagen"
+        "actionFailed": "Aktion fehlgeschlagen",
+        "alreadyRunning": "Für diese Notiz läuft bereits eine KI-Aktion.",
+        "noteNotFound": "Notiz nicht gefunden. Sie wurde möglicherweise gelöscht."
       },
       "outputTargetLabel": "Ergebnis speichern in",
       "outputTargetNote": "Notizen",

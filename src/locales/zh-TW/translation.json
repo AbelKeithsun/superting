@@ -1913,7 +1913,9 @@
       },
       "errors": {
         "noModel": "未選擇 AI 模型。請在設定中進行配置。",
-        "actionFailed": "操作失敗"
+        "actionFailed": "操作失敗",
+        "alreadyRunning": "這則筆記已有 AI 操作正在執行。",
+        "noteNotFound": "找不到這則筆記，可能已被刪除。"
       },
       "outputTargetLabel": "儲存結果到",
       "outputTargetNote": "筆記",

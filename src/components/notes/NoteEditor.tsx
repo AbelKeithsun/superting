@@ -73,6 +73,7 @@ import type {
 } from "../../types/electron";
 import type { ActionProcessingState } from "../../hooks/useActionProcessing";
 import type { ActionOutputTarget } from "../../stores/actionProcessingCore";
+import { publishNoteActionContext } from "../../stores/noteActionContext";
 import ActionProcessingOverlay from "./ActionProcessingOverlay";
 import NoteBottomBar from "./NoteBottomBar";
 import EmbeddedChat, { type EmbeddedChatMode } from "./EmbeddedChat";
@@ -974,6 +975,17 @@ export default function NoteEditor({
     setContentDraft(note.content);
     setEnhancedDraft(enhancement?.content ?? "");
   }, [note.id]);
+
+  // Publish uncommitted edit-session drafts for note actions: the editor shows
+  // text that is newer than both the committed renderer state and the DB copy.
+  // Cleared (null) as soon as the edit session ends. See noteActionContext.ts.
+  useEffect(() => {
+    if (!note.id) return;
+    publishNoteActionContext(note.id, {
+      draftContent: contentEditTarget === "raw" ? contentDraft : null,
+      draftEnhancedContent: contentEditTarget === "enhanced" ? enhancedDraft : null,
+    });
+  }, [note.id, contentEditTarget, contentDraft, enhancedDraft]);
 
   // Sync the persisted diarization outcome (covers runs from earlier sessions,
   // where the toast is long gone).

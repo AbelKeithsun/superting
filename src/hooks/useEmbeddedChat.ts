@@ -5,12 +5,7 @@ import { useChatStreaming } from "../components/chat/useChatStreaming";
 import type { Message, AgentState, ToolCallInfo } from "../components/chat/types";
 import { initializeActions, useActions, getActionName } from "../stores/actionStore";
 import type { ActionItem } from "../types/electron";
-import {
-  selectIsCloudNoteFormattingMode,
-  selectResolvedNoteFormatting,
-  useSettingsStore,
-} from "../stores/settingsStore";
-import { runNoteActionOnce } from "../stores/runNoteActionOnce";
+import { executeNoteAction } from "../stores/actionProcessingStore";
 import { buildWriteNoteContentUpdates } from "../stores/actionProcessingCore";
 import { createPendingRunNoteActionToolCall } from "./embeddedChatActions";
 
@@ -257,24 +252,26 @@ export function useEmbeddedChat({
           const actionId = Number(payload.actionId);
           const action = actionsRef.current.find((item) => item.id === actionId);
           if (!action) throw new Error(t("embeddedChat.confirmation.actionNotFound"));
-          const note = await window.electronAPI.getNote(noteIdFromPayload);
-          if (!note) throw new Error(t("embeddedChat.confirmation.noteNotFound"));
 
-          const settings = useSettingsStore.getState();
-          const resolved = selectResolvedNoteFormatting(settings);
-          const isCloudMode = selectIsCloudNoteFormattingMode(settings);
-          const { updates } = await runNoteActionOnce({
-            note,
+          // Same executor as the toolbar ActionPicker: same content snapshot
+          // (unsaved edits + live transcript included), same per-note lock,
+          // same side drawer, same validation.
+          const result = await executeNoteAction({
+            noteId: noteIdFromPayload,
             action,
-            modelId: resolved.model,
-            isCloudMode,
-            speakerLabels: {
-              you: t("notes.speaker.you"),
-              them: t("notes.speaker.them"),
-            },
+            trigger: "chat",
           });
-          const result = await window.electronAPI.updateNote(note.id, updates);
-          if (!result.success) throw new Error(t("embeddedChat.confirmation.writeFailed"));
+
+          if (result.status === "busy") {
+            throw new Error(t("notes.actions.errors.alreadyRunning"));
+          }
+          if (result.status === "cancelled") {
+            throw new Error(t("embeddedChat.confirmation.cancelled"));
+          }
+          if (result.status === "error") {
+            throw new Error(result.message);
+          }
+
           patchToolCall(toolCall.id, {
             status: "completed",
             result: t("embeddedChat.confirmation.actionCompleted", { name: action.name }),

@@ -1913,7 +1913,9 @@
       },
       "errors": {
         "noModel": "No hay modelo de IA seleccionado. Configura uno en Ajustes.",
-        "actionFailed": "La acción falló"
+        "actionFailed": "La acción falló",
+        "alreadyRunning": "Ya hay una acción de IA en curso en esta nota.",
+        "noteNotFound": "No se encontró la nota. Puede que se haya eliminado."
       },
       "outputTargetLabel": "Guardar resultado en",
       "outputTargetNote": "Notas",

@@ -70,9 +70,8 @@ import AddNotesToFolderDialog from "./AddNotesToFolderDialog";
 import { useActionProcessing } from "../../hooks/useActionProcessing";
 import {
   useSettingsStore,
-  selectIsCloudNoteFormattingMode,
-  selectResolvedNoteFormatting,
 } from "../../stores/settingsStore";
+import { clearNoteActionContext, publishNoteActionContext } from "../../stores/noteActionContext";
 import { useFolderManagement } from "../../hooks/useFolderManagement";
 import { useFolderReorderDrag } from "../../hooks/useFolderReorderDrag";
 import { useNoteDragAndDrop } from "../../hooks/useNoteDragAndDrop";
@@ -429,8 +428,6 @@ export default function PersonalNotesView({
     setSyncedNoteIdState(id);
   };
   const { toast } = useToast();
-  const isCloudMode = useSettingsStore(selectIsCloudNoteFormattingMode);
-  const effectiveModelId = useSettingsStore((s) => selectResolvedNoteFormatting(s).model);
   const noteFilesEnabled = useSettingsStore((s) => s.noteFilesEnabled);
   const fileManagerName = navigator.platform.startsWith("Mac")
     ? "Finder"
@@ -1473,13 +1470,53 @@ export default function PersonalNotesView({
   }, [isTranscribing, realtimeSegments, recordingNoteId, recordingStartedAt, notes]);
 
   const isLocalSynced = syncedNoteId === activeNote?.id;
+  const editorTitle = isLocalSynced ? localTitle : (activeNote?.title ?? "");
+  const editorBody = isLocalSynced ? localContent : (activeNote?.content ?? "");
   const editorNote = activeNote
     ? {
         ...activeNote,
-        title: isLocalSynced ? localTitle : activeNote.title,
-        content: isLocalSynced ? localContent : activeNote.content,
+        title: editorTitle,
+        content: editorBody,
       }
     : null;
+
+  // Publish what the editor shows right now so every note-action entry point
+  // (toolbar ActionPicker, embedded chat) runs against identical content:
+  // in-memory edits win over the DB copy, and a recording's live transcript
+  // wins over the periodically-persisted one. See stores/noteActionContext.ts.
+  useEffect(() => {
+    const noteId = activeNote?.id ?? null;
+    if (!noteId) return;
+    publishNoteActionContext(noteId, {
+      title: editorTitle,
+      content: editorBody,
+      enhancedContent: localEnhancedContent,
+      transcript: resolvedActiveTranscript ?? null,
+      transcriptIsLive: isActiveNoteRecording,
+      recordedAt: activeNote?.recorded_at ?? null,
+      createdAt: activeNote?.created_at ?? null,
+      audioDurationSeconds: activeNote?.audio_duration_seconds ?? null,
+      isRecording: isActiveNoteRecording,
+      flush: () => flushPendingNoteSaves(noteId),
+    });
+  }, [
+    activeNote?.id,
+    activeNote?.recorded_at,
+    activeNote?.created_at,
+    activeNote?.audio_duration_seconds,
+    editorTitle,
+    editorBody,
+    localEnhancedContent,
+    resolvedActiveTranscript,
+    isActiveNoteRecording,
+    flushPendingNoteSaves,
+  ]);
+
+  useEffect(() => {
+    const noteId = activeNote?.id ?? null;
+    if (!noteId) return;
+    return () => clearNoteActionContext(noteId);
+  }, [activeNote?.id]);
 
   const handleNotesSidebarResizeStart = useCallback(
     (event: ReactPointerEvent<HTMLButtonElement>) => {
@@ -2105,44 +2142,7 @@ export default function PersonalNotesView({
               actionOutputTarget={actionOutputTarget}
               actionPicker={
                 <ActionPicker
-                  onRunAction={async (action) => {
-                    if (!editorNote) return;
-                    await flushPendingNoteSaves(editorNote.id);
-                    const rawTranscript = resolveNoteActionTranscript({
-                      isActiveNoteRecording,
-                      realtimeTranscript,
-                      persistedTranscript: editorNote.transcript,
-                    });
-                    const currentTitle = localTitleRef.current;
-                    const currentContent = localContentRef.current;
-                    const currentEnhancedContent = localEnhancedContentRef.current;
-                    const actionInput = buildNoteActionInput({
-                      noteContent: currentContent,
-                      rawTranscript,
-                      speakerLabels: {
-                        you: t("notes.speaker.you"),
-                        them: t("notes.speaker.them"),
-                      },
-                    });
-                    if (!actionInput) return;
-
-                    runAction(action, actionInput.content, actionInput.contentHash, {
-                      isCloudMode,
-                      modelId: effectiveModelId,
-                      isMeetingNote: actionInput.isMeetingNote,
-                      currentTitle,
-                      currentContent,
-                      currentEnhancedContent,
-                      currentTranscript: rawTranscript,
-                      currentRecordedAt: editorNote.recorded_at,
-                      currentCreatedAt: editorNote.created_at,
-                      currentAudioDurationSeconds: editorNote.audio_duration_seconds,
-                      speakerLabels: {
-                        you: t("notes.speaker.you"),
-                        them: t("notes.speaker.them"),
-                      },
-                    });
-                  }}
+                  onRunAction={(action) => runAction(action)}
                   onManageActions={() => setShowActionManager(true)}
                   disabled={
                     (!editorNote?.content?.trim() &&

@@ -1913,7 +1913,9 @@
       },
       "errors": {
         "noModel": "Nenhum modelo de IA selecionado. Configure um nas Configurações.",
-        "actionFailed": "A ação falhou"
+        "actionFailed": "A ação falhou",
+        "alreadyRunning": "Já existe uma ação de IA em execução nesta nota.",
+        "noteNotFound": "Nota não encontrada. Ela pode ter sido excluída."
       },
       "outputTargetLabel": "Salvar resultado em",
       "outputTargetNote": "Notas",

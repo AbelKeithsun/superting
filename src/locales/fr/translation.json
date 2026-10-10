@@ -1970,7 +1970,9 @@
       },
       "errors": {
         "noModel": "Aucun modèle IA sélectionné. Configurez-en un dans les Paramètres.",
-        "actionFailed": "L'action a échoué"
+        "actionFailed": "L'action a échoué",
+        "alreadyRunning": "Une action IA est déjà en cours sur cette note.",
+        "noteNotFound": "Note introuvable. Elle a peut-être été supprimée."
       },
       "outputTargetLabel": "Enregistrer le resultat dans",
       "outputTargetNote": "Notes",
