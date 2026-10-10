@@ -111,18 +111,18 @@ SuperTing 是一款基于 Electron 的桌面听写应用，使用 whisper.cpp �
 - **vectorIndex.js**: Qdrant collection 管理 — upsert、删除、搜索、批量重建索引
 - **windowConfig.js**: 集中的窗口配置
 - **windowManager.js**: 窗口创建与生命周期管理
-- **appOperations/**: 机器能力注册表（`registry.js` + 各域 operations + `mcpAdapter.js` / `cliAdapter.js`）。**唯一事实来源**：每项能力声明一次（id、policy: read/write/destructive、参数、可选 serializer），自动投影为 MCP 工具与 CLI 路由；`rendererBridge.js` 负责需要 UI 的能力（如运行笔记动作）的主↔渲染往返，无窗口时返回 `renderer_unavailable`。新增能力请只改这里，`test/helpers/appOperations.test.js` 会因两侧不一致而失败。
-- **cliBridge.js**: 回环 HTTP 服务器，端口 8200–8219，Bearer token 认证（token 位于 `~/.superting/cli-bridge.json`），仅允许 127.0.0.1。供 agent CLI（`cli/superting.js`）与运行中的桌面应用通信。路由覆盖笔记 CRUD（create 会广播 `note-added` 并写入向量索引）、folders、transcriptions、tags，以及可读写的词典热词与替换规则（变更会广播 `dictionary-updated` / `dictionary-aliases-updated`，设置界面实时刷新）。校验失败返回 HTTP 400 `validation_error`。
+- **appOperations/**: 机器能力注册表（`registry.js` + 各域 operations + `mcpAdapter.js` / `cliAdapter.js`）。**唯一事实来源**：每项能力声明一次（id、policy: read/write/destructive、参数、可选 serializer、可选 `notes` 使用说明），自动投影为 MCP 工具与 CLI 路由；`rendererBridge.js` 负责需要 UI 的能力（如运行笔记动作）的主↔渲染往返，无窗口时返回 `renderer_unavailable`。agent 侧由此得到两层说明：MCP 服务端共享的 `instructions` 规则块 + 每个工具的 `Guidance:` 提示，以及生成的能力参考表。新增能力请只改这里，`test/helpers/appOperations.test.js` 会因两侧不一致而失败。
+- **cliBridge.js**: 回环 HTTP 服务器，端口 8200-8219，Bearer token 认证（token 位于 `~/.superting/cli-bridge.json`），仅允许 127.0.0.1。供 agent CLI（`cli/superting.js`）与运行中的桌面应用通信。其路由由 `src/helpers/appOperations/` 的能力注册表**自动生成**（v2.0.13 为 87 项能力：笔记与转写段落、笔记动作、长任务、文件夹、转录、音频、联系人/说话人/声纹、聊天、设置、录音、词典）——新增能力只改注册表。变更会广播对应渲染事件（`note-added`、`dictionary-updated`、`settings-mirror-update`、`operation-job-*`），界面实时刷新；需要 UI 的能力在渲染层执行，打不开窗口时返回 HTTP 503 `renderer_unavailable`。校验失败返回 HTTP 400 `validation_error`。
 - **postMigrationDetector.js**: 通过 userData 中的 `.bundle-migrated` 哨兵文件检测从旧 Gizmo bundle ID 迁移回来的用户；由 `ipcHandlers.js` 消费以触发 `PostMigrationOnboarding` 弹窗
 
 ### Agent CLI（cli/）
 
-- **superting.js**: 零依赖 Node CLI（`bin: superting`，经 `npm run install:cli` 安装 → `~/.local/bin` 符号链接）。每条命令一次回环 HTTP 调用 — 取代 MCP 的快速 agent 通道。默认 JSON 输出（`--format text` 为人类可读），退出码 0/1/2（成功 / 桥接或应用错误 / 用法错误），破坏性命令（`delete`、`dict|alias remove|replace`）需 `--yes`。命令组：`health`、`notes list|get|search|create|update|append|delete`（`update` 支持对 content 的 `--find/--replace` 字面量替换）、`folders list|create`、`transcriptions list|get`、`tags list`、`dict list|add|remove|replace`、`alias list|add|remove|replace`。另有 `ops list`（列出全部能力）与 `call <operation.id>`（通用调用兜底，参数位置由应用自己的能力目录决定），因此新增 operation 无需重发 CLI。
+- **superting.js**: 零依赖 Node CLI（`bin: superting`，经 `npm run install:cli` 安装 → `~/.local/bin` 符号链接；切换检出后要重跑一次，worktree 被删会留下断链）。每条命令一次回环 HTTP 调用——取代 MCP 的快速 agent 通道。默认 JSON 输出（`--format text` 为人类可读），退出码 0/1/2，破坏性命令按 operation 的 `policy` 自动要求 `--yes`。截至 v2.0.13 共 **88 条命令**，每个能力族一条（笔记与转写段落、笔记动作、长任务、转录、音频、联系人/说话人/声纹、聊天、设置、录音、文件夹、词典、替换规则）；便捷命令声明在 `OPERATION_COMMANDS` 表（命令名 → operation id），共用同一个 runner：路由、参数位置（path/query/body）与破坏性都取自应用自己的能力目录。多词命令按最长匹配，snake_case 参数同时接受连字符写法（`--note-id` = `--note_id`）。`ops list` 与通用兜底 `call <operation.id>` 仍然保留，所以新增 operation 依旧无需重发 CLI；`test/cli/cliOperationCommands.test.js` 保证 skills 与 CLI 同步。
 - **install-skills.js**（`bin: superting-skills`）: 零依赖 skill 安装器，把 `agent-skills/` 下的 skill 安装到 agent 技能目录，并把 package.json 版本号注入 SKILL.md frontmatter，使 skill 与 CLI 同版本更新。目标：默认 `<cwd>/.claude/skills`（项目）、`--project <dir>`、`--global`（`~/.agents/skills`，可用 `SUPERTING_SKILLS_GLOBAL_DIR` 覆盖）、`--target <dir>`；操作：`--list` / `--check` / `--remove`；`--force` 覆盖本地修改（以 sha256 manifest `.superting-skills-meta.json` 检测改动）。远程一条命令安装（版本由 release 资产锁定）：`npx -p https://github.com/AbelKeithsun/superting/releases/download/v<ver>/superting-skills-<ver>.tgz superting-skills --global`。本仓库内快捷方式：`npm run install:skills`。
 
 ### Agent Skills（agent-skills/）
 
-- `superting-cli/` 与 `superting-api/`（旧名 openwhispr-\* 已更名）。遵循渐进式披露：SKILL.md 保持精简（≤120 行，含触发 description、NEVER/MUST 守则、命令速查表、少量示例），细节放 `references/` 子目录按需加载（cli: `notes.md`/`dictionary.md`/`troubleshooting.md`；api: `routes.md`）。`--list` 自带 lint（长度上限、frontmatter 完整性、references 链接有效性）。发版时 `npm run pack:skills` 生成零依赖 `dist/superting-skills-<version>.tgz` 作为 release 资产上传。
+- `superting-cli/` 与 `superting-api/`（旧名 openwhispr-\* 已更名）。遵循渐进式披露：SKILL.md 保持精简（≤120 行，含触发 description、NEVER/MUST 守则、命令速查表、少量示例），细节放 `references/` 子目录按需加载（cli: `notes.md`/`dictionary.md`/`troubleshooting.md`；api: `routes.md`/`operations.md`）。`routes.md` 与 `operations.md` 由 `node scripts/generate-app-operations-docs.js` **生成**，禁止手改（过期会有测试失败）；文档里告诉 agent 的每条命令/能力都必须真实存在——skills 与 CLI 由测试强制同步。`--list` 自带 lint（长度上限、frontmatter 完整性、references 链接有效性）。发版时 `npm run pack:skills` 生成零依赖 `dist/superting-skills-<version>.tgz` 作为 release 资产上传。
 
 ### React 组件（src/components/）
 
@@ -613,8 +613,8 @@ AbelKeithsun/superting           remote: abel —— 开发仓（日常分支、
 
 - **开发主线是 `abel/main`**。功能分支命名 `codex/<主题>`，PR 以 `abel/main` 为 base，只允许 rebase merge；合并后立即删除远端分支。
 - **本地 `main` 跟踪 `abel/main`**。origin（源仓库）当前是滞后镜像（v2.0.x 的开发未回推）；`git push origin main` 是显式的手动同步动作，永不自动发生。
-- **发版**：发布提交（`chore: release vX.Y.Z`）直接在主检出 `main` 上做并推 `abel/main`，随后打 tag `vX.Y.Z` 发 GitHub Release（资产三件套：dmg、zip、`superting-skills-<ver>.tgz`）。
-- **worktree 分工**：`superting/` 主检出放 `main`（发版提交）；`superting-worktrees/codex-funasr-sensevoice` 是开发/构建工作区（带全量 node_modules）。临时构建分支 `temp/build-<版本>` 在发版完成后删除。
+- **发版**：发布提交（`chore: release vX.Y.Z`）直接在主检出 `main` 上做并推 `abel/main`，随后打 tag `vX.Y.Z` 发 GitHub Release（资产三件套：dmg、zip、`superting-skills-<ver>.tgz`）。升版本要改 `package.json` 与 `package-lock.json` 的**两处** `version`（`version` 与 `packages[""].version`，后者正是 `test/config/version101.test.js` 检查的）；用 `git tag -a` 打注释 tag 并推送；资产在主检出构建：`npm run build:mac:arm64`（dmg + zip，约 3-5 分钟，结束时会把 better-sqlite3 恢复为 Node ABI）与 `npm run pack:skills`（skills 压缩包）。用 `gh release create` 发布（GitHub 访问必须走本机代理 127.0.0.1:7897），再用 `gh release view <tag> --json assets` 核验。本机已装应用用 `node scripts/overlay-local-asar.js --app /Applications/SuperTing.app --bundle-version X.Y.Z` 对齐版本，无需重装。
+- **worktree 分工**：`superting/` 主检出放 `main`（发版提交），**同时就是构建工作区**——它带全量 `node_modules`，发版构建（`npm run build:mac:arm64`、`npm run pack:skills`）都在这里跑；`dist/` 已在 .gitignore 中，产物不会弄脏 `main`。功能开发在 `superting-worktrees/codex-<主题>` 的临时 worktree 中进行，从 `main` 创建，**合并后立即删除**——合并完还留着的 worktree 视为遗漏，而不是可复用的工作区。（旧笔记/旧分支里那个专职构建工作区 `superting-worktrees/codex-funasr-sensevoice` 已不存在。）
 - 常用检视命令：`git status -sb`（本地 main vs abel/main）；`git log --oneline abel/main ^origin/main`（列出未回推源仓库的提交）。
 
 ### Git 工作流
