@@ -291,13 +291,19 @@ test("handlers run with the registry context and shape their own response", asyn
   await assert.rejects(() => registry.invoke("notes.unknown", {}, context), /Unknown operation/);
 });
 
-test("the generated capability reference is up to date", () => {
-  const rendered = renderOperationsDoc(buildRegistry().list());
-  const existing = fs.readFileSync(OUTPUT_PATH, "utf8");
+test("the generated capability references are up to date", () => {
+  const { ROUTES_PATH, renderRoutesDoc } = require("../../scripts/generate-app-operations-docs.js");
+  const operations = buildRegistry().list();
+
   assert.equal(
-    existing,
-    rendered,
+    fs.readFileSync(OUTPUT_PATH, "utf8"),
+    renderOperationsDoc(operations),
     "agent-skills/superting-api/references/operations.md is stale — run `node scripts/generate-app-operations-docs.js`"
+  );
+  assert.equal(
+    fs.readFileSync(ROUTES_PATH, "utf8"),
+    renderRoutesDoc(operations),
+    "agent-skills/superting-api/references/routes.md is stale — run `node scripts/generate-app-operations-docs.js`"
   );
   assert.ok(path.isAbsolute(OUTPUT_PATH) || OUTPUT_PATH.includes("operations.md"));
 });

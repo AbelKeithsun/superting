@@ -68,8 +68,8 @@ superting transcriptions get <id>
 
 ```sh
 superting transcript segments --id 47 --limit 20          # {total, offset, count, has_more, segments[]}
-superting transcript segment-update --id 47 --json '{"index":0,"text":"修正后的文本"}'
-superting transcript segment-update --id 47 --json '{"index":3,"speaker_name":"张三","speaker":"manual_1","lock":true}'
+superting transcript segment-update --id 47 --index 0 --text "修正后的文本"
+superting transcript segment-update --id 47 --index 3 --speaker-name "张三" --speaker manual_1 --lock true
 superting transcript segment-delete --id 47 --index 12 --count 2
 ```
 
@@ -78,6 +78,7 @@ superting transcript segment-delete --id 47 --index 12 --count 2
 - 纯文本转录（非结构化）会报错 `stores a plain-text transcript, not structured segments`，
   此时改用 `notes update <id> --find/--replace`。
 - 列表默认 `limit 200`，长会议（上千段）务必分页，避免灌爆上下文。
+- 参数用 snake_case 也会被接受（`--note_id` 与 `--note-id` 等价）；`true/false/数字/逗号列表` 由 CLI 自动转换。
 
 ## 回收站与永久删除
 
@@ -91,5 +92,5 @@ superting notes purge <id>           # 永久删除（清空回收站里的这�
 ```sh
 superting notes import 47 --file-path /abs/path/notes.md --target note   # 或 --target transcript
 superting notes export 47 --format md        # 直接返回文本（无对话框）
-superting notes export-to-disk --json '{"note_ids":[47],"format":"md","fields":["content"]}'   # 走应用保存对话框
+superting notes export-to-disk --note-ids 47 --format md --fields content   # 走应用保存对话框
 ```

@@ -207,13 +207,15 @@ superting notes search "funasr" --limit 5
 superting notes update 3 --find "Fun ASR" --replace "FunASR"
 superting notes purge 12                       # 清空回收站里的笔记（破坏性，需 --yes）
 superting transcript segments --id 47 --limit 20          # 分页看转录段落
-superting transcript segment-update --id 47 --json '{"index":0,"text":"改后的文本"}'
+superting transcript segment-update --id 47 --index 0 --text "改后的文本"
 superting actions list                         # 找到「生成会议纪要」的动作 id
-superting call actions.run --json '{"id":1,"note_id":47}'
+superting actions run 1 --note-id 47                     # 生成会议纪要
 superting jobs list                            # 长任务（重新分离/批量压缩/音频转写）：wait=false 时返回 job_id
 superting jobs get <job_id>
 superting recording status / recording start --note-id 47 / recording stop
 superting settings get --key uiLanguage
+superting people list && superting speakers profiles     # 联系人与说话人
+superting audio usage                                    # 音频占用
 ```
 
 退出码：0=成功、1=桥接或应用错误、2=用法错误；输出默认 JSON（`--format text` 更易读）；破坏性命令需 `--yes`。常用语义见 `agent-skills/superting-cli/SKILL.md`，全量目录见 `agent-skills/superting-api/references/operations.md`（由注册表生成，勿手改）。

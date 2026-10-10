@@ -24,7 +24,6 @@ const EXIT_OK = 0;
 const EXIT_ERROR = 1;
 const EXIT_USAGE = 2;
 
-
 class ArgError extends Error {}
 
 /**
@@ -126,7 +125,6 @@ function parseTagList(raw) {
     .filter(Boolean);
 }
 
-
 class BridgeError extends Error {
   constructor(message, { status, code } = {}) {
     super(message);
@@ -217,7 +215,6 @@ async function bridgeRequest(bridge, method, route, { query, body } = {}) {
   return payload;
 }
 
-
 function truncatePreview(text, limit) {
   if (typeof text !== "string" || text.length <= limit) return text;
   return `${text.slice(0, limit)}…`;
@@ -267,7 +264,6 @@ function printText(payload) {
   render(payload, 0);
 }
 
-
 function requireYes(cliFlags, action) {
   if (last(cliFlags, "yes") !== "true") {
     throw new ArgError(
@@ -275,6 +271,334 @@ function requireYes(cliFlags, action) {
     );
   }
 }
+
+/**
+ * Load one operation from the app's capability catalog. Placement of every
+ * parameter (path/query/body) and destructiveness come from that catalog, so the
+ * ergonomic commands below never hard-code routes or guess argument shapes.
+ */
+async function loadOperation(bridge, operationId) {
+  const catalog = await bridgeRequest(bridge, "GET", "/v1/operations");
+  const operation = (catalog?.data ?? []).find((item) => item.id === operationId);
+  if (!operation) {
+    throw new ArgError(
+      `Operation "${operationId}" is not available in this app version (see: superting ops list)`
+    );
+  }
+  return operation;
+}
+
+/** Read `--flag` values, accepting the hyphenated spelling of snake_case params. */
+function flagValues(flags, name) {
+  const direct = flags.get(name);
+  if (direct && direct.length > 0) return direct;
+  const hyphenated = name.replace(/_/g, "-");
+  if (hyphenated !== name) return flags.get(hyphenated);
+  return undefined;
+}
+
+/** Collect the operation's declared params from `--flag value` pairs. */
+function paramsFromFlags(operation, flags, extra = {}) {
+  const params = { ...extra };
+  for (const [name, spec] of Object.entries(operation.params ?? {})) {
+    const values = flagValues(flags, name);
+    if (!values || values.length === 0) continue;
+    if (spec.type === "array") {
+      params[name] =
+        values.length > 1
+          ? values
+          : String(values[0])
+              .split(",")
+              .map((item) => item.trim())
+              .filter(Boolean);
+    } else {
+      params[name] = values[values.length - 1];
+    }
+  }
+  return params;
+}
+
+/** Execute one operation, honouring the app's own route/parameter placement. */
+async function runOperationRequest(bridge, operation, { params = {}, cliFlags = new Map() } = {}) {
+  if (operation.policy === "destructive") {
+    requireYes(cliFlags, `Running ${operation.id}`);
+  }
+
+  const locations = operation.cli?.params ?? {};
+  let route = operation.cli?.path ?? "";
+  const query = {};
+  const body = {};
+  for (const [name, value] of Object.entries(params)) {
+    const location = locations[name];
+    if (location === "path") {
+      route = route.replace(`:${name}`, encodeURIComponent(String(value)));
+    } else if (location === "query") {
+      query[name] = value;
+    } else {
+      body[name] = value;
+    }
+  }
+  const missing = [...route.matchAll(/:([a-z0-9_]+)/g)].map((match) => match[1]);
+  if (missing.length > 0) {
+    throw new ArgError(`Missing required parameter(s): ${missing.join(", ")}`);
+  }
+
+  const method = operation.cli?.method ?? "GET";
+  const hasBody = method !== "GET" && method !== "DELETE";
+  return bridgeRequest(bridge, method, route, { query, body: hasBody ? body : undefined });
+}
+
+/**
+ * Ergonomic commands for the capability families added after 2.0.4. Each row is
+ * a thin wrapper over runOperationRequest; `superting call <operation.id>`
+ * remains the escape hatch for anything not listed (and a test asserts every row
+ * here maps to a real operation).
+ */
+const OPERATION_COMMANDS = [
+  // notes: lifecycle, import/export, audio
+  [
+    "notes purge",
+    "notes.purge",
+    "Permanently delete a trashed note (irreversible).",
+    "superting notes purge <id>",
+  ],
+  [
+    "notes import",
+    "notes.import",
+    "Import a local txt/md/docx into a note.",
+    "superting notes import <id> --file-path <f> [--target note|transcript]",
+  ],
+  [
+    "notes export",
+    "notes.export",
+    "Render a note to md/txt/json text (no file written).",
+    "superting notes export <id> [--format md|txt|json]",
+  ],
+  [
+    "notes export-to-disk",
+    "notes.export_files",
+    "Export notes to a folder chosen in the app.",
+    "superting notes export-to-disk --note-ids 1,2 --format md",
+  ],
+  [
+    "notes audio list",
+    "notes.audio.list",
+    "List a note's retained audio files.",
+    "superting notes audio list --id <n>",
+  ],
+  [
+    "notes audio compress",
+    "notes.audio.compress",
+    "Compress a note's audio to Opus-in-WebM.",
+    "superting notes audio compress --id <n> [--audio-file-id N]",
+  ],
+  [
+    "notes audio merge",
+    "notes.audio.merge",
+    "Merge a note's audio segments into one file.",
+    "superting notes audio merge --id <n>",
+  ],
+  [
+    "notes audio rediarize",
+    "notes.audio.rediarize",
+    "Re-run speaker diarization for a note.",
+    "superting notes audio rediarize --id <n>",
+  ],
+  // transcript segments
+  [
+    "transcript segments",
+    "notes.transcript.segments",
+    "List transcript segments (paged).",
+    "superting transcript segments --id <n> [--offset N] [--limit N]",
+  ],
+  [
+    "transcript segment-update",
+    "notes.transcript.segment.update",
+    "Edit one transcript segment's text or speaker.",
+    'superting transcript segment-update --id <n> --json \'{"index":0,"text":"…"}\'',
+  ],
+  [
+    "transcript segment-delete",
+    "notes.transcript.segment.delete",
+    "Delete transcript segments by id or index.",
+    "superting transcript segment-delete --id <n> --index N [--count N]",
+  ],
+  // note actions
+  ["actions list", "actions.list", "List note actions (built-in and custom)."],
+  ["actions get", "actions.get", "Get one note action definition.", "superting actions get <id>"],
+  ["actions create", "actions.create", "Create a custom note action."],
+  [
+    "actions update",
+    "actions.update",
+    "Update a note action.",
+    "superting actions update <id> [--name …] [--prompt …]",
+  ],
+  ["actions delete", "actions.delete", "Delete a note action.", "superting actions delete <id>"],
+  [
+    "actions run",
+    "actions.run",
+    "Run a note action (e.g. 生成会议纪要) on a note.",
+    "superting actions run <id> --note-id <n>",
+  ],
+  // jobs
+  ["jobs list", "jobs.list", "List long-running operation jobs."],
+  [
+    "jobs get",
+    "jobs.get",
+    "Get one job's status, progress and result.",
+    "superting jobs get <job_id>",
+  ],
+  [
+    "jobs cancel",
+    "jobs.cancel",
+    "Request cancellation of a running job.",
+    "superting jobs cancel <job_id>",
+  ],
+  // folders
+  [
+    "folders rename",
+    "folders.rename",
+    "Rename a folder.",
+    "superting folders rename <id> --name <n>",
+  ],
+  ["folders delete", "folders.delete", "Delete a folder.", "superting folders delete <id>"],
+  [
+    "folders reorder",
+    "folders.reorder",
+    "Persist a new folder order.",
+    "superting folders reorder --folder-ids 1,2,3",
+  ],
+  // dictionary groups
+  ["dict groups list", "dictionary.groups.list", "List the dictionary group tree."],
+  ["dict groups create", "dictionary.groups.create", "Create a dictionary group."],
+  [
+    "dict groups rename",
+    "dictionary.groups.rename",
+    "Rename a dictionary group.",
+    "superting dict groups rename <id> --name <n>",
+  ],
+  ["dict groups move", "dictionary.groups.move", "Move a group or a dictionary item into a group."],
+  [
+    "dict groups delete",
+    "dictionary.groups.delete",
+    "Delete a dictionary group.",
+    "superting dict groups delete <id>",
+  ],
+  // transcriptions
+  [
+    "transcriptions transcribe",
+    "transcriptions.transcribe_file",
+    "Transcribe a local audio file on-device.",
+    "superting transcriptions transcribe --file-path <f> [--wait false]",
+  ],
+  [
+    "transcriptions retry",
+    "transcriptions.retry",
+    "Retry a transcription with current settings.",
+    "superting transcriptions retry <id>",
+  ],
+  ["transcriptions clear", "transcriptions.clear", "Delete all transcription history and audio."],
+  [
+    "transcriptions delete",
+    "transcriptions.delete",
+    "Delete one transcription record and its audio.",
+    "superting transcriptions delete <id>",
+  ],
+  [
+    "transcriptions delete-audio",
+    "transcriptions.delete_audio",
+    "Delete a transcription's audio, keep the text.",
+    "superting transcriptions delete-audio <id>",
+  ],
+  // audio storage
+  ["audio usage", "audio.usage", "Show how much disk retained audio uses."],
+  ["audio retention", "audio.retention.set", "Set audio retention days and run cleanup."],
+  ["audio compress-all", "audio.compress_all", "Compress every retained audio file."],
+  ["audio delete-all", "audio.delete_all", "Delete every retained audio file."],
+  // people & contacts
+  ["people list", "people.list", "List contact profiles (人名表)."],
+  [
+    "people get",
+    "people.get",
+    "Get one contact and its voiceprint metadata.",
+    "superting people get <id>",
+  ],
+  ["people create", "people.create", "Create a contact profile."],
+  [
+    "people update",
+    "people.update",
+    "Update a contact profile.",
+    "superting people update <id> [--email …]",
+  ],
+  [
+    "people delete",
+    "people.delete",
+    "Delete a contact and its voiceprints.",
+    "superting people delete <id>",
+  ],
+  [
+    "people merge",
+    "people.merge",
+    "Merge one contact into another.",
+    "superting people merge --keep-id <id> --remove-id <id>",
+  ],
+  ["contacts search", "contacts.search", "Search contact records by name or email."],
+  ["contacts upsert", "contacts.upsert", "Create or update a contact record."],
+  // speakers
+  ["speakers profiles", "speakers.profiles", "List speaker profiles across notes."],
+  ["speakers names", "speakers.names", "List known speaker names."],
+  [
+    "speakers mappings",
+    "speakers.mappings",
+    "Show a note's speaker → contact mappings.",
+    "superting speakers mappings --id <n>",
+  ],
+  ["speakers assign", "speakers.mapping.set", "Assign a name/contact to a speaker in a note."],
+  ["speakers name-add", "speakers.name.upsert", "Create or update a speaker name."],
+  [
+    "speakers name-delete",
+    "speakers.name.delete",
+    "Delete a speaker name.",
+    "superting speakers name-delete <id>",
+  ],
+  ["speakers email-attach", "speakers.email.attach", "Attach an email to a speaker profile."],
+  // voiceprints
+  ["voiceprints segments", "voiceprints.segments", "List auditionable voiceprint segments."],
+  ["voiceprints delete-all", "voiceprints.delete_all", "Delete voiceprints (all, or one person)."],
+  // chats
+  ["chats list", "chats.list", "List agent chat history."],
+  [
+    "chats messages",
+    "chats.messages",
+    "Show one conversation's messages.",
+    "superting chats messages <id>",
+  ],
+  [
+    "chats for-note",
+    "chats.for_note",
+    "List the chats attached to a note.",
+    "superting chats for-note --id <n>",
+  ],
+  ["chats create", "chats.create", "Create an agent conversation."],
+  ["chats archive", "chats.archive", "Archive a conversation.", "superting chats archive <id>"],
+  [
+    "chats delete",
+    "chats.delete",
+    "Permanently delete a conversation.",
+    "superting chats delete <id>",
+  ],
+  // settings & recording
+  [
+    "settings get",
+    "settings.get",
+    "Read app settings (credentials redacted).",
+    "superting settings get [--key <k>]",
+  ],
+  ["settings set", "settings.set", "Update one setting (credentials refused)."],
+  ["recording status", "recording.status", "Report whether the app is recording."],
+  ["recording start", "recording.start", "Start recording into a note."],
+  ["recording stop", "recording.stop", "Stop the running recording."],
+];
 
 function buildCommandRegistry() {
   const commands = new Map();
@@ -299,15 +623,7 @@ function buildCommandRegistry() {
     run: async ({ bridge, flags, cliFlags, positional }) => {
       const operationId = positional[0];
       if (!operationId) throw new ArgError("An operation id is required (see: superting ops list)");
-
-      const catalog = await bridgeRequest(bridge, "GET", "/v1/operations");
-      const operation = (catalog?.data ?? []).find((item) => item.id === operationId);
-      if (!operation) {
-        throw new ArgError(`Unknown operation "${operationId}". Run: superting ops list`);
-      }
-      if (operation.policy === "destructive") {
-        requireYes(cliFlags, `Running ${operationId}`);
-      }
+      const operation = await loadOperation(bridge, operationId);
 
       let params = {};
       const jsonArg = last(flags, "json");
@@ -322,50 +638,33 @@ function buildCommandRegistry() {
           throw new ArgError(`--json must be a JSON object: ${err.message}`);
         }
       }
-
-      for (const [name, spec] of Object.entries(operation.params ?? {})) {
-        const values = flags.get(name);
-        if (!values || values.length === 0) continue;
-        if (spec.type === "array") {
-          params[name] =
-            values.length > 1
-              ? values
-              : String(values[0])
-                  .split(",")
-                  .map((item) => item.trim())
-                  .filter(Boolean);
-        } else {
-          params[name] = values[values.length - 1];
-        }
-      }
-
-      const locations = operation.cli?.params ?? {};
-      let route = operation.cli?.path ?? "";
-      const query = {};
-      const body = {};
-      for (const [name, value] of Object.entries(params)) {
-        const location = locations[name];
-        if (location === "path") {
-          route = route.replace(`:${name}`, encodeURIComponent(String(value)));
-        } else if (location === "query") {
-          query[name] = value;
-        } else {
-          body[name] = value;
-        }
-      }
-      if (route.includes(":")) {
-        const missing = route
-          .split("/")
-          .filter((part) => part.startsWith(":"))
-          .map((part) => part.slice(1));
-        throw new ArgError(`Missing required parameter(s): ${missing.join(", ")}`);
-      }
-
-      const method = operation.cli?.method ?? "GET";
-      const hasBody = method !== "GET" && method !== "DELETE";
-      return bridgeRequest(bridge, method, route, { query, body: hasBody ? body : undefined });
+      Object.assign(params, paramsFromFlags(operation, flags, params));
+      return runOperationRequest(bridge, operation, { params, cliFlags });
     },
   });
+
+  // One thin command per capability family; see OPERATION_COMMANDS.
+  for (const [name, operationId, description, usage] of OPERATION_COMMANDS) {
+    if (commands.has(name)) {
+      throw new Error(`duplicate CLI command "${name}"`);
+    }
+    command(name, {
+      description,
+      usage: usage ?? `superting ${name} [--flag value …]`,
+      run: async ({ bridge, flags, cliFlags, positional }) => {
+        const operation = await loadOperation(bridge, operationId);
+        const pathNames = [...(operation.cli?.path ?? "").matchAll(/:([a-z0-9_]+)/g)].map(
+          (match) => match[1]
+        );
+        const positionalParams = {};
+        pathNames.forEach((paramName, index) => {
+          if (positional[index] !== undefined) positionalParams[paramName] = positional[index];
+        });
+        const params = paramsFromFlags(operation, flags, positionalParams);
+        return runOperationRequest(bridge, operation, { params, cliFlags });
+      },
+    });
+  }
 
   command("health", {
     description: "Check whether the SuperTing desktop app bridge is reachable.",
@@ -453,7 +752,9 @@ function buildCommandRegistry() {
         throw new ArgError("--replace requires --find");
       }
       if (Object.keys(body).length === 0) {
-        throw new ArgError("Provide at least one of --title/--content/--transcript/--folder-id/--tags/--find");
+        throw new ArgError(
+          "Provide at least one of --title/--content/--transcript/--folder-id/--tags/--find"
+        );
       }
       return bridgeRequest(bridge, "PATCH", `/v1/notes/${id}`, { body });
     },
@@ -557,7 +858,8 @@ function buildCommandRegistry() {
 
   command("dict replace", {
     description: "Replace the entire dictionary (destructive).",
-    usage: "superting dict replace --words a,b,c --yes  |  superting dict replace --json '[\"a\",\"b\"]' --yes",
+    usage:
+      'superting dict replace --words a,b,c --yes  |  superting dict replace --json \'["a","b"]\' --yes',
     destructive: true,
     run: async ({ bridge, flags, positional, cliFlags }) => {
       let words;
@@ -587,7 +889,8 @@ function buildCommandRegistry() {
   });
 
   command("alias add", {
-    description: "Add or update one replacement rule (existing rule with same from is overwritten).",
+    description:
+      "Add or update one replacement rule (existing rule with same from is overwritten).",
     usage: "superting alias add <from> <to>",
     run: async ({ bridge, positional, flags }) => {
       let from = positional[0];
@@ -636,7 +939,6 @@ function buildCommandRegistry() {
   return commands;
 }
 
-
 function buildUsage(commands) {
   const lines = [
     `${CLI_NAME} <command> [args] [--format json|text] [--bridge <path>] [--yes]`,
@@ -662,12 +964,14 @@ function buildUsage(commands) {
 
 function matchCommand(commands, positional) {
   if (positional.length === 0) return null;
-  const twoPart = `${positional[0]} ${positional[1]}`;
-  if (commands.has(twoPart)) {
-    return { spec: commands.get(twoPart), args: positional.slice(2) };
-  }
-  if (commands.has(positional[0])) {
-    return { spec: commands.get(positional[0]), args: positional.slice(1) };
+  // Longest match first, so `notes audio list` wins over a hypothetical `notes`
+  // (and `notes list` still wins over `notes`).
+  const maxWords = Math.min(4, positional.length);
+  for (let words = maxWords; words >= 1; words -= 1) {
+    const candidate = positional.slice(0, words).join(" ");
+    if (commands.has(candidate)) {
+      return { spec: commands.get(candidate), args: positional.slice(words) };
+    }
   }
   return null;
 }
@@ -696,9 +1000,7 @@ async function runCli(argv, { stdout = process.stdout, stderr = process.stderr }
 
   const match = matchCommand(commands, parsed.positional);
   if (!match) {
-    stderr.write(
-      `Unknown command: ${parsed.positional.join(" ")}\n\n${buildUsage(commands)}\n`
-    );
+    stderr.write(`Unknown command: ${parsed.positional.join(" ")}\n\n${buildUsage(commands)}\n`);
     return EXIT_USAGE;
   }
 

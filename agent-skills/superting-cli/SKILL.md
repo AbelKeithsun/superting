@@ -25,26 +25,26 @@ cli_version: ">=2.0.12"
 
 ## 命令速查
 
-| 领域     | 命令                                                                                                                                                   |
-| -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| 发现     | `ops list`、`call <operation.id> --json '{…}'`（通用兜底）、`health`                                                                                   |
-| 笔记     | `notes list / get <id> [--full] / search <q> / create / update <id> [--find --replace] / append <id> / delete <id> / purge <id>`                       |
-| 转写段落 | `transcript segments --id <n> [--offset --limit]`、`transcript segment-update --id <n> --json '{…}'`、`transcript segment-delete --id <n> --index <i>` |
-| 笔记动作 | `actions list / get <id> / create / update / delete`、`actions run <id> --json '{"note_id":<n>}'`（即「生成会议纪要」）                                |
-| 长任务   | `jobs list`、`jobs get <job_id>`、`jobs cancel <job_id>`；各长命令加 `--wait false`                                                                    |
-| 音频     | `notes audio list --id <n>`、`notes audio compress / merge / rediarize`、`audio usage / retention / compress-all / delete-all`                         |
-| 转录     | `transcriptions list / get <id> / transcribe --file-path <f>`、`transcriptions retry <id>`、`transcriptions clear`                                     |
-| 录音     | `recording status`、`recording start --note-id <n>`、`recording stop`                                                                                  |
-| 联系人   | `people list / get <id> / create / update / delete / merge`、`contacts search <q> / upsert`                                                            |
-| 说话人   | `speakers profiles / names / mappings --id <n>`、`speakers assign`、`speakers name-add / name-delete / email-attach`                                   |
-| 声纹     | `voiceprints segments [--person-id <n>]`、`voiceprints delete-all [--person-id <n>]`                                                                   |
-| 聊天记录 | `chats list / messages <id> / for-note --id <n> / create / archive / delete`                                                                           |
-| 设置     | `settings get [--key <k>]`、`settings set --key <k> --value <v>`（凭据类键被拒绝，需在应用内改）                                                       |
-| 文件夹   | `folders list / create / rename / delete / reorder`                                                                                                    |
-| 标签     | `tags list`                                                                                                                                            |
-| 词典     | `dict list / add / remove / replace`、`dict groups list / create / rename / move / delete`                                                             |
-| 替换规则 | `alias list / add <from> <to> / remove <from…> / replace --json '[{"from","to"}]'`                                                                     |
-| 导入导出 | `notes import <id> --file-path <f>`、`notes export-to-disk --json '{"note_ids":[1],"format":"md"}'`、`notes export <id> --format md`                   |
+| 领域     | 命令                                                                                                                                                                 |
+| -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 发现     | `ops list`、`call <operation.id> --json '{…}'`（通用兜底）、`health`                                                                                                 |
+| 笔记     | `notes list / get <id> [--full] / search <q> / create / update <id> [--find --replace] / append <id> / delete <id> / purge <id>`                                     |
+| 转写段落 | `transcript segments --id <n> [--offset --limit]`、`transcript segment-update --id <n> --index N --text …`、`transcript segment-delete --id <n> --index <i>`         |
+| 笔记动作 | `actions list / get <id> / create / update / delete`、`actions run <id> --note-id <n>`（即「生成会议纪要」）                                                         |
+| 长任务   | `jobs list`、`jobs get <job_id>`、`jobs cancel <job_id>`；各长命令加 `--wait false`                                                                                  |
+| 音频     | `notes audio list --id <n>`、`notes audio compress / merge / rediarize`、`audio usage / retention / compress-all / delete-all`                                       |
+| 转录     | `transcriptions list / get <id> / transcribe --file-path <f>`、`transcriptions retry <id>`、`transcriptions delete <id> / delete-audio <id>`、`transcriptions clear` |
+| 录音     | `recording status`、`recording start --note-id <n>`、`recording stop`                                                                                                |
+| 联系人   | `people list / get <id> / create / update / delete / merge`、`contacts search <q> / upsert`                                                                          |
+| 说话人   | `speakers profiles / names / mappings --id <n>`、`speakers assign`、`speakers name-add / name-delete / email-attach`                                                 |
+| 声纹     | `voiceprints segments [--person-id <n>]`、`voiceprints delete-all [--person-id <n>]`                                                                                 |
+| 聊天记录 | `chats list / messages <id> / for-note --id <n> / create / archive / delete`                                                                                         |
+| 设置     | `settings get [--key <k>]`、`settings set --key <k> --value <v>`（凭据类键被拒绝，需在应用内改）                                                                     |
+| 文件夹   | `folders list / create / rename / delete / reorder`                                                                                                                  |
+| 标签     | `tags list`                                                                                                                                                          |
+| 词典     | `dict list / add / remove / replace`、`dict groups list / create / rename / move / delete`                                                                           |
+| 替换规则 | `alias list / add <from> <to> / remove <from…> / replace --json '[{"from","to"}]'`                                                                                   |
+| 导入导出 | `notes import <id> --file-path <f>`、`notes export-to-disk --note-ids 1 --format md`、`notes export <id> --format md`                                                |
 
 破坏性命令需 `--yes`；退出码 0=成功、1=桥接/应用错误、2=用法错误；`--format text` 输出人类可读。
 
@@ -53,9 +53,12 @@ cli_version: ">=2.0.12"
 ```sh
 superting notes search "funasr" --limit 5                     # 先找 id
 superting transcript segments --id 47 --limit 10              # 看段落（用返回的 stored-N 或 index）
-superting call actions.run --json '{"id":1,"note_id":47}'     # 跑「生成会议纪要」
+superting transcript segment-update --id 47 --index 0 --text "修正后的文本"
+superting actions run 1 --note-id 47                          # 跑「生成会议纪要」
 superting jobs list                                           # 长任务进度
 ```
+
+参数名接受 snake_case 与 kebab-case 两种写法（`--note_id` = `--note-id`）；布尔/数字/逗号列表由 CLI 自动转换。
 
 ## 按需加载的详细参考（references/）
 

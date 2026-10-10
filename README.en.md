@@ -100,7 +100,7 @@ superting ops list             # all 87 capabilities: id / policy / route / MCP 
 superting call <operation.id> --json '{"…"}'   # generic escape hatch for any capability
 superting notes list --limit 5
 superting transcript segments --id 47 --limit 20
-superting actions list && superting call actions.run --json '{"id":1,"note_id":47}'
+superting actions list && superting actions run 1 --note-id 47
 superting jobs list            # long tasks; wait:false returns a job id to poll
 superting settings get --key uiLanguage
 ```
