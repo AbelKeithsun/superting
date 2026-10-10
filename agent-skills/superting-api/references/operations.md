@@ -2,7 +2,7 @@
 
 # 全部机器能力（MCP 工具与 CLI 路由）
 
-共 79 项能力。每一行都由主进程的操作注册表
+共 80 项能力。每一行都由主进程的操作注册表
 （`src/helpers/appOperations/`）生成：同一份定义同时投影为 MCP 工具与
 CLI 路由，因此两边的能力集合不再可能不一致。
 
@@ -984,6 +984,21 @@ Delete every transcription record and its audio.
 - CLI 路由：`DELETE /v1/transcriptions`（CLI：`superting transcriptions clear`）
 
 _No parameters._
+
+### `transcriptions.transcribe_file` — Transcribe an audio file
+
+Transcribe a local audio file with an on-device engine (whisper / Parakeet / FunASR).
+
+- 策略：`write`
+- MCP 工具：`transcribe_audio_file`
+- CLI 路由：`POST /v1/transcriptions/transcribe`（CLI：`superting transcriptions transcribe`）
+
+| 参数 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| `file_path` | string | 是 | Absolute path of the audio file. |
+| `provider` | whisper\|nvidia\|funasr | 否 | Local engine. |
+| `model` | string | 否 | Model name for that engine. |
+| `language` | string | 否 | Language code, or `auto`. |
 
 ### `transcriptions.retry` — Retry transcription
 

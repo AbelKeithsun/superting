@@ -253,6 +253,36 @@ function domainOperations() {
       mcp: "clear_transcriptions",
       cli: { method: "DELETE", path: "/v1/transcriptions", command: "transcriptions clear" },
     }),
+    ipcOperation({
+      id: "transcriptions.transcribe_file",
+      title: "Transcribe an audio file",
+      description:
+        "Transcribe a local audio file with an on-device engine (whisper / Parakeet / FunASR).",
+      policy: "write",
+      params: {
+        file_path: param("Absolute path of the audio file.", { required: true }),
+        provider: param("Local engine.", { enum: ["whisper", "nvidia", "funasr"] }),
+        model: param("Model name for that engine."),
+        language: param("Language code, or `auto`."),
+      },
+      channel: "transcribe-audio-file",
+      args: ({ file_path, provider, model, language }) => [
+        file_path,
+        { provider, model, language },
+      ],
+      mcp: "transcribe_audio_file",
+      cli: {
+        method: "POST",
+        path: "/v1/transcriptions/transcribe",
+        command: "transcriptions transcribe",
+        params: {
+          file_path: "body",
+          provider: "body",
+          model: "body",
+          language: "body",
+        },
+      },
+    }),
     rendererOperation({
       id: "transcriptions.retry",
       title: "Retry transcription",
