@@ -87,7 +87,10 @@ function validateParam(name, spec, operationId) {
 function validateOperation(operation) {
   assert(operation && typeof operation === "object", "operation must be an object");
   const { id, title, description, policy, handler, params } = operation;
-  assert(typeof id === "string" && /^[a-z0-9]+(\.[a-z0-9_]+)+$/.test(id), `bad operation id: ${id}`);
+  assert(
+    typeof id === "string" && /^[a-z0-9]+(\.[a-z0-9_]+)+$/.test(id),
+    `bad operation id: ${id}`
+  );
   assert(typeof title === "string" && title, `${id}: title is required`);
   assert(typeof description === "string" && description, `${id}: description is required`);
   assert(POLICIES.has(policy), `${id}: policy must be one of ${[...POLICIES].join(", ")}`);

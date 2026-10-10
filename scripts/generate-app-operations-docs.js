@@ -35,7 +35,12 @@ function renderParamTable(operation) {
   if (entries.length === 0) return "_No parameters._\n";
   const lines = ["| 参数 | 类型 | 必填 | 说明 |", "| --- | --- | --- | --- |"];
   for (const [name, spec] of entries) {
-    const type = spec.type === "array" ? `array<${spec.items}>` : (spec.enum ? spec.enum.join("\\|") : spec.type);
+    const type =
+      spec.type === "array"
+        ? `array<${spec.items}>`
+        : spec.enum
+          ? spec.enum.join("\\|")
+          : spec.type;
     lines.push(
       `| \`${name}\` | ${type} | ${spec.required ? "是" : "否"} | ${spec.description ?? ""} |`
     );
@@ -78,7 +83,9 @@ function renderOperationsDoc(operations) {
       lines.push(`- 策略：\`${policy}\``);
       if (operation.mcp) lines.push(`- MCP 工具：\`${operation.mcp.name}\``);
       if (operation.cli) {
-        const command = operation.cli.command ? `（CLI：\`superting ${operation.cli.command}\`）` : "";
+        const command = operation.cli.command
+          ? `（CLI：\`superting ${operation.cli.command}\`）`
+          : "";
         lines.push(`- CLI 路由：\`${operation.cli.method} ${operation.cli.path}\`${command}`);
       }
       lines.push("");

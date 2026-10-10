@@ -24,7 +24,8 @@ function param(description, extra = {}) {
 const num = (description, extra = {}) => param(description, { type: "number", ...extra });
 const int = (description, extra = {}) => num(description, { ...extra });
 const bool = (description, extra = {}) => param(description, { type: "boolean", ...extra });
-const list = (description, extra = {}) => param(description, { type: "array", items: "string", ...extra });
+const list = (description, extra = {}) =>
+  param(description, { type: "array", items: "string", ...extra });
 
 /** Unwrap the `{ success, ...payload }` envelope IPC handlers return. */
 function unwrapIpcResult(result, label) {
@@ -139,7 +140,12 @@ function domainOperations() {
       channel: "get-note-audio-files",
       args: ({ id }) => [id],
       mcp: "list_note_audio",
-      cli: { method: "GET", path: "/v1/notes/:id/audio", command: "notes audio list", params: { id: "path" } },
+      cli: {
+        method: "GET",
+        path: "/v1/notes/:id/audio",
+        command: "notes audio list",
+        params: { id: "path" },
+      },
     }),
     ipcOperation({
       id: "notes.audio.compress",
@@ -359,7 +365,12 @@ function domainOperations() {
       channel: "people-list",
       args: ({ query }) => [query ?? ""],
       mcp: "list_people",
-      cli: { method: "GET", path: "/v1/people", command: "people list", params: { query: "query" } },
+      cli: {
+        method: "GET",
+        path: "/v1/people",
+        command: "people list",
+        params: { query: "query" },
+      },
     }),
     ipcOperation({
       id: "people.get",
@@ -477,7 +488,12 @@ function domainOperations() {
       channel: "upsert-contact",
       args: ({ contact }) => [contact],
       mcp: "upsert_contact",
-      cli: { method: "POST", path: "/v1/contacts", command: "contacts upsert", params: { contact: "body" } },
+      cli: {
+        method: "POST",
+        path: "/v1/contacts",
+        command: "contacts upsert",
+        params: { contact: "body" },
+      },
     }),
 
     // ------------------------------------------------------ speaker labelling

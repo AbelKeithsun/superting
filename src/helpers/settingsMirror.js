@@ -64,7 +64,11 @@ class SettingsMirror {
       }
     } catch (error) {
       if (error.code !== "ENOENT") {
-        debugLogger.debug("Settings mirror read failed", { error: error.message }, "app-operations");
+        debugLogger.debug(
+          "Settings mirror read failed",
+          { error: error.message },
+          "app-operations"
+        );
       }
     }
   }
@@ -93,7 +97,11 @@ class SettingsMirror {
   }
 
   info() {
-    return { path: this.filePath, updatedAt: this.updatedAt, count: this.snapshot ? Object.keys(this.snapshot).length : 0 };
+    return {
+      path: this.filePath,
+      updatedAt: this.updatedAt,
+      count: this.snapshot ? Object.keys(this.snapshot).length : 0,
+    };
   }
 }
 

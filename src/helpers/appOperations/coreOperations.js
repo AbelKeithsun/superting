@@ -152,7 +152,10 @@ function coreOperations() {
       params: { id: { type: "number", required: true, description: "Note ID." } },
       mcp: {
         name: "get_note",
-        serialize: (payload) => ({ success: true, data: sanitizeNote(payload.data, { full: true }) }),
+        serialize: (payload) => ({
+          success: true,
+          data: sanitizeNote(payload.data, { full: true }),
+        }),
       },
       cli: {
         method: "GET",
@@ -180,7 +183,10 @@ function coreOperations() {
       },
       mcp: {
         name: "create_note",
-        serialize: (payload) => ({ success: true, data: sanitizeNote(payload.data, { full: true }) }),
+        serialize: (payload) => ({
+          success: true,
+          data: sanitizeNote(payload.data, { full: true }),
+        }),
       },
       cli: {
         method: "POST",
@@ -231,7 +237,10 @@ function coreOperations() {
       },
       mcp: {
         name: "update_note",
-        serialize: (payload) => ({ success: true, data: sanitizeNote(payload.data, { full: true }) }),
+        serialize: (payload) => ({
+          success: true,
+          data: sanitizeNote(payload.data, { full: true }),
+        }),
       },
       cli: {
         method: "PATCH",
@@ -250,7 +259,14 @@ function coreOperations() {
       handler: (params, { db, ipc, broadcast }) => {
         const id = requireId(params.id, "note");
         const updates = {};
-        for (const key of ["title", "content", "enhanced_content", "transcript", "folder_id", "tags"]) {
+        for (const key of [
+          "title",
+          "content",
+          "enhanced_content",
+          "transcript",
+          "folder_id",
+          "tags",
+        ]) {
           if (params[key] !== undefined) updates[key] = params[key];
         }
         if (Object.keys(updates).length === 0) {
@@ -280,7 +296,10 @@ function coreOperations() {
       },
       mcp: {
         name: "append_note",
-        serialize: (payload) => ({ success: true, data: sanitizeNote(payload.data, { full: true }) }),
+        serialize: (payload) => ({
+          success: true,
+          data: sanitizeNote(payload.data, { full: true }),
+        }),
       },
       cli: {
         method: "POST",
@@ -416,7 +435,8 @@ function coreOperations() {
       handler: ({ id, name }, { db, broadcast }) => {
         const folderId = requireId(id, "folder");
         const result = db.renameFolder(folderId, name);
-        if (!result?.success) throw OperationError.notFound(result?.error || "Failed to rename folder");
+        if (!result?.success)
+          throw OperationError.notFound(result?.error || "Failed to rename folder");
         setImmediate(() => broadcast("folder-updated", result.folder ?? { id: folderId, name }));
         return { data: result.folder ?? { id: folderId, name } };
       },
@@ -438,7 +458,8 @@ function coreOperations() {
       handler: ({ id }, { db, broadcast }) => {
         const folderId = requireId(id, "folder");
         const result = db.deleteFolder(folderId);
-        if (!result?.success) throw OperationError.notFound(result?.error || "Failed to delete folder");
+        if (!result?.success)
+          throw OperationError.notFound(result?.error || "Failed to delete folder");
         setImmediate(() => broadcast("folder-deleted", { id: folderId }));
         return { data: { id: folderId, deleted: true } };
       },
@@ -465,7 +486,8 @@ function coreOperations() {
       },
       handler: ({ folder_ids }, { db, broadcast }) => {
         const result = db.reorderFolders(folder_ids);
-        if (!result?.success) throw OperationError.validation(result?.error || "Failed to reorder folders");
+        if (!result?.success)
+          throw OperationError.validation(result?.error || "Failed to reorder folders");
         const folders = db.getFolders();
         setImmediate(() => broadcast("folders-reordered", folders));
         return { data: folders };
@@ -753,7 +775,11 @@ function coreOperations() {
       params: {
         group_id: { type: "number", description: "Group to move." },
         parent_id: { type: "number", description: "New parent group ID (null for root)." },
-        item_type: { type: "string", enum: ["word", "alias"], description: "Move an item instead." },
+        item_type: {
+          type: "string",
+          enum: ["word", "alias"],
+          description: "Move an item instead.",
+        },
         key: { type: "string", description: "Item key when moving an item." },
         item_group_id: { type: "number", description: "Target group for the item." },
       },
@@ -916,7 +942,9 @@ function coreOperations() {
         const transcriptionId = requireId(id, "transcription");
         const result = ipc.audioStorageManager.deleteAudio(transcriptionId);
         if (!result?.success) {
-          throw OperationError.notFound(`Failed to delete audio for transcription ${transcriptionId}`);
+          throw OperationError.notFound(
+            `Failed to delete audio for transcription ${transcriptionId}`
+          );
         }
         db.updateTranscriptionAudio(transcriptionId, {
           hasAudio: 0,

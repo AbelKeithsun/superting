@@ -6,12 +6,20 @@ const fs = require("node:fs");
 const path = require("node:path");
 const z = require("zod/v4");
 
-const { createRegistry, normalizeParams, OperationError } = require("../../src/helpers/appOperations/registry");
+const {
+  createRegistry,
+  normalizeParams,
+  OperationError,
+} = require("../../src/helpers/appOperations/registry");
 const { coreOperations } = require("../../src/helpers/appOperations/coreOperations");
 const { actionOperations } = require("../../src/helpers/appOperations/actionOperations");
 const { domainOperations } = require("../../src/helpers/appOperations/domainOperations");
 const { buildZodShape, annotationsFor } = require("../../src/helpers/appOperations/mcpAdapter");
-const { buildCliRoutes, collectParams, matchPath } = require("../../src/helpers/appOperations/cliAdapter");
+const {
+  buildCliRoutes,
+  collectParams,
+  matchPath,
+} = require("../../src/helpers/appOperations/cliAdapter");
 const { listMcpToolNames } = require("../../src/helpers/appOperations");
 const {
   OUTPUT_PATH,
@@ -164,7 +172,10 @@ test("params are normalized the same way for CLI strings and MCP values", () => 
 
   const search = buildRegistry().get("notes.search");
   assert.throws(() => normalizeParams(search, { limit: 3 }), /"query" is required/);
-  assert.throws(() => normalizeParams(search, { query: "x", semantic: "maybe" }), /Invalid boolean/);
+  assert.throws(
+    () => normalizeParams(search, { query: "x", semantic: "maybe" }),
+    /Invalid boolean/
+  );
 
   const format = buildRegistry().get("notes.export");
   assert.throws(() => normalizeParams(format, { id: 1, format: "docx" }), /must be one of/);
@@ -178,7 +189,11 @@ test("CLI routes collect path, query, repeatable and body parameters", () => {
   assert.deepEqual(matchPath("/v1/notes/:id", "/v1/notes/42"), { id: "42" });
   assert.equal(matchPath("/v1/notes/:id", "/v1/notes/42/export"), null);
   assert.deepEqual(matchPath("/v1/notes/list", "/v1/notes/list"), {});
-  assert.equal(matchPath("/v1/notes/list", "/v1/notes/42"), null, "static routes must not capture id-like paths");
+  assert.equal(
+    matchPath("/v1/notes/list", "/v1/notes/42"),
+    null,
+    "static routes must not capture id-like paths"
+  );
 
   const getNote = byId.get("notes.get");
   assert.deepEqual(getNote.match("/v1/notes/7"), { id: "7" });
@@ -326,19 +341,12 @@ test("IPC-backed operations call the registered handler channel with mapped args
   assert.deepEqual(calls[0], ["people-list", "anna"]);
   assert.deepEqual(people.data, [{ id: 1 }]);
 
-  const audio = await registry.invoke(
-    "notes.audio.compress",
-    { id: 4, audio_file_id: 9 },
-    context
-  );
+  const audio = await registry.invoke("notes.audio.compress", { id: 4, audio_file_id: 9 }, context);
   assert.deepEqual(calls[1], ["compress-note-audio", 4, 9]);
   assert.deepEqual(audio.data, {});
 
   // Handler-level failures become operation errors, not silent empty payloads.
-  await assert.rejects(
-    () => registry.invoke("audio.usage", {}, context),
-    /boom/
-  );
+  await assert.rejects(() => registry.invoke("audio.usage", {}, context), /boom/);
 
   // Renderer-required operations go through the bridge with the mapped payload.
   let rendererCall = null;
@@ -422,10 +430,15 @@ test("reading settings falls back to the mirror when no window is open", async (
   const registry = buildRegistry();
   const unavailable = Object.assign(new Error("no window"), { code: "UNAVAILABLE" });
   const context = {
-    renderer: { invoke: async () => { throw unavailable; } },
+    renderer: {
+      invoke: async () => {
+        throw unavailable;
+      },
+    },
     ipc: {
       getSettingsMirror: () => ({
-        read: (key) => (key ? { uiLanguage: "zh-CN" }[key] : { uiLanguage: "zh-CN", notifyUpdates: true }),
+        read: (key) =>
+          key ? { uiLanguage: "zh-CN" }[key] : { uiLanguage: "zh-CN", notifyUpdates: true },
       }),
     },
   };
@@ -445,10 +458,18 @@ test("reading settings falls back to the mirror when no window is open", async (
   // Without a mirror there is nothing to read: say so instead of guessing.
   await assert.rejects(
     () =>
-      registry.invoke("settings.get", {}, {
-        renderer: { invoke: async () => { throw unavailable; } },
-        ipc: { getSettingsMirror: () => ({ read: () => null }) },
-      }),
+      registry.invoke(
+        "settings.get",
+        {},
+        {
+          renderer: {
+            invoke: async () => {
+              throw unavailable;
+            },
+          },
+          ipc: { getSettingsMirror: () => ({ read: () => null }) },
+        }
+      ),
     /no settings snapshot/i
   );
 

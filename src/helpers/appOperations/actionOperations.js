@@ -80,10 +80,16 @@ function actionOperations() {
         },
       },
       handler: (params, { db, broadcast }) => {
-        const result = db.createAction(params.name, params.description, params.prompt, params.icon, {
-          output_target: params.output_target,
-          write_mode: params.write_mode,
-        });
+        const result = db.createAction(
+          params.name,
+          params.description,
+          params.prompt,
+          params.icon,
+          {
+            output_target: params.output_target,
+            write_mode: params.write_mode,
+          }
+        );
         if (!result?.success || !result.action) {
           throw OperationError.validation(result?.error || "Failed to create action");
         }
@@ -164,7 +170,8 @@ function actionOperations() {
       handler: ({ id }, { db, broadcast }) => {
         const actionId = requireId(id, "action");
         const result = db.deleteAction(actionId);
-        if (!result?.success) throw OperationError.notFound(result?.error || `Action ${id} not found`);
+        if (!result?.success)
+          throw OperationError.notFound(result?.error || `Action ${id} not found`);
         setImmediate(() => broadcast("action-deleted", { id: actionId }));
         return { data: { id: actionId, deleted: true } };
       },

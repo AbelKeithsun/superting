@@ -55,7 +55,11 @@ function parseWordList(value) {
 }
 
 function parseAliasList(value) {
-  const aliases = Array.isArray(value?.aliases) ? value.aliases : Array.isArray(value) ? value : null;
+  const aliases = Array.isArray(value?.aliases)
+    ? value.aliases
+    : Array.isArray(value)
+      ? value
+      : null;
   if (!aliases) {
     throw OperationError.validation('Expected a JSON array of aliases (or {"aliases": [...]})');
   }
@@ -64,7 +68,9 @@ function parseAliasList(value) {
     const from = typeof alias?.from === "string" ? alias.from.trim() : "";
     const to = typeof alias?.to === "string" ? alias.to.trim() : "";
     if (!from || !to) {
-      throw OperationError.validation('Aliases must be objects with non-empty "from" and "to" strings');
+      throw OperationError.validation(
+        'Aliases must be objects with non-empty "from" and "to" strings'
+      );
     }
     cleaned.push({ from, to });
   }

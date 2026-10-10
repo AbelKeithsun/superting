@@ -15,9 +15,7 @@ import type { ActionItem } from "../types/electron";
  * implemented here.
  */
 
-type AppOperationHandler = (
-  payload: Record<string, unknown>
-) => Promise<unknown> | unknown;
+type AppOperationHandler = (payload: Record<string, unknown>) => Promise<unknown> | unknown;
 
 /** Never hand raw secrets to an agent surface. */
 const SECRET_KEY_PATTERN = /(apikey|api_key|token|secret|password|privatekey)/i;
@@ -167,9 +165,7 @@ const handlers: Record<string, AppOperationHandler> = {
       : [];
     if (ids.length === 0) throw new Error("note_ids must contain at least one note id");
     const requestedFormat = typeof payload?.format === "string" ? payload.format : "md";
-    const format = (["md", "txt", "pdf"] as const).includes(
-      requestedFormat as "md" | "txt" | "pdf"
-    )
+    const format = (["md", "txt", "pdf"] as const).includes(requestedFormat as "md" | "txt" | "pdf")
       ? (requestedFormat as "md" | "txt" | "pdf")
       : "md";
     const allowedFields = ["transcript", "content", "enhanced_content"] as const;
@@ -211,8 +207,7 @@ const handlers: Record<string, AppOperationHandler> = {
       noteTitle: note.title ?? null,
       folderId: note.folder_id ?? null,
       seedSegments,
-      diarizationEnabled:
-        note.diarization_enabled == null ? null : note.diarization_enabled === 1,
+      diarizationEnabled: note.diarization_enabled == null ? null : note.diarization_enabled === 1,
       expectedCount: note.expected_speaker_count ?? null,
     });
     return { started: true, noteId };
