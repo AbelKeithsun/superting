@@ -111,12 +111,13 @@ SuperTing 是一款基于 Electron 的桌面听写应用，使用 whisper.cpp �
 - **vectorIndex.js**: Qdrant collection 管理 — upsert、删除、搜索、批量重建索引
 - **windowConfig.js**: 集中的窗口配置
 - **windowManager.js**: 窗口创建与生命周期管理
+- **appOperations/**: 机器能力注册表（`registry.js` + 各域 operations + `mcpAdapter.js` / `cliAdapter.js`）。**唯一事实来源**：每项能力声明一次（id、policy: read/write/destructive、参数、可选 serializer），自动投影为 MCP 工具与 CLI 路由；`rendererBridge.js` 负责需要 UI 的能力（如运行笔记动作）的主↔渲染往返，无窗口时返回 `renderer_unavailable`。新增能力请只改这里，`test/helpers/appOperations.test.js` 会因两侧不一致而失败。
 - **cliBridge.js**: 回环 HTTP 服务器，端口 8200–8219，Bearer token 认证（token 位于 `~/.superting/cli-bridge.json`），仅允许 127.0.0.1。供 agent CLI（`cli/superting.js`）与运行中的桌面应用通信。路由覆盖笔记 CRUD（create 会广播 `note-added` 并写入向量索引）、folders、transcriptions、tags，以及可读写的词典热词与替换规则（变更会广播 `dictionary-updated` / `dictionary-aliases-updated`，设置界面实时刷新）。校验失败返回 HTTP 400 `validation_error`。
 - **postMigrationDetector.js**: 通过 userData 中的 `.bundle-migrated` 哨兵文件检测从旧 Gizmo bundle ID 迁移回来的用户；由 `ipcHandlers.js` 消费以触发 `PostMigrationOnboarding` 弹窗
 
 ### Agent CLI（cli/）
 
-- **superting.js**: 零依赖 Node CLI（`bin: superting`，经 `npm run install:cli` 安装 → `~/.local/bin` 符号链接）。每条命令一次回环 HTTP 调用 — 取代 MCP 的快速 agent 通道。默认 JSON 输出（`--format text` 为人类可读），退出码 0/1/2（成功 / 桥接或应用错误 / 用法错误），破坏性命令（`delete`、`dict|alias remove|replace`）需 `--yes`。命令组：`health`、`notes list|get|search|create|update|append|delete`（`update` 支持对 content 的 `--find/--replace` 字面量替换）、`folders list|create`、`transcriptions list|get`、`tags list`、`dict list|add|remove|replace`、`alias list|add|remove|replace`。
+- **superting.js**: 零依赖 Node CLI（`bin: superting`，经 `npm run install:cli` 安装 → `~/.local/bin` 符号链接）。每条命令一次回环 HTTP 调用 — 取代 MCP 的快速 agent 通道。默认 JSON 输出（`--format text` 为人类可读），退出码 0/1/2（成功 / 桥接或应用错误 / 用法错误），破坏性命令（`delete`、`dict|alias remove|replace`）需 `--yes`。命令组：`health`、`notes list|get|search|create|update|append|delete`（`update` 支持对 content 的 `--find/--replace` 字面量替换）、`folders list|create`、`transcriptions list|get`、`tags list`、`dict list|add|remove|replace`、`alias list|add|remove|replace`。另有 `ops list`（列出全部能力）与 `call <operation.id>`（通用调用兜底，参数位置由应用自己的能力目录决定），因此新增 operation 无需重发 CLI。
 - **install-skills.js**（`bin: superting-skills`）: 零依赖 skill 安装器，把 `agent-skills/` 下的 skill 安装到 agent 技能目录，并把 package.json 版本号注入 SKILL.md frontmatter，使 skill 与 CLI 同版本更新。目标：默认 `<cwd>/.claude/skills`（项目）、`--project <dir>`、`--global`（`~/.agents/skills`，可用 `SUPERTING_SKILLS_GLOBAL_DIR` 覆盖）、`--target <dir>`；操作：`--list` / `--check` / `--remove`；`--force` 覆盖本地修改（以 sha256 manifest `.superting-skills-meta.json` 检测改动）。远程一条命令安装（版本由 release 资产锁定）：`npx -p https://github.com/AbelKeithsun/superting/releases/download/v<ver>/superting-skills-<ver>.tgz superting-skills --global`。本仓库内快捷方式：`npm run install:skills`。
 
 ### Agent Skills（agent-skills/）
