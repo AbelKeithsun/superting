@@ -6,6 +6,14 @@ import { CopyableCommand } from "./ui/CopyableCommand";
 import { LogoTile } from "./ui/LogoTile";
 import logo from "../assets/logo.svg";
 
+interface McpTool {
+  name: string;
+  title?: string;
+  description?: string;
+  policy?: "read" | "write" | "destructive" | "blocked";
+  notes?: string[];
+}
+
 interface McpStatus {
   enabled: boolean;
   running: boolean;
@@ -14,7 +22,7 @@ interface McpStatus {
   hasToken: boolean;
   token?: string | null;
   metadataPath?: string | null;
-  tools: Array<{ name: string }>;
+  tools: McpTool[];
 }
 
 const EMPTY_STATUS: McpStatus = {
@@ -140,12 +148,21 @@ export default function McpIntegrationCard() {
               role="row"
               className="grid grid-cols-1 gap-1 border-t border-border/50 px-3 py-2.5 first:border-t-0 sm:grid-cols-[minmax(9rem,0.8fr)_minmax(0,2.2fr)] sm:gap-4"
             >
-              <code role="cell" className="min-w-0 break-all text-[11px] text-foreground/90">
-                {tool.name}
-              </code>
+              <div role="cell" className="min-w-0">
+                <code className="block break-all text-[11px] text-foreground/90">{tool.name}</code>
+                {tool.policy === "destructive" && (
+                  <span className="mt-1 inline-block rounded bg-destructive/10 px-1.5 py-px text-[10px] font-medium text-destructive">
+                    {t("integrations.mcp.destructiveBadge")}
+                  </span>
+                )}
+              </div>
               <span role="cell" className="min-w-0 text-xs leading-relaxed text-muted-foreground">
+                {/* Localised copy when it exists, otherwise the description the
+                    registry gives the MCP client — never a "no description"
+                    placeholder now that every tool is described. */}
                 {t(`integrations.mcp.tools.${tool.name}`, {
-                  defaultValue: t("integrations.mcp.unknownToolDescription"),
+                  defaultValue:
+                    tool.description || tool.title || t("integrations.mcp.unknownToolDescription"),
                 })}
               </span>
             </div>

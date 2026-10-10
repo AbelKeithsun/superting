@@ -69,10 +69,25 @@ function createAppOperations(ipcHandlers) {
 
 /** Tool names without needing an IpcHandlers instance (status API, tests, docs). */
 function listMcpToolNames() {
+  return listMcpTools().map((tool) => tool.name);
+}
+
+/**
+ * MCP tool catalog for the status API / settings UI: the registry is the single
+ * source, so the 集成 page can show a real description for every tool instead
+ * of a "no description" placeholder.
+ */
+function listMcpTools() {
   return createRegistry(buildOperationList())
     .list()
     .filter((operation) => operation.mcp)
-    .map((operation) => operation.mcp.name);
+    .map((operation) => ({
+      name: operation.mcp.name,
+      title: operation.title,
+      description: operation.description,
+      notes: operation.notes,
+      policy: operation.policy,
+    }));
 }
 
-module.exports = { createAppOperations, listMcpToolNames };
+module.exports = { createAppOperations, listMcpToolNames, listMcpTools };

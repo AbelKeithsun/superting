@@ -35,39 +35,30 @@ test("note editor and list expose note tags", () => {
 test("MCP integration renders the tool catalog returned by status", () => {
   const card = read("src/components/McpIntegrationCard.tsx");
   const english = JSON.parse(read("src/locales/en/translation.json"));
-  const expectedTools = [
-    "health",
-    "list_notes",
-    "search_notes",
-    "get_note",
-    "create_note",
-    "update_note",
-    "delete_note",
-    "list_folders",
-    "create_folder",
-    "list_transcriptions",
-    "get_transcription",
-    "get_dictionary",
-    "get_dictionary_aliases",
-    "list_tags",
-  ];
+  const zh = JSON.parse(read("src/locales/zh-CN/translation.json"));
+  const { listMcpTools } = require("../../src/helpers/appOperations/index.js");
+  const expectedTools = listMcpTools().map((tool) => tool.name);
+  assert.ok(expectedTools.length >= 80);
 
-  assert.match(card, /tools:\s*Array<\{ name: string \}>/);
   assert.match(card, /status\.tools/);
   assert.match(card, /\(status\.tools \|\| \[\]\)\.map/);
   assert.match(card, /integrations\.mcp\.toolsTitle/);
   assert.match(card, /integrations\.mcp\.toolColumn/);
   assert.match(card, /integrations\.mcp\.descriptionColumn/);
-  assert.match(card, /integrations\.mcp\.unknownToolDescription/);
+  assert.match(card, /integrations\.mcp\.destructiveBadge/);
+  // A row falls back to the registry description, never to a "no description" placeholder.
+  assert.match(card, /defaultValue:[\s\S]{0,160}tool\.description/);
   assert.match(card, /sm:grid-cols-/);
   assert.doesNotMatch(card, /migrationNotice/);
 
-  assert.deepEqual(Object.keys(english.integrations.mcp.tools), expectedTools);
+  // The catalog and the locale keys must stay in lockstep (order-insensitive).
+  assert.deepEqual(Object.keys(english.integrations.mcp.tools).sort(), [...expectedTools].sort());
   for (const name of expectedTools) {
-    assert.equal(typeof english.integrations.mcp.tools[name], "string");
-    assert.ok(english.integrations.mcp.tools[name].length > 0);
+    assert.ok(english.integrations.mcp.tools[name].length > 0, `en copy missing for ${name}`);
+    assert.ok(zh.integrations.mcp.tools[name].length > 0, `zh copy missing for ${name}`);
   }
-  for (const unsupported of ["get_usage", "get_note_transcript", "delete_transcription"]) {
+  assert.match(zh.integrations.mcp.tools.purge_note, /永久删除/);
+  for (const unsupported of ["get_usage", "get_note_transcript", "superting_health"]) {
     assert.equal(english.integrations.mcp.tools[unsupported], undefined);
   }
 });

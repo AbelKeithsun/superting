@@ -761,10 +761,7 @@ declare global {
       }) => Promise<{ success: boolean }>;
       onCorrectionsLearned?: (callback: (words: string[]) => void) => () => void;
       onCorrectionsLearnedQuiet?: (
-        callback: (data: {
-          pairs: Array<{ from: string; to: string }>;
-          source: string;
-        }) => void
+        callback: (data: { pairs: Array<{ from: string; to: string }>; source: string }) => void
       ) => () => void;
       undoLearnedCorrections?: (words: string[]) => Promise<{ success: boolean }>;
 
@@ -776,8 +773,15 @@ declare global {
         port: number | null;
         hasToken: boolean;
         token?: string | null;
+
         metadataPath?: string | null;
-        tools: Array<{ name: string }>;
+        tools: Array<{
+          name: string;
+          title?: string;
+          description?: string;
+          policy?: "read" | "write" | "destructive" | "blocked";
+          notes?: string[];
+        }>;
       }>;
       setMcpServerEnabled?: (enabled: boolean) => Promise<{
         success: boolean;
@@ -790,7 +794,13 @@ declare global {
           hasToken: boolean;
           token?: string | null;
           metadataPath?: string | null;
-          tools: Array<{ name: string }>;
+          tools: Array<{
+            name: string;
+            title?: string;
+            description?: string;
+            policy?: "read" | "write" | "destructive" | "blocked";
+            notes?: string[];
+          }>;
         };
       }>;
       rotateMcpServerToken?: () => Promise<{
@@ -804,7 +814,13 @@ declare global {
           hasToken: boolean;
           token?: string | null;
           metadataPath?: string | null;
-          tools: Array<{ name: string }>;
+          tools: Array<{
+            name: string;
+            title?: string;
+            description?: string;
+            policy?: "read" | "write" | "destructive" | "blocked";
+            notes?: string[];
+          }>;
         };
       }>;
 
@@ -2009,9 +2025,7 @@ declare global {
         people: PersonRecord[];
         error?: string;
       }>;
-      peopleGet?: (
-        id: number
-      ) => Promise<{
+      peopleGet?: (id: number) => Promise<{
         success: boolean;
         person?: PersonRecord;
         voiceprints?: VoiceprintRecord[];
@@ -2047,9 +2061,7 @@ declare global {
         voiceprint?: VoiceprintRecord;
         error?: string;
       }>;
-      voiceprintList?: (
-        personId?: number | null
-      ) => Promise<{
+      voiceprintList?: (personId?: number | null) => Promise<{
         success: boolean;
         voiceprints: VoiceprintSummary[];
         maxVoiceprints?: number;

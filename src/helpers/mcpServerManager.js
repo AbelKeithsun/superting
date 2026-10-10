@@ -13,7 +13,7 @@ const debugLogger = require("./debugLogger");
 const { ensureMigratedPath } = require("./brandConfig");
 const { isPortAvailable } = require("../utils/serverUtils");
 const { version: APP_VERSION } = require("../../package.json");
-const { createAppOperations, listMcpToolNames } = require("./appOperations");
+const { createAppOperations, listMcpToolNames, listMcpTools } = require("./appOperations");
 const { registerRegistryTools } = require("./appOperations/mcpAdapter");
 
 /**
@@ -126,7 +126,7 @@ class McpServerManager {
       url: this.url,
       port: this.port,
       hasToken: !!this.token,
-      tools: listMcpToolNames().map((name) => ({ name })),
+      tools: listMcpTools(),
     };
   }
 

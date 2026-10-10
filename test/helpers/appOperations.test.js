@@ -593,3 +593,39 @@ test("the MCP server instructs clients how to use the tools", () => {
   assert.match(MCP_SERVER_INSTRUCTIONS, /untrusted user content/);
   assert.ok(MCP_TOOL_NAMES.length >= 80);
 });
+
+test("every MCP tool is described in the settings UI, localised", () => {
+  const { listMcpTools } = require("../../src/helpers/appOperations/index.js");
+  const tools = listMcpTools();
+  assert.ok(tools.length >= 80);
+  for (const tool of tools) {
+    assert.ok(tool.description && tool.description.length > 10, `${tool.name} needs a description`);
+    assert.ok(["read", "write", "destructive", "blocked"].includes(tool.policy));
+  }
+
+  // The 集成 page reads integrations.mcp.tools.<name>; a new capability must not
+  // ship an untranslated row.
+  const localesDir = path.join(__dirname, "..", "..", "src", "locales");
+  for (const lang of ["en", "zh-CN", "zh-TW"]) {
+    const translations = JSON.parse(
+      fs.readFileSync(path.join(localesDir, lang, "translation.json"), "utf8")
+    );
+    const table = translations.integrations?.mcp?.tools ?? {};
+    const missing = tools.filter((tool) => {
+      const value = table[tool.name];
+      return typeof value !== "string" || value.trim().length === 0;
+    });
+    assert.deepEqual(
+      missing.map((tool) => tool.name),
+      [],
+      `${lang} is missing MCP tool descriptions`
+    );
+  }
+
+  // And the status payload the renderer consumes carries the registry text.
+  const McpServerManager = require("../../src/helpers/mcpServerManager.js");
+  const status = new McpServerManager({ databaseManager: {} }).getStatus();
+  assert.equal(status.tools.length, tools.length);
+  assert.ok(status.tools.every((tool) => tool.description));
+  assert.ok(status.tools.some((tool) => tool.policy === "destructive"));
+});
