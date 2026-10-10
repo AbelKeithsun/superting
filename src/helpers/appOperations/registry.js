@@ -26,6 +26,7 @@
  *   title: "List notes",              // short human label
  *   description: "…",                 // shown to MCP clients and in docs
  *   policy: "read" | "write" | "destructive" | "blocked",
+ *   notes: ["…"],                     // optional agent-facing guidance
  *   params: {                          // declarative; adapters derive schemas
  *     limit: { type: "number", description: "…", default: 100 },
  *     tags: { type: "array", items: "string" },
@@ -70,6 +71,24 @@ const CLI_LOCATIONS = new Set(["path", "query", "body"]);
 
 function assert(condition, message) {
   if (!condition) throw new Error(`[appOperations] ${message}`);
+}
+
+/**
+ * Optional per-operation usage guidance. It is shown to agents twice: appended to
+ * the MCP tool description and rendered in the generated capability reference —
+ * the place to state what the parameters cannot express (id discipline, paging,
+ * job handles, irreversibility, UI requirements).
+ */
+function normalizeNotes(notes, operationId) {
+  if (notes === undefined || notes === null) return [];
+  const list = Array.isArray(notes) ? notes : [notes];
+  for (const note of list) {
+    assert(
+      typeof note === "string" && note.trim().length > 0,
+      `${operationId}: notes must be non-empty strings`
+    );
+  }
+  return list.map((note) => note.trim());
 }
 
 function validateParam(name, spec, operationId) {
@@ -144,12 +163,15 @@ function validateOperation(operation) {
     );
   }
 
+  const notes = normalizeNotes(operation.notes, id);
+
   return {
     id,
     title,
     description,
     policy,
     params: paramSpecs,
+    notes,
     mcp: mcp ? { ...mcp, serialize: mcp.serialize ?? null } : null,
     cli: cli ? { ...cli, serialize: cli.serialize ?? null } : null,
     rendererRequired: !!operation.rendererRequired,
@@ -293,6 +315,7 @@ function createRegistry(operationList) {
 
 module.exports = {
   AppRegistry,
+  normalizeNotes,
   OperationError,
   POLICIES,
   createRegistry,

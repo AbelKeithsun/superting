@@ -46,7 +46,17 @@ function annotationsFor(operation) {
   return {
     readOnlyHint: operation.policy === "read",
     destructiveHint: operation.policy === "destructive",
+    // Local data, no network fan-out; reads are repeatable.
+    idempotentHint: operation.policy === "read",
+    openWorldHint: false,
   };
+}
+
+/** Tool description = what it does + the guidance parameters cannot express. */
+function descriptionFor(operation) {
+  const notes = (operation.notes ?? []).filter(Boolean);
+  if (notes.length === 0) return operation.description;
+  return `${operation.description}\n\nGuidance:\n${notes.map((note) => `- ${note}`).join("\n")}`;
 }
 
 /**
@@ -62,7 +72,7 @@ function registerRegistryTools(server, registry, { z, sendMcpToolResult, context
       operation.mcp.name,
       {
         title: operation.title,
-        description: operation.description,
+        description: descriptionFor(operation),
         inputSchema: buildZodShape(operation, z),
         annotations: annotationsFor(operation),
       },
@@ -88,4 +98,4 @@ function registerRegistryTools(server, registry, { z, sendMcpToolResult, context
   return registered;
 }
 
-module.exports = { annotationsFor, buildZodShape, registerRegistryTools };
+module.exports = { annotationsFor, buildZodShape, descriptionFor, registerRegistryTools };

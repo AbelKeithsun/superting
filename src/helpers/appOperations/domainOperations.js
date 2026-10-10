@@ -53,6 +53,7 @@ function ipcOperation({
   mcp,
   cli,
   label,
+  notes = [],
   job = null,
 }) {
   if (!mcp || !cli) {
@@ -64,6 +65,7 @@ function ipcOperation({
     description,
     policy,
     params,
+    notes,
     mcp: { name: mcp },
     cli,
     handler: async (values, ctx) => {
@@ -94,6 +96,7 @@ function rendererOperation({
   channel,
   mcp,
   cli,
+  notes = [],
   payload = (values) => values,
   fallback = null,
 }) {
@@ -106,6 +109,7 @@ function rendererOperation({
     description,
     policy,
     params,
+    notes,
     mcp: { name: mcp },
     cli,
     rendererRequired: true,
@@ -151,6 +155,7 @@ function domainOperations() {
       params: { id: int("Note ID.", { required: true }) },
       channel: "get-note-audio-files",
       args: ({ id }) => [id],
+      notes: ["Reports retained audio files (name, size, duration) — never raw audio bytes."],
       mcp: "list_note_audio",
       cli: {
         method: "GET",
@@ -170,6 +175,7 @@ function domainOperations() {
       },
       channel: "compress-note-audio",
       args: ({ id, audio_file_id }) => [id, audio_file_id ?? null],
+      notes: ["Opus-in-WebM transcoding; pass wait=false on long recordings to get a job id."],
       mcp: "compress_note_audio",
       cli: {
         method: "POST",
@@ -190,6 +196,10 @@ function domainOperations() {
       channel: "merge-note-audio-files",
       job: { title: "Merge note audio" },
       args: ({ id }) => [id],
+      notes: [
+        "Concatenates the note's audio segments into one file and deletes the originals — irreversible.",
+        "Pass wait=false to get a job id.",
+      ],
       mcp: "merge_note_audio",
       cli: {
         method: "POST",
@@ -216,6 +226,9 @@ function domainOperations() {
         audio_file_id ?? null,
         expected_count ? { expectedCount: expected_count } : {},
       ],
+      notes: [
+        "On-device diarization over the retained audio; minutes on long meetings — pass wait=false and poll jobs.get.",
+      ],
       mcp: "rediarize_note_audio",
       cli: {
         method: "POST",
@@ -229,6 +242,7 @@ function domainOperations() {
       title: "Audio storage usage",
       description: "Report how much disk the retained audio uses.",
       channel: "get-audio-storage-usage",
+      notes: ["Reports how much disk the retained audio uses."],
       mcp: "get_audio_storage_usage",
       cli: { method: "GET", path: "/v1/audio/usage", command: "audio usage" },
     }),
@@ -240,6 +254,7 @@ function domainOperations() {
       params: { days: int("Retention in days.", { required: true }) },
       channel: "set-audio-retention-days",
       args: ({ days }) => [days],
+      notes: ["Also runs the retention cleanup immediately."],
       mcp: "set_audio_retention_days",
       cli: {
         method: "PUT",
@@ -258,6 +273,7 @@ function domainOperations() {
       },
       channel: "compress-all-audio",
       job: { title: "Compress all audio" },
+      notes: ["Bulk transcoding of every retained audio file; pass wait=false and poll jobs.get."],
       mcp: "compress_all_audio",
       cli: { method: "POST", path: "/v1/audio/compress", command: "audio compress-all" },
     }),
@@ -267,6 +283,7 @@ function domainOperations() {
       description: "Delete every retained audio file (transcripts are kept).",
       policy: "destructive",
       channel: "delete-all-audio",
+      notes: ["Removes every retained audio file; transcripts and notes stay. Irreversible."],
       mcp: "delete_all_audio",
       cli: { method: "DELETE", path: "/v1/audio", command: "audio delete-all" },
     }),
@@ -278,6 +295,7 @@ function domainOperations() {
       description: "Delete every transcription record and its audio.",
       policy: "destructive",
       channel: "db-clear-transcriptions",
+      notes: ["Deletes every transcription record and its audio. Irreversible."],
       mcp: "clear_transcriptions",
       cli: { method: "DELETE", path: "/v1/transcriptions", command: "transcriptions clear" },
     }),
@@ -300,6 +318,10 @@ function domainOperations() {
         file_path,
         { provider, model, language },
       ],
+      notes: [
+        "On-device engines only (whisper / nvidia / funasr); file_path must be a local absolute path.",
+        "Long files: pass wait=false. Cloud/BYOK transcription is deliberately not exposed.",
+      ],
       mcp: "transcribe_audio_file",
       cli: {
         method: "POST",
@@ -321,6 +343,9 @@ function domainOperations() {
       policy: "write",
       params: { id: int("Transcription ID.", { required: true }) },
       channel: "transcriptions.retry",
+      notes: [
+        "Re-runs ASR with the app's current transcription settings, so it needs the SuperTing window.",
+      ],
       mcp: "retry_transcription",
       cli: {
         method: "POST",
@@ -343,6 +368,10 @@ function domainOperations() {
       },
       channel: "import-note-file",
       args: ({ id, file_path, target }) => [id, file_path, target ? { target } : {}],
+      notes: [
+        "file_path must be an absolute local path (.txt/.md/.docx).",
+        "target=transcript appends structured segments, target=note overwrites the note body.",
+      ],
       mcp: "import_note_file",
       cli: {
         method: "POST",
@@ -371,6 +400,7 @@ function domainOperations() {
         },
       },
       channel: "notes.export_selection",
+      notes: ["Opens the app's folder picker, so the SuperTing window must be available."],
       mcp: "export_notes",
       cli: {
         method: "POST",
@@ -388,6 +418,7 @@ function domainOperations() {
       params: { query: param("Optional name filter.") },
       channel: "people-list",
       args: ({ query }) => [query ?? ""],
+      notes: ["Cross-meeting contact profiles (人名表)."],
       mcp: "list_people",
       cli: {
         method: "GET",
@@ -403,6 +434,7 @@ function domainOperations() {
       params: { id: int("Person ID.", { required: true }) },
       channel: "people-get",
       args: ({ id }) => [id],
+      notes: ["Includes the person's voiceprint metadata (templates are local biometrics)."],
       mcp: "get_person",
       cli: { method: "GET", path: "/v1/people/:id", command: "people get", params: { id: "path" } },
     }),
@@ -414,6 +446,7 @@ function domainOperations() {
       params: CONTACT_FIELDS,
       channel: "people-create",
       args: (values) => [contactFromParams(values)],
+      notes: ["Idempotency is not guaranteed — search first to avoid duplicates."],
       mcp: "create_person",
       cli: {
         method: "POST",
@@ -437,6 +470,7 @@ function domainOperations() {
       params: { id: int("Person ID.", { required: true }), ...CONTACT_FIELDS },
       channel: "people-update",
       args: (values) => [values.id, contactFromParams(values)],
+      notes: ["Only the provided fields change."],
       mcp: "update_person",
       cli: {
         method: "PATCH",
@@ -460,6 +494,7 @@ function domainOperations() {
       params: { id: int("Person ID.", { required: true }) },
       channel: "people-delete",
       args: ({ id }) => [id],
+      notes: ["Irreversible; the person's voiceprints go with it."],
       mcp: "delete_person",
       cli: {
         method: "DELETE",
@@ -480,6 +515,9 @@ function domainOperations() {
       },
       channel: "people-merge",
       args: ({ keep_id, remove_id }) => [keep_id, remove_id],
+      notes: [
+        "Merges one contact into another and deletes the duplicate — confirm with the user first.",
+      ],
       mcp: "merge_people",
       cli: {
         method: "POST",
@@ -495,6 +533,7 @@ function domainOperations() {
       params: { query: param("Search text.", { required: true }) },
       channel: "search-contacts",
       args: ({ query }) => [query],
+      notes: ["Searches stored contact records by name or email."],
       mcp: "search_contacts",
       cli: {
         method: "GET",
@@ -511,6 +550,9 @@ function domainOperations() {
       params: { contact: { type: "object", required: true, description: "Contact fields." } },
       channel: "upsert-contact",
       args: ({ contact }) => [contact],
+      notes: [
+        "Creates or updates by email/name, so read the record first if you only mean to add.",
+      ],
       mcp: "upsert_contact",
       cli: {
         method: "POST",
@@ -528,6 +570,7 @@ function domainOperations() {
       params: { id: int("Note ID.", { required: true }) },
       channel: "get-speaker-mappings",
       args: ({ id }) => [id],
+      notes: ["Speaker → contact mappings recorded for one note."],
       mcp: "get_speaker_mappings",
       cli: {
         method: "GET",
@@ -541,6 +584,7 @@ function domainOperations() {
       title: "List speaker profiles",
       description: "List speaker profiles (marked names) across notes.",
       channel: "get-speaker-profiles",
+      notes: ["Names that have been marked on speakers across notes."],
       mcp: "list_speaker_profiles",
       cli: { method: "GET", path: "/v1/speakers", command: "speakers profiles" },
     }),
@@ -549,6 +593,7 @@ function domainOperations() {
       title: "List speaker names",
       description: "List the speaker names known to the app.",
       channel: "get-speaker-names",
+      notes: ["Known speaker names (the app's 人名表)."],
       mcp: "list_speaker_names",
       cli: { method: "GET", path: "/v1/speakers/names", command: "speakers names" },
     }),
@@ -572,6 +617,10 @@ function domainOperations() {
         email ?? null,
         profile_id ?? null,
         {},
+      ],
+      notes: [
+        "Use the speaker ids present in the note's transcript.",
+        "lock=true prevents later diarization from reassigning them.",
       ],
       mcp: "set_speaker_mapping",
       cli: {
@@ -598,6 +647,7 @@ function domainOperations() {
       },
       channel: "upsert-speaker-name",
       args: ({ display_name, email }) => [display_name, email ?? null],
+      notes: ["Creates or updates a speaker name, optionally with an email."],
       mcp: "upsert_speaker_name",
       cli: {
         method: "POST",
@@ -614,6 +664,7 @@ function domainOperations() {
       params: { id: int("Speaker name ID.", { required: true }) },
       channel: "delete-speaker-name",
       args: ({ id }) => [id],
+      notes: ["Removes the name; existing transcript labels are untouched."],
       mcp: "delete_speaker_name",
       cli: {
         method: "DELETE",
@@ -633,6 +684,7 @@ function domainOperations() {
       },
       channel: "attach-speaker-email",
       args: ({ profile_id, email }) => [profile_id, email],
+      notes: ["Links an email to a speaker profile so historical notes can be remapped."],
       mcp: "attach_speaker_email",
       cli: {
         method: "POST",
@@ -650,6 +702,9 @@ function domainOperations() {
       params: { person_id: int("Person ID. Omit for all people.") },
       channel: "voiceprint-segment-list",
       args: ({ person_id }) => [person_id ?? null],
+      notes: [
+        "Voiceprints are local biometric templates; only metadata is exposed, never embeddings.",
+      ],
       mcp: "list_voiceprint_segments",
       cli: {
         method: "GET",
@@ -666,6 +721,7 @@ function domainOperations() {
       params: { person_id: int("Person ID. Omit to delete every voiceprint.") },
       channel: "voiceprint-delete-all",
       args: ({ person_id }) => [person_id ?? null],
+      notes: ["Irreversible; pass person_id to limit it to one person."],
       mcp: "delete_all_voiceprints",
       cli: {
         method: "DELETE",
@@ -683,6 +739,7 @@ function domainOperations() {
       params: { limit: int("Maximum conversations.") },
       channel: "db-get-agent-conversations",
       args: ({ limit }) => [limit ?? null],
+      notes: ["Agent chat history, newest first."],
       mcp: "list_chats",
       cli: { method: "GET", path: "/v1/chats", command: "chats list", params: { limit: "query" } },
     }),
@@ -693,6 +750,7 @@ function domainOperations() {
       params: { id: int("Conversation ID.", { required: true }) },
       channel: "db-get-agent-messages",
       args: ({ id }) => [id],
+      notes: ["Messages of one conversation, oldest first."],
       mcp: "get_chat_messages",
       cli: {
         method: "GET",
@@ -711,6 +769,7 @@ function domainOperations() {
       },
       channel: "db-get-conversations-for-note",
       args: ({ id, limit }) => [id, limit ?? null],
+      notes: ["Conversations attached to a note."],
       mcp: "list_note_chats",
       cli: {
         method: "GET",
@@ -730,6 +789,7 @@ function domainOperations() {
       },
       channel: "db-create-agent-conversation",
       args: ({ title, note_id }) => [title ?? "Untitled", note_id ?? null],
+      notes: ["Creates the conversation record; sending a message still happens in the app UI."],
       mcp: "create_chat",
       cli: {
         method: "POST",
@@ -747,6 +807,7 @@ function domainOperations() {
       params: { id: int("Conversation ID.", { required: true }) },
       channel: "db-archive-agent-conversation",
       args: ({ id }) => [id],
+      notes: ["Reversible — archived conversations stay readable."],
       mcp: "archive_chat",
       cli: {
         method: "POST",
@@ -763,6 +824,7 @@ function domainOperations() {
       params: { id: int("Conversation ID.", { required: true }) },
       channel: "db-hard-delete-conversation",
       args: ({ id }) => [id],
+      notes: ["Permanently deletes a conversation."],
       mcp: "delete_chat",
       cli: {
         method: "DELETE",
@@ -785,6 +847,10 @@ function domainOperations() {
         limit: int("Maximum segments to return. Default 200."),
       },
       channel: "notes.transcript.segments",
+      notes: [
+        "Paged: offset/limit (default 200) with total/has_more, because long meetings carry thousands of segments.",
+        "Segment ids are re-derived as stored-<index> on every read — use the ids from this response, or `index`.",
+      ],
       mcp: "list_transcript_segments",
       cli: {
         method: "GET",
@@ -808,6 +874,11 @@ function domainOperations() {
         lock: bool("Lock the speaker so later diarization runs cannot overwrite it."),
       },
       channel: "notes.transcript.segment.update",
+      notes: [
+        "Target by segment_id from list_transcript_segments or by `index`.",
+        "Editing text marks the segment edited_user and keeps original_text (same as the editor).",
+        "lock=true pins the speaker so later diarization cannot overwrite it.",
+      ],
       mcp: "update_transcript_segment",
       cli: {
         method: "PATCH",
@@ -841,6 +912,7 @@ function domainOperations() {
         count: int("With index: delete this many consecutive segments."),
       },
       channel: "notes.transcript.segment.delete",
+      notes: ["Removes segments from the transcript only; the audio file is untouched."],
       mcp: "delete_transcript_segments",
       cli: {
         method: "DELETE",
@@ -857,6 +929,10 @@ function domainOperations() {
       description: "Read the app's settings (or one setting by key).",
       params: { key: param("Optional setting key.") },
       channel: "settings.get",
+      notes: [
+        "Credential-looking keys (…ApiKey / …Token / …Secret) are returned as <redacted>.",
+        "Falls back to the mirrored snapshot when no window is open (source: settings-mirror).",
+      ],
       mcp: "get_settings",
       cli: {
         method: "GET",
@@ -894,6 +970,10 @@ function domainOperations() {
         json: param("New value as JSON, for arrays/objects."),
       },
       channel: "settings.set",
+      notes: [
+        "Credential keys are rejected — ask the user to change those in the app's settings UI.",
+        "Values go through the app's own setters, so side effects (IPC, localStorage, hotkey re-registration) still happen.",
+      ],
       mcp: "set_setting",
       cli: {
         method: "PUT",
@@ -909,6 +989,7 @@ function domainOperations() {
       title: "Recording status",
       description: "Report whether a note or meeting recording is in progress.",
       channel: "recording.status",
+      notes: ["Reports whether the app is recording and into which note."],
       mcp: "get_recording_status",
       cli: { method: "GET", path: "/v1/recording", command: "recording status" },
     }),
@@ -921,6 +1002,10 @@ function domainOperations() {
         note_id: int("Note to record into (a meeting or personal note).", { required: true }),
       },
       channel: "recording.start",
+      notes: [
+        "Controls the app's real microphone/system-audio recording — confirm with the user before starting.",
+        "Fails if a recording is already in progress.",
+      ],
       mcp: "start_recording",
       cli: {
         method: "POST",
@@ -935,6 +1020,7 @@ function domainOperations() {
       description: "Stop the running recording and finalize the note.",
       policy: "write",
       channel: "recording.stop",
+      notes: ["Finalizes the recording, transcribes the audio and writes the note."],
       mcp: "stop_recording",
       cli: { method: "POST", path: "/v1/recording/stop", command: "recording stop" },
     }),

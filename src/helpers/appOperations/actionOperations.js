@@ -20,6 +20,9 @@ function actionOperations() {
       title: "List note actions",
       description: "List the user's note actions (built-in and custom).",
       policy: "read",
+      notes: [
+        "Note actions are the user's saved prompts (e.g. 生成会议纪要 / 优化转录文本) with an output target and write mode.",
+      ],
       mcp: { name: "list_note_actions" },
       cli: { method: "GET", path: "/v1/actions", command: "actions list" },
       handler: (_params, { db }) => ({ data: db.getActions() }),
@@ -187,6 +190,10 @@ function actionOperations() {
         id: { type: "number", required: true, description: "Action ID." },
         note_id: { type: "number", required: true, description: "Note to run the action on." },
       },
+      notes: [
+        "Needs the SuperTing window (the model/provider configuration lives in the renderer).",
+        "Can take minutes on long meetings; the run appears in the app's AI drawer and is serialized per note.",
+      ],
       mcp: { name: "run_note_action" },
       cli: {
         method: "POST",

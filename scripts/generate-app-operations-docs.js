@@ -95,6 +95,11 @@ function renderOperationsDoc(operations) {
         lines.push(`- CLI 路由：\`${operation.cli.method} ${operation.cli.path}\`${command}`);
       }
       lines.push("");
+      if ((operation.notes ?? []).length > 0) {
+        lines.push("说明：", "");
+        for (const note of operation.notes) lines.push(`- ${note}`);
+        lines.push("");
+      }
       lines.push(renderParamTable(operation));
     }
   }

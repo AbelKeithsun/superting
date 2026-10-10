@@ -46,6 +46,7 @@ function jobOperations() {
         limit: { type: "number", description: "Maximum jobs to return. Default 20." },
         status: { type: "string", enum: JOB_STATUSES, description: "Filter by status." },
       },
+      notes: ["Jobs are created by long operations called with wait=false."],
       mcp: { name: "list_jobs" },
       cli: {
         method: "GET",
@@ -72,6 +73,7 @@ function jobOperations() {
       description: "Get one job's status, progress and result.",
       policy: "read",
       params: { id: { type: "string", required: true, description: "Job id." } },
+      notes: ["Status: running | succeeded | failed | cancelled; result is null until it settles."],
       mcp: { name: "get_job" },
       cli: { method: "GET", path: "/v1/jobs/:id", command: "jobs get", params: { id: "path" } },
       handler: ({ id }, ctx) => {
@@ -87,6 +89,9 @@ function jobOperations() {
         "Request cancellation of a running job. The underlying work is not abortable, so the result is discarded on completion.",
       policy: "write",
       params: { id: { type: "string", required: true, description: "Job id." } },
+      notes: [
+        "Cooperative: the underlying work cannot be aborted, so the job is marked cancelled and its result discarded on completion.",
+      ],
       mcp: { name: "cancel_job" },
       cli: {
         method: "POST",

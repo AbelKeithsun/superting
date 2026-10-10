@@ -156,10 +156,14 @@ test("policy drives MCP annotations and destructive routes", () => {
   assert.deepEqual(annotationsFor(registry.get("notes.list")), {
     readOnlyHint: true,
     destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
   });
   assert.deepEqual(annotationsFor(registry.get("notes.delete")), {
     readOnlyHint: false,
     destructiveHint: true,
+    idempotentHint: false,
+    openWorldHint: false,
   });
   assert.equal(registry.get("notes.delete").cli.noContent, true);
   assert.equal(registry.get("notes.create").cli.status, 201);
@@ -540,4 +544,52 @@ test("transcript segment operations are defined on both surfaces", () => {
   const remove = registry.get("notes.transcript.segment.delete");
   assert.equal(remove.policy, "destructive");
   assert.ok(remove.params.segment_ids && remove.params.index);
+});
+
+test("operations can carry agent-facing guidance that reaches MCP and the docs", () => {
+  const {
+    descriptionFor,
+    annotationsFor,
+  } = require("../../src/helpers/appOperations/mcpAdapter.js");
+  const { normalizeNotes } = require("../../src/helpers/appOperations/registry.js");
+  const registry = buildRegistry();
+
+  const withNotes = registry.list().filter((operation) => operation.notes.length > 0);
+  assert.ok(withNotes.length >= 40, `expected broad guidance coverage, got ${withNotes.length}`);
+
+  const segments = registry.get("notes.transcript.segments");
+  assert.ok(segments.notes.some((note) => /stored-<index>/.test(note)));
+  const description = descriptionFor(segments);
+  assert.match(description, /\n\nGuidance:\n- /);
+  assert.match(description, /offset\/limit/);
+
+  // Operations without guidance keep their plain description.
+  const health = registry.get("system.health");
+  assert.equal(descriptionFor(health), health.description);
+
+  // Every MCP tool advertises that it only touches local data.
+  for (const operation of registry.list()) {
+    const annotations = annotationsFor(operation);
+    assert.equal(annotations.openWorldHint, false, `${operation.id} must be local-only`);
+    assert.equal(annotations.readOnlyHint, operation.policy === "read");
+    assert.equal(annotations.idempotentHint, operation.policy === "read");
+  }
+
+  assert.deepEqual(normalizeNotes([" a ", "b"], "x"), ["a", "b"]);
+  assert.deepEqual(normalizeNotes(undefined, "x"), []);
+  assert.throws(() => normalizeNotes([42], "x"), /notes must be non-empty strings/);
+});
+
+test("the MCP server instructs clients how to use the tools", () => {
+  const {
+    MCP_SERVER_INSTRUCTIONS,
+    MCP_TOOL_NAMES,
+  } = require("../../src/helpers/mcpServerManager.js");
+  assert.match(MCP_SERVER_INSTRUCTIONS, /127\.0\.0\.1/);
+  assert.match(MCP_SERVER_INSTRUCTIONS, /list_operations/);
+  assert.match(MCP_SERVER_INSTRUCTIONS, /Never invent an id/);
+  assert.match(MCP_SERVER_INSTRUCTIONS, /destructiveHint/);
+  assert.match(MCP_SERVER_INSTRUCTIONS, /wait:false/);
+  assert.match(MCP_SERVER_INSTRUCTIONS, /untrusted user content/);
+  assert.ok(MCP_TOOL_NAMES.length >= 80);
 });

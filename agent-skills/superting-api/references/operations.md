@@ -20,6 +20,10 @@ List the user's note actions (built-in and custom).
 - MCP 工具：`list_note_actions`
 - CLI 路由：`GET /v1/actions`（CLI：`superting actions list`）
 
+说明：
+
+- Note actions are the user's saved prompts (e.g. 生成会议纪要 / 优化转录文本) with an output target and write mode.
+
 _No parameters._
 
 ### `actions.get` — Get note action
@@ -90,6 +94,11 @@ Run a note action (for example 生成会议纪要) on a note. Requires the Super
 - MCP 工具：`run_note_action`
 - CLI 路由：`POST /v1/actions/:id/run`（CLI：`superting actions run`）
 
+说明：
+
+- Needs the SuperTing window (the model/provider configuration lives in the renderer).
+- Can take minutes on long meetings; the run appears in the app's AI drawer and is serialized per note.
+
 | 参数 | 类型 | 必填 | 说明 |
 | --- | --- | --- | --- |
 | `id` | number | 是 | Action ID. |
@@ -105,6 +114,10 @@ Report how much disk the retained audio uses.
 - MCP 工具：`get_audio_storage_usage`
 - CLI 路由：`GET /v1/audio/usage`（CLI：`superting audio usage`）
 
+说明：
+
+- Reports how much disk the retained audio uses.
+
 _No parameters._
 
 ### `audio.retention.set` — Set audio retention
@@ -114,6 +127,10 @@ Set how many days retained audio is kept, then run cleanup.
 - 策略：`write`
 - MCP 工具：`set_audio_retention_days`
 - CLI 路由：`PUT /v1/audio/retention`（CLI：`superting audio retention`）
+
+说明：
+
+- Also runs the retention cleanup immediately.
 
 | 参数 | 类型 | 必填 | 说明 |
 | --- | --- | --- | --- |
@@ -127,6 +144,10 @@ Compress every retained audio file to Opus-in-WebM.
 - MCP 工具：`compress_all_audio`
 - CLI 路由：`POST /v1/audio/compress`（CLI：`superting audio compress-all`）
 
+说明：
+
+- Bulk transcoding of every retained audio file; pass wait=false and poll jobs.get.
+
 | 参数 | 类型 | 必填 | 说明 |
 | --- | --- | --- | --- |
 | `wait` | boolean | 否 | Wait for compression to finish (default true). Set false for a job id. |
@@ -138,6 +159,10 @@ Delete every retained audio file (transcripts are kept).
 - 策略：`destructive`
 - MCP 工具：`delete_all_audio`
 - CLI 路由：`DELETE /v1/audio`（CLI：`superting audio delete-all`）
+
+说明：
+
+- Removes every retained audio file; transcripts and notes stay. Irreversible.
 
 _No parameters._
 
@@ -151,6 +176,10 @@ List agent conversations.
 - MCP 工具：`list_chats`
 - CLI 路由：`GET /v1/chats`（CLI：`superting chats list`）
 
+说明：
+
+- Agent chat history, newest first.
+
 | 参数 | 类型 | 必填 | 说明 |
 | --- | --- | --- | --- |
 | `limit` | number | 否 | Maximum conversations. |
@@ -163,6 +192,10 @@ Get the messages of one conversation.
 - MCP 工具：`get_chat_messages`
 - CLI 路由：`GET /v1/chats/:id/messages`（CLI：`superting chats messages`）
 
+说明：
+
+- Messages of one conversation, oldest first.
+
 | 参数 | 类型 | 必填 | 说明 |
 | --- | --- | --- | --- |
 | `id` | number | 是 | Conversation ID. |
@@ -174,6 +207,10 @@ List the conversations attached to a note.
 - 策略：`read`
 - MCP 工具：`list_note_chats`
 - CLI 路由：`GET /v1/notes/:id/chats`（CLI：`superting chats for-note`）
+
+说明：
+
+- Conversations attached to a note.
 
 | 参数 | 类型 | 必填 | 说明 |
 | --- | --- | --- | --- |
@@ -188,6 +225,10 @@ Create an agent conversation, optionally attached to a note.
 - MCP 工具：`create_chat`
 - CLI 路由：`POST /v1/chats`（CLI：`superting chats create`）
 
+说明：
+
+- Creates the conversation record; sending a message still happens in the app UI.
+
 | 参数 | 类型 | 必填 | 说明 |
 | --- | --- | --- | --- |
 | `title` | string | 否 | Conversation title. |
@@ -201,6 +242,10 @@ Archive a conversation.
 - MCP 工具：`archive_chat`
 - CLI 路由：`POST /v1/chats/:id/archive`（CLI：`superting chats archive`）
 
+说明：
+
+- Reversible — archived conversations stay readable.
+
 | 参数 | 类型 | 必填 | 说明 |
 | --- | --- | --- | --- |
 | `id` | number | 是 | Conversation ID. |
@@ -212,6 +257,10 @@ Permanently delete a conversation.
 - 策略：`destructive`
 - MCP 工具：`delete_chat`
 - CLI 路由：`DELETE /v1/chats/:id`（CLI：`superting chats delete`）
+
+说明：
+
+- Permanently deletes a conversation.
 
 | 参数 | 类型 | 必填 | 说明 |
 | --- | --- | --- | --- |
@@ -227,6 +276,10 @@ Search contact records by name or email.
 - MCP 工具：`search_contacts`
 - CLI 路由：`GET /v1/contacts/search`（CLI：`superting contacts search`）
 
+说明：
+
+- Searches stored contact records by name or email.
+
 | 参数 | 类型 | 必填 | 说明 |
 | --- | --- | --- | --- |
 | `query` | string | 是 | Search text. |
@@ -238,6 +291,10 @@ Create or update a contact record by email or name.
 - 策略：`write`
 - MCP 工具：`upsert_contact`
 - CLI 路由：`POST /v1/contacts`（CLI：`superting contacts upsert`）
+
+说明：
+
+- Creates or updates by email/name, so read the record first if you only mean to add.
 
 | 参数 | 类型 | 必填 | 说明 |
 | --- | --- | --- | --- |
@@ -263,6 +320,10 @@ Replace the whole hotword list.
 - MCP 工具：`set_dictionary`
 - CLI 路由：`PUT /v1/dictionary`（CLI：`superting dict replace`）
 
+说明：
+
+- Replaces the entire hotword list — read it first if you only mean to add.
+
 | 参数 | 类型 | 必填 | 说明 |
 | --- | --- | --- | --- |
 | `words` | array<string> | 是 | Full word list. |
@@ -287,6 +348,10 @@ Remove hotwords (case-insensitive).
 - MCP 工具：`remove_dictionary_words`
 - CLI 路由：`DELETE /v1/dictionary/words`（CLI：`superting dict remove`）
 
+说明：
+
+- Case-insensitive; missing words are simply ignored.
+
 | 参数 | 类型 | 必填 | 说明 |
 | --- | --- | --- | --- |
 | `words` | array<string> | 是 | Words to remove. |
@@ -299,6 +364,10 @@ Get replacement rules used by transcription correction.
 - MCP 工具：`get_dictionary_aliases`
 - CLI 路由：`GET /v1/dictionary/aliases`（CLI：`superting alias list`）
 
+说明：
+
+- Replacement rules applied after ASR (e.g. Antibus → EntVerse).
+
 _No parameters._
 
 ### `dictionary.aliases.set` — Replace dictionary aliases
@@ -308,6 +377,10 @@ Replace the whole replacement-rule list.
 - 策略：`destructive`
 - MCP 工具：`set_dictionary_aliases`
 - CLI 路由：`PUT /v1/dictionary/aliases`（CLI：`superting alias replace`）
+
+说明：
+
+- Replaces the entire replacement-rule list — read it first if you only mean to add.
 
 | 参数 | 类型 | 必填 | 说明 |
 | --- | --- | --- | --- |
@@ -345,6 +418,10 @@ List the dictionary group tree and item memberships.
 - 策略：`read`
 - MCP 工具：`list_dictionary_groups`
 - CLI 路由：`GET /v1/dictionary/groups`（CLI：`superting dict groups list`）
+
+说明：
+
+- Nestable organisation layer over hotwords and replacement rules.
 
 _No parameters._
 
@@ -412,6 +489,10 @@ List local folders.
 - MCP 工具：`list_folders`
 - CLI 路由：`GET /v1/folders/list`（CLI：`superting folders list`）
 
+说明：
+
+- Folder ids come from here; pass them to list_notes or update_note.
+
 _No parameters._
 
 ### `folders.create` — Create folder
@@ -459,6 +540,10 @@ Persist a new folder order.
 - MCP 工具：`reorder_folders`
 - CLI 路由：`PUT /v1/folders/order`（CLI：`superting folders reorder`）
 
+说明：
+
+- Provide every visible folder id exactly once.
+
 | 参数 | 类型 | 必填 | 说明 |
 | --- | --- | --- | --- |
 | `folder_ids` | array<number> | 是 | Folder IDs in the desired order. |
@@ -473,6 +558,10 @@ List recent long-running operation jobs (newest first).
 - MCP 工具：`list_jobs`
 - CLI 路由：`GET /v1/jobs`（CLI：`superting jobs list`）
 
+说明：
+
+- Jobs are created by long operations called with wait=false.
+
 | 参数 | 类型 | 必填 | 说明 |
 | --- | --- | --- | --- |
 | `limit` | number | 否 | Maximum jobs to return. Default 20. |
@@ -486,6 +575,10 @@ Get one job's status, progress and result.
 - MCP 工具：`get_job`
 - CLI 路由：`GET /v1/jobs/:id`（CLI：`superting jobs get`）
 
+说明：
+
+- Status: running | succeeded | failed | cancelled; result is null until it settles.
+
 | 参数 | 类型 | 必填 | 说明 |
 | --- | --- | --- | --- |
 | `id` | string | 是 | Job id. |
@@ -497,6 +590,10 @@ Request cancellation of a running job. The underlying work is not abortable, so 
 - 策略：`write`
 - MCP 工具：`cancel_job`
 - CLI 路由：`POST /v1/jobs/:id/cancel`（CLI：`superting jobs cancel`）
+
+说明：
+
+- Cooperative: the underlying work cannot be aborted, so the job is marked cancelled and its result discarded on completion.
 
 | 参数 | 类型 | 必填 | 说明 |
 | --- | --- | --- | --- |
@@ -601,6 +698,11 @@ Delete a note and its retained audio references.
 - MCP 工具：`delete_note`
 - CLI 路由：`DELETE /v1/notes/:id`（CLI：`superting notes delete`）
 
+说明：
+
+- Soft delete — the note moves to the trash and can be restored in the app.
+- Use purge_note to remove it permanently.
+
 | 参数 | 类型 | 必填 | 说明 |
 | --- | --- | --- | --- |
 | `id` | number | 是 | Note ID. |
@@ -613,6 +715,10 @@ Purge a note that is already in the trash (hard delete, not recoverable).
 - MCP 工具：`purge_note`
 - CLI 路由：`DELETE /v1/notes/:id/purge`（CLI：`superting notes purge`）
 
+说明：
+
+- Irreversible hard delete of an already-trashed note; confirm with the user first.
+
 | 参数 | 类型 | 必填 | 说明 |
 | --- | --- | --- | --- |
 | `id` | number | 是 | Note ID. |
@@ -624,6 +730,11 @@ Render a note to text without opening a save dialog (markdown, txt, json).
 - 策略：`read`
 - MCP 工具：`export_note`
 - CLI 路由：`GET /v1/notes/:id/export`（CLI：`superting notes export`）
+
+说明：
+
+- Returns the rendered text in the response — no file is written and no dialog opens.
+- Use export_notes when the user wants files on disk.
 
 | 参数 | 类型 | 必填 | 说明 |
 | --- | --- | --- | --- |
@@ -639,6 +750,10 @@ List the retained audio files of a note with size metadata.
 - MCP 工具：`list_note_audio`
 - CLI 路由：`GET /v1/notes/:id/audio`（CLI：`superting notes audio list`）
 
+说明：
+
+- Reports retained audio files (name, size, duration) — never raw audio bytes.
+
 | 参数 | 类型 | 必填 | 说明 |
 | --- | --- | --- | --- |
 | `id` | number | 是 | Note ID. |
@@ -650,6 +765,10 @@ Compress a note's retained audio to Opus-in-WebM.
 - 策略：`write`
 - MCP 工具：`compress_note_audio`
 - CLI 路由：`POST /v1/notes/:id/audio/compress`（CLI：`superting notes audio compress`）
+
+说明：
+
+- Opus-in-WebM transcoding; pass wait=false on long recordings to get a job id.
 
 | 参数 | 类型 | 必填 | 说明 |
 | --- | --- | --- | --- |
@@ -664,6 +783,11 @@ Merge a note's audio segments into one file (removes the segments).
 - MCP 工具：`merge_note_audio`
 - CLI 路由：`POST /v1/notes/:id/audio/merge`（CLI：`superting notes audio merge`）
 
+说明：
+
+- Concatenates the note's audio segments into one file and deletes the originals — irreversible.
+- Pass wait=false to get a job id.
+
 | 参数 | 类型 | 必填 | 说明 |
 | --- | --- | --- | --- |
 | `id` | number | 是 | Note ID. |
@@ -676,6 +800,10 @@ Re-identify speakers for a note's audio (runs in the background).
 - 策略：`write`
 - MCP 工具：`rediarize_note_audio`
 - CLI 路由：`POST /v1/notes/:id/audio/rediarize`（CLI：`superting notes audio rediarize`）
+
+说明：
+
+- On-device diarization over the retained audio; minutes on long meetings — pass wait=false and poll jobs.get.
 
 | 参数 | 类型 | 必填 | 说明 |
 | --- | --- | --- | --- |
@@ -692,6 +820,11 @@ Import a .txt/.md/.docx file into a note's content or transcript.
 - MCP 工具：`import_note_file`
 - CLI 路由：`POST /v1/notes/:id/import`（CLI：`superting notes import`）
 
+说明：
+
+- file_path must be an absolute local path (.txt/.md/.docx).
+- target=transcript appends structured segments, target=note overwrites the note body.
+
 | 参数 | 类型 | 必填 | 说明 |
 | --- | --- | --- | --- |
 | `id` | number | 是 | Note ID. |
@@ -705,6 +838,10 @@ Export notes (markdown/txt/pdf) to a folder chosen in the app's save dialog.
 - 策略：`write · needs UI`
 - MCP 工具：`export_notes`
 - CLI 路由：`POST /v1/notes/export`（CLI：`superting notes export-to-disk`）
+
+说明：
+
+- Opens the app's folder picker, so the SuperTing window must be available.
 
 | 参数 | 类型 | 必填 | 说明 |
 | --- | --- | --- | --- |
@@ -720,6 +857,11 @@ List a note's transcript as structured segments (index, speaker, timestamp, text
 - MCP 工具：`list_transcript_segments`
 - CLI 路由：`GET /v1/notes/:id/transcript/segments`（CLI：`superting transcript segments`）
 
+说明：
+
+- Paged: offset/limit (default 200) with total/has_more, because long meetings carry thousands of segments.
+- Segment ids are re-derived as stored-<index> on every read — use the ids from this response, or `index`.
+
 | 参数 | 类型 | 必填 | 说明 |
 | --- | --- | --- | --- |
 | `id` | number | 是 | Note ID. |
@@ -733,6 +875,12 @@ Edit one transcript segment's text and/or speaker (marking it as user-edited).
 - 策略：`write · needs UI`
 - MCP 工具：`update_transcript_segment`
 - CLI 路由：`PATCH /v1/notes/:id/transcript/segments`（CLI：`superting transcript segment-update`）
+
+说明：
+
+- Target by segment_id from list_transcript_segments or by `index`.
+- Editing text marks the segment edited_user and keeps original_text (same as the editor).
+- lock=true pins the speaker so later diarization cannot overwrite it.
 
 | 参数 | 类型 | 必填 | 说明 |
 | --- | --- | --- | --- |
@@ -752,6 +900,10 @@ Delete transcript segments by `segment_ids` (from notes.transcript.segments) or 
 - MCP 工具：`delete_transcript_segments`
 - CLI 路由：`DELETE /v1/notes/:id/transcript/segments`（CLI：`superting transcript segment-delete`）
 
+说明：
+
+- Removes segments from the transcript only; the audio file is untouched.
+
 | 参数 | 类型 | 必填 | 说明 |
 | --- | --- | --- | --- |
 | `id` | number | 是 | Note ID. |
@@ -769,6 +921,10 @@ List contact profiles (跨会议人名表).
 - MCP 工具：`list_people`
 - CLI 路由：`GET /v1/people`（CLI：`superting people list`）
 
+说明：
+
+- Cross-meeting contact profiles (人名表).
+
 | 参数 | 类型 | 必填 | 说明 |
 | --- | --- | --- | --- |
 | `query` | string | 否 | Optional name filter. |
@@ -781,6 +937,10 @@ Get one contact profile and its voiceprints.
 - MCP 工具：`get_person`
 - CLI 路由：`GET /v1/people/:id`（CLI：`superting people get`）
 
+说明：
+
+- Includes the person's voiceprint metadata (templates are local biometrics).
+
 | 参数 | 类型 | 必填 | 说明 |
 | --- | --- | --- | --- |
 | `id` | number | 是 | Person ID. |
@@ -792,6 +952,10 @@ Create a contact profile.
 - 策略：`write`
 - MCP 工具：`create_person`
 - CLI 路由：`POST /v1/people`（CLI：`superting people create`）
+
+说明：
+
+- Idempotency is not guaranteed — search first to avoid duplicates.
 
 | 参数 | 类型 | 必填 | 说明 |
 | --- | --- | --- | --- |
@@ -808,6 +972,10 @@ Update a contact profile's fields.
 - 策略：`write`
 - MCP 工具：`update_person`
 - CLI 路由：`PATCH /v1/people/:id`（CLI：`superting people update`）
+
+说明：
+
+- Only the provided fields change.
 
 | 参数 | 类型 | 必填 | 说明 |
 | --- | --- | --- | --- |
@@ -826,6 +994,10 @@ Delete a contact profile.
 - MCP 工具：`delete_person`
 - CLI 路由：`DELETE /v1/people/:id`（CLI：`superting people delete`）
 
+说明：
+
+- Irreversible; the person's voiceprints go with it.
+
 | 参数 | 类型 | 必填 | 说明 |
 | --- | --- | --- | --- |
 | `id` | number | 是 | Person ID. |
@@ -837,6 +1009,10 @@ Merge one contact into another.
 - 策略：`destructive`
 - MCP 工具：`merge_people`
 - CLI 路由：`POST /v1/people/merge`（CLI：`superting people merge`）
+
+说明：
+
+- Merges one contact into another and deletes the duplicate — confirm with the user first.
 
 | 参数 | 类型 | 必填 | 说明 |
 | --- | --- | --- | --- |
@@ -853,6 +1029,10 @@ Report whether a note or meeting recording is in progress.
 - MCP 工具：`get_recording_status`
 - CLI 路由：`GET /v1/recording`（CLI：`superting recording status`）
 
+说明：
+
+- Reports whether the app is recording and into which note.
+
 _No parameters._
 
 ### `recording.start` — Start recording
@@ -862,6 +1042,11 @@ Start recording into a note (same entry point as the editor's 开始录音).
 - 策略：`write · needs UI`
 - MCP 工具：`start_recording`
 - CLI 路由：`POST /v1/recording/start`（CLI：`superting recording start`）
+
+说明：
+
+- Controls the app's real microphone/system-audio recording — confirm with the user before starting.
+- Fails if a recording is already in progress.
 
 | 参数 | 类型 | 必填 | 说明 |
 | --- | --- | --- | --- |
@@ -875,6 +1060,10 @@ Stop the running recording and finalize the note.
 - MCP 工具：`stop_recording`
 - CLI 路由：`POST /v1/recording/stop`（CLI：`superting recording stop`）
 
+说明：
+
+- Finalizes the recording, transcribes the audio and writes the note.
+
 _No parameters._
 
 ## settings
@@ -887,6 +1076,11 @@ Read the app's settings (or one setting by key).
 - MCP 工具：`get_settings`
 - CLI 路由：`GET /v1/settings`（CLI：`superting settings get`）
 
+说明：
+
+- Credential-looking keys (…ApiKey / …Token / …Secret) are returned as <redacted>.
+- Falls back to the mirrored snapshot when no window is open (source: settings-mirror).
+
 | 参数 | 类型 | 必填 | 说明 |
 | --- | --- | --- | --- |
 | `key` | string | 否 | Optional setting key. |
@@ -898,6 +1092,11 @@ Update one setting through the app's own setter (side effects included).
 - 策略：`write · needs UI`
 - MCP 工具：`set_setting`
 - CLI 路由：`PUT /v1/settings`（CLI：`superting settings set`）
+
+说明：
+
+- Credential keys are rejected — ask the user to change those in the app's settings UI.
+- Values go through the app's own setters, so side effects (IPC, localStorage, hotkey re-registration) still happen.
 
 | 参数 | 类型 | 必填 | 说明 |
 | --- | --- | --- | --- |
@@ -915,6 +1114,10 @@ Get the speaker→contact mappings recorded for a note.
 - MCP 工具：`get_speaker_mappings`
 - CLI 路由：`GET /v1/notes/:id/speakers`（CLI：`superting speakers mappings`）
 
+说明：
+
+- Speaker → contact mappings recorded for one note.
+
 | 参数 | 类型 | 必填 | 说明 |
 | --- | --- | --- | --- |
 | `id` | number | 是 | Note ID. |
@@ -927,6 +1130,10 @@ List speaker profiles (marked names) across notes.
 - MCP 工具：`list_speaker_profiles`
 - CLI 路由：`GET /v1/speakers`（CLI：`superting speakers profiles`）
 
+说明：
+
+- Names that have been marked on speakers across notes.
+
 _No parameters._
 
 ### `speakers.names` — List speaker names
@@ -937,6 +1144,10 @@ List the speaker names known to the app.
 - MCP 工具：`list_speaker_names`
 - CLI 路由：`GET /v1/speakers/names`（CLI：`superting speakers names`）
 
+说明：
+
+- Known speaker names (the app's 人名表).
+
 _No parameters._
 
 ### `speakers.mapping.set` — Assign a speaker name
@@ -946,6 +1157,11 @@ Assign a name/contact to a speaker id in a note.
 - 策略：`write`
 - MCP 工具：`set_speaker_mapping`
 - CLI 路由：`POST /v1/notes/:id/speakers`（CLI：`superting speakers assign`）
+
+说明：
+
+- Use the speaker ids present in the note's transcript.
+- lock=true prevents later diarization from reassigning them.
 
 | 参数 | 类型 | 必填 | 说明 |
 | --- | --- | --- | --- |
@@ -963,6 +1179,10 @@ Create or update a speaker name (optionally with an email).
 - MCP 工具：`upsert_speaker_name`
 - CLI 路由：`POST /v1/speakers/names`（CLI：`superting speakers name-add`）
 
+说明：
+
+- Creates or updates a speaker name, optionally with an email.
+
 | 参数 | 类型 | 必填 | 说明 |
 | --- | --- | --- | --- |
 | `display_name` | string | 是 | Speaker name. |
@@ -976,6 +1196,10 @@ Delete a speaker name by id.
 - MCP 工具：`delete_speaker_name`
 - CLI 路由：`DELETE /v1/speakers/names/:id`（CLI：`superting speakers name-delete`）
 
+说明：
+
+- Removes the name; existing transcript labels are untouched.
+
 | 参数 | 类型 | 必填 | 说明 |
 | --- | --- | --- | --- |
 | `id` | number | 是 | Speaker name ID. |
@@ -987,6 +1211,10 @@ Attach an email address to a speaker profile.
 - 策略：`write`
 - MCP 工具：`attach_speaker_email`
 - CLI 路由：`POST /v1/speakers/email`（CLI：`superting speakers email-attach`）
+
+说明：
+
+- Links an email to a speaker profile so historical notes can be remapped.
 
 | 参数 | 类型 | 必填 | 说明 |
 | --- | --- | --- | --- |
@@ -1013,6 +1241,10 @@ List every capability exposed to agents, with its MCP tool name, CLI route and p
 - MCP 工具：`list_operations`
 - CLI 路由：`GET /v1/operations`（CLI：`superting ops list`）
 
+说明：
+
+- Call this first when unsure which capability or parameter to use.
+
 _No parameters._
 
 ## tags
@@ -1024,6 +1256,10 @@ List tags used by local notes.
 - 策略：`read`
 - MCP 工具：`list_tags`
 - CLI 路由：`GET /v1/tags`（CLI：`superting tags list`）
+
+说明：
+
+- Tags are attached to notes; filter list_notes by tags.
 
 _No parameters._
 
@@ -1061,6 +1297,10 @@ Delete a transcription record and its audio.
 - MCP 工具：`delete_transcription`
 - CLI 路由：`DELETE /v1/transcriptions/:id`（CLI：`superting transcriptions delete`）
 
+说明：
+
+- Deletes the history record and its stored audio.
+
 | 参数 | 类型 | 必填 | 说明 |
 | --- | --- | --- | --- |
 | `id` | number | 是 | Transcription ID. |
@@ -1072,6 +1312,10 @@ Delete only the stored audio for a transcription, keeping the text.
 - 策略：`destructive`
 - MCP 工具：`delete_transcription_audio`
 - CLI 路由：`DELETE /v1/transcriptions/:id/audio`（CLI：`superting transcriptions delete-audio`）
+
+说明：
+
+- Keeps the transcription text, drops only the audio file.
 
 | 参数 | 类型 | 必填 | 说明 |
 | --- | --- | --- | --- |
@@ -1085,6 +1329,10 @@ Delete every transcription record and its audio.
 - MCP 工具：`clear_transcriptions`
 - CLI 路由：`DELETE /v1/transcriptions`（CLI：`superting transcriptions clear`）
 
+说明：
+
+- Deletes every transcription record and its audio. Irreversible.
+
 _No parameters._
 
 ### `transcriptions.transcribe_file` — Transcribe an audio file
@@ -1094,6 +1342,11 @@ Transcribe a local audio file with an on-device engine (whisper / Parakeet / Fun
 - 策略：`write`
 - MCP 工具：`transcribe_audio_file`
 - CLI 路由：`POST /v1/transcriptions/transcribe`（CLI：`superting transcriptions transcribe`）
+
+说明：
+
+- On-device engines only (whisper / nvidia / funasr); file_path must be a local absolute path.
+- Long files: pass wait=false. Cloud/BYOK transcription is deliberately not exposed.
 
 | 参数 | 类型 | 必填 | 说明 |
 | --- | --- | --- | --- |
@@ -1111,6 +1364,10 @@ Re-transcribe a stored audio file using the app's current transcription settings
 - MCP 工具：`retry_transcription`
 - CLI 路由：`POST /v1/transcriptions/:id/retry`（CLI：`superting transcriptions retry`）
 
+说明：
+
+- Re-runs ASR with the app's current transcription settings, so it needs the SuperTing window.
+
 | 参数 | 类型 | 必填 | 说明 |
 | --- | --- | --- | --- |
 | `id` | number | 是 | Transcription ID. |
@@ -1125,6 +1382,10 @@ List the auditionable voiceprint segments of a person.
 - MCP 工具：`list_voiceprint_segments`
 - CLI 路由：`GET /v1/voiceprints/segments`（CLI：`superting voiceprints segments`）
 
+说明：
+
+- Voiceprints are local biometric templates; only metadata is exposed, never embeddings.
+
 | 参数 | 类型 | 必填 | 说明 |
 | --- | --- | --- | --- |
 | `person_id` | number | 否 | Person ID. Omit for all people. |
@@ -1136,6 +1397,10 @@ Delete one person's voiceprints, or every voiceprint.
 - 策略：`destructive`
 - MCP 工具：`delete_all_voiceprints`
 - CLI 路由：`DELETE /v1/voiceprints`（CLI：`superting voiceprints delete-all`）
+
+说明：
+
+- Irreversible; pass person_id to limit it to one person.
 
 | 参数 | 类型 | 必填 | 说明 |
 | --- | --- | --- | --- |

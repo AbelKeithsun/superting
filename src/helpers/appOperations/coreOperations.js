@@ -43,6 +43,7 @@ function coreOperations() {
       description:
         "List every capability exposed to agents, with its MCP tool name, CLI route and parameters.",
       policy: "read",
+      notes: ["Call this first when unsure which capability or parameter to use."],
       mcp: { name: "list_operations" },
       cli: { method: "GET", path: "/v1/operations", command: "ops list" },
       handler: (_params, ctx) => ({
@@ -331,6 +332,10 @@ function coreOperations() {
       description: "Delete a note and its retained audio references.",
       policy: "destructive",
       params: { id: { type: "number", required: true, description: "Note ID." } },
+      notes: [
+        "Soft delete — the note moves to the trash and can be restored in the app.",
+        "Use purge_note to remove it permanently.",
+      ],
       mcp: { name: "delete_note" },
       cli: {
         method: "DELETE",
@@ -352,6 +357,7 @@ function coreOperations() {
       description: "Purge a note that is already in the trash (hard delete, not recoverable).",
       policy: "destructive",
       params: { id: { type: "number", required: true, description: "Note ID." } },
+      notes: ["Irreversible hard delete of an already-trashed note; confirm with the user first."],
       mcp: { name: "purge_note" },
       cli: {
         method: "DELETE",
@@ -386,6 +392,10 @@ function coreOperations() {
           description: "Subset of: transcript, notes, enhanced. Default all present fields.",
         },
       },
+      notes: [
+        "Returns the rendered text in the response — no file is written and no dialog opens.",
+        "Use export_notes when the user wants files on disk.",
+      ],
       mcp: { name: "export_note" },
       cli: {
         method: "GET",
@@ -414,6 +424,7 @@ function coreOperations() {
       title: "List folders",
       description: "List local folders.",
       policy: "read",
+      notes: ["Folder ids come from here; pass them to list_notes or update_note."],
       mcp: { name: "list_folders" },
       cli: { method: "GET", path: "/v1/folders/list", command: "folders list" },
       handler: (_params, { db }) => ({ data: db.getFolders(), ...LIST_ENVELOPE }),
@@ -499,6 +510,7 @@ function coreOperations() {
           description: "Folder IDs in the desired order.",
         },
       },
+      notes: ["Provide every visible folder id exactly once."],
       mcp: { name: "reorder_folders" },
       cli: {
         method: "PUT",
@@ -522,6 +534,7 @@ function coreOperations() {
       title: "List tags",
       description: "List tags used by local notes.",
       policy: "read",
+      notes: ["Tags are attached to notes; filter list_notes by tags."],
       mcp: { name: "list_tags" },
       cli: { method: "GET", path: "/v1/tags", command: "tags list" },
       handler: (_params, { db }) => ({ data: db.getTags(), ...LIST_ENVELOPE }),
@@ -545,6 +558,7 @@ function coreOperations() {
       params: {
         words: { type: "array", items: "string", required: true, description: "Full word list." },
       },
+      notes: ["Replaces the entire hotword list — read it first if you only mean to add."],
       mcp: { name: "set_dictionary" },
       cli: {
         method: "PUT",
@@ -602,6 +616,7 @@ function coreOperations() {
       params: {
         words: { type: "array", items: "string", required: true, description: "Words to remove." },
       },
+      notes: ["Case-insensitive; missing words are simply ignored."],
       mcp: { name: "remove_dictionary_words" },
       cli: {
         method: "DELETE",
@@ -628,6 +643,7 @@ function coreOperations() {
       title: "Get dictionary aliases",
       description: "Get replacement rules used by transcription correction.",
       policy: "read",
+      notes: ["Replacement rules applied after ASR (e.g. Antibus → EntVerse)."],
       mcp: { name: "get_dictionary_aliases" },
       cli: { method: "GET", path: "/v1/dictionary/aliases", command: "alias list" },
       handler: (_params, { db }) => ({ data: db.getDictionaryAliases() }),
@@ -645,6 +661,7 @@ function coreOperations() {
           description: 'Rules as [{"from": "...", "to": "..."}].',
         },
       },
+      notes: ["Replaces the entire replacement-rule list — read it first if you only mean to add."],
       mcp: { name: "set_dictionary_aliases" },
       cli: {
         method: "PUT",
@@ -726,6 +743,7 @@ function coreOperations() {
       title: "List dictionary groups",
       description: "List the dictionary group tree and item memberships.",
       policy: "read",
+      notes: ["Nestable organisation layer over hotwords and replacement rules."],
       mcp: { name: "list_dictionary_groups" },
       cli: { method: "GET", path: "/v1/dictionary/groups", command: "dict groups list" },
       handler: (_params, { db }) => ({
@@ -929,6 +947,7 @@ function coreOperations() {
       description: "Delete a transcription record and its audio.",
       policy: "destructive",
       params: { id: { type: "number", required: true, description: "Transcription ID." } },
+      notes: ["Deletes the history record and its stored audio."],
       mcp: { name: "delete_transcription" },
       cli: {
         method: "DELETE",
@@ -952,6 +971,7 @@ function coreOperations() {
       description: "Delete only the stored audio for a transcription, keeping the text.",
       policy: "destructive",
       params: { id: { type: "number", required: true, description: "Transcription ID." } },
+      notes: ["Keeps the transcription text, drops only the audio file."],
       mcp: { name: "delete_transcription_audio" },
       cli: {
         method: "DELETE",
