@@ -103,8 +103,10 @@ export default function NoteTimelineItem({ note, folderName, onOpen }: NoteTimel
 
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
-            <Icon size={13} className="shrink-0 text-accent/70" />
-            <span className="shrink-0 text-[10px] font-medium px-1 py-px rounded bg-accent/10 text-accent/80">
+            {/* Type icon + label as one chip: a bare 70%-opacity icon read as
+                grey noise next to the title. */}
+            <span className="shrink-0 inline-flex items-center gap-1 rounded bg-accent/15 px-1.5 py-px text-[10px] font-semibold text-accent">
+              <Icon size={11} className="shrink-0" aria-hidden />
               {t(meta.badgeKey)}
             </span>
             {folderName && (

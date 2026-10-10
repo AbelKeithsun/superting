@@ -6,10 +6,12 @@ import { ConfirmDialog } from "./ui/dialog.js";
 import { cn } from "./lib/utils";
 import type { NoteItem } from "../types/electron.js";
 
+// Kept deliberately stronger than a muted hint: the type chip sits next to the
+// title and needs to be readable, not decorative grey.
 const NOTE_TYPE_COLORS: Record<NoteItem["note_type"], string> = {
-  personal: "bg-foreground/5 text-foreground/50",
-  meeting: "bg-foreground/[0.06] text-foreground/60 dark:bg-white/[0.08] dark:text-white/60",
-  upload: "bg-amber-500/8 text-amber-600/60 dark:bg-amber-400/10 dark:text-amber-400/60",
+  personal: "bg-foreground/10 text-foreground/75",
+  meeting: "bg-foreground/12 text-foreground/80 dark:bg-white/15 dark:text-white/85",
+  upload: "bg-amber-500/15 text-amber-700 dark:bg-amber-400/18 dark:text-amber-300",
 };
 
 type SaveState = "idle" | "saving" | "saved";
