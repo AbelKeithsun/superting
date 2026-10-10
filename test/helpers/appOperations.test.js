@@ -384,3 +384,77 @@ test("UI-bound operations fail cleanly outside Electron instead of crashing", as
     (error) => error.code === "UNAVAILABLE" && /window/i.test(error.message)
   );
 });
+
+test("the settings mirror round-trips redacted values", () => {
+  const os = require("node:os");
+  const { SettingsMirror, sanitize } = require("../../src/helpers/settingsMirror.js");
+  const homeDir = fs.mkdtempSync(path.join(os.tmpdir(), "superting-mirror-"));
+  try {
+    const mirror = new SettingsMirror({ homeDir });
+    const written = mirror.write({
+      uiLanguage: "zh-CN",
+      notifyUpdates: true,
+      audioRetentionDays: 30,
+      openaiApiKey: "sk-live-should-never-be-written",
+      customDictionary: ["SuperTing"],
+    });
+    assert.equal(written.count, 5);
+
+    const reloaded = new SettingsMirror({ homeDir });
+    const snapshot = reloaded.read();
+    assert.equal(snapshot.uiLanguage, "zh-CN");
+    assert.equal(snapshot.notifyUpdates, true);
+    assert.equal(snapshot.audioRetentionDays, 30);
+    assert.deepEqual(snapshot.customDictionary, ["SuperTing"]);
+    assert.equal(snapshot.openaiApiKey, "<redacted>");
+    assert.equal(reloaded.read("uiLanguage"), "zh-CN");
+    assert.equal(reloaded.info().count, 5);
+
+    // Defence in depth: even a direct write cannot leak a credential.
+    assert.equal(sanitize({ bedrockSecretAccessKey: "x" }).bedrockSecretAccessKey, "<redacted>");
+    assert.match(reloaded.info().path, /settings-mirror\.json$/);
+  } finally {
+    fs.rmSync(homeDir, { recursive: true, force: true });
+  }
+});
+
+test("reading settings falls back to the mirror when no window is open", async () => {
+  const registry = buildRegistry();
+  const unavailable = Object.assign(new Error("no window"), { code: "UNAVAILABLE" });
+  const context = {
+    renderer: { invoke: async () => { throw unavailable; } },
+    ipc: {
+      getSettingsMirror: () => ({
+        read: (key) => (key ? { uiLanguage: "zh-CN" }[key] : { uiLanguage: "zh-CN", notifyUpdates: true }),
+      }),
+    },
+  };
+
+  const all = await registry.invoke("settings.get", {}, context);
+  assert.equal(all.data.source, "settings-mirror");
+  assert.equal(all.data.count, 2);
+
+  const one = await registry.invoke("settings.get", { key: "uiLanguage" }, context);
+  assert.deepEqual(one.data, { key: "uiLanguage", value: "zh-CN", source: "settings-mirror" });
+
+  await assert.rejects(
+    () => registry.invoke("settings.get", { key: "nope" }, context),
+    /Unknown setting/
+  );
+
+  // Without a mirror there is nothing to read: say so instead of guessing.
+  await assert.rejects(
+    () =>
+      registry.invoke("settings.get", {}, {
+        renderer: { invoke: async () => { throw unavailable; } },
+        ipc: { getSettingsMirror: () => ({ read: () => null }) },
+      }),
+    /no settings snapshot/i
+  );
+
+  // Writing settings still needs the UI (the renderer owns the side effects).
+  await assert.rejects(
+    () => registry.invoke("settings.set", { key: "uiLanguage", value: "en" }, context),
+    /no window/
+  );
+});

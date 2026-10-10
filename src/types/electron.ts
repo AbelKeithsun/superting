@@ -2164,6 +2164,8 @@ declare global {
         result?: unknown;
         error?: string;
       }) => void;
+      /** Publish a redacted settings snapshot for window-less readers. */
+      updateSettingsMirror?: (snapshot: Record<string, unknown>) => void;
       getUpdateNotificationData?: () => Promise<{
         version: string;
         releaseDate?: string;

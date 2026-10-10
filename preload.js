@@ -942,6 +942,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
     (callback) => (_event, message) => callback(message)
   ),
   respondAppOperation: (message) => ipcRenderer.send("app-operation-response", message),
+  updateSettingsMirror: (snapshot) => ipcRenderer.send("settings-mirror-update", snapshot),
 
   onUpdateNotificationData: registerListener(
     "update-notification-data",

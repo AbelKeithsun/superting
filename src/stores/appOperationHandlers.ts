@@ -231,12 +231,35 @@ interface AppOperationMessage {
   payload?: Record<string, unknown>;
 }
 
+/**
+ * Keep the main process's redacted settings mirror current so agent surfaces can
+ * read configuration while no window is open (see helpers/settingsMirror.js).
+ */
+function publishSettingsMirror(api: NonNullable<Window["electronAPI"]>): void {
+  if (!api.updateSettingsMirror) return;
+  try {
+    api.updateSettingsMirror(settingsSnapshot());
+  } catch {
+    // Mirroring is best-effort; never break the bridge over it.
+  }
+}
+
 /** Installs the bridge listener; returns an unsubscribe function. */
 export function registerAppOperationHandlers(): () => void {
   const api = window.electronAPI;
   if (!api?.onAppOperationRequest) return () => {};
 
-  return api.onAppOperationRequest((message: AppOperationMessage) => {
+  publishSettingsMirror(api);
+  let mirrorTimer: number | null = null;
+  const unsubscribeMirror = useSettingsStore.subscribe(() => {
+    if (mirrorTimer !== null) window.clearTimeout(mirrorTimer);
+    mirrorTimer = window.setTimeout(() => {
+      mirrorTimer = null;
+      publishSettingsMirror(api);
+    }, 500);
+  });
+
+  const unsubscribe = api.onAppOperationRequest((message: AppOperationMessage) => {
     const { id, channel } = message ?? {};
     if (!id || !channel) return;
     const respond = (result: unknown) => {
@@ -262,6 +285,12 @@ export function registerAppOperationHandlers(): () => void {
       .then(respond)
       .catch(fail);
   });
+
+  return () => {
+    if (mirrorTimer !== null) window.clearTimeout(mirrorTimer);
+    unsubscribeMirror();
+    unsubscribe();
+  };
 }
 
 export { handlers as appOperationHandlers };

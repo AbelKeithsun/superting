@@ -1095,6 +1095,14 @@ class IPCHandlers {
     }
   }
 
+  getSettingsMirror() {
+    if (!this._settingsMirror) {
+      const { SettingsMirror } = require("./settingsMirror");
+      this._settingsMirror = new SettingsMirror();
+    }
+    return this._settingsMirror;
+  }
+
   /**
    * Invoke a registered renderer IPC handler from a non-renderer caller.
    * The handler receives a stand-in event whose sender is inert, so
@@ -1111,6 +1119,12 @@ class IPCHandlers {
   }
 
   _registerAllHandlers() {
+    // Redacted settings snapshot pushed by the renderer, so agent surfaces can
+    // still read configuration while no window is open.
+    ipcMain.on("settings-mirror-update", (_event, snapshot) => {
+      this.getSettingsMirror().write(snapshot);
+    });
+
     ipcMain.handle("window-minimize", () => {
       if (this.windowManager.controlPanelWindow) {
         this.windowManager.controlPanelWindow.minimize();

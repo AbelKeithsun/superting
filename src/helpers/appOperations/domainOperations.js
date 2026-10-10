@@ -82,6 +82,7 @@ function rendererOperation({
   mcp,
   cli,
   payload = (values) => values,
+  fallback = null,
 }) {
   if (!mcp || !cli) {
     throw new Error(`[appOperations] ${id}: renderer operations must be exposed on both surfaces`);
@@ -96,8 +97,15 @@ function rendererOperation({
     cli,
     rendererRequired: true,
     handler: async (values, ctx) => {
-      const result = await ctx.renderer.invoke(channel, payload(values));
-      return { data: result ?? {} };
+      try {
+        const result = await ctx.renderer.invoke(channel, payload(values));
+        return { data: result ?? {} };
+      } catch (error) {
+        if (fallback && error?.code === "UNAVAILABLE") {
+          return { data: fallback(values, ctx) };
+        }
+        throw error;
+      }
     },
   };
 }
@@ -708,6 +716,24 @@ function domainOperations() {
         path: "/v1/settings",
         command: "settings get",
         params: { key: "query" },
+      },
+      // Reading configuration should not require the window: the renderer
+      // mirrors a redacted snapshot on every change.
+      fallback: (values, ctx) => {
+        const snapshot = ctx.ipc?.getSettingsMirror?.()?.read() ?? null;
+        if (!snapshot) {
+          throw OperationError.unavailable(
+            "No SuperTing window is open and no settings snapshot has been mirrored yet"
+          );
+        }
+        const source = "settings-mirror";
+        if (!values.key) {
+          return { settings: snapshot, count: Object.keys(snapshot).length, source };
+        }
+        if (!(values.key in snapshot)) {
+          throw OperationError.validation(`Unknown setting "${values.key}"`);
+        }
+        return { key: values.key, value: snapshot[values.key], source };
       },
     }),
     rendererOperation({
