@@ -1073,9 +1073,12 @@ export default function PersonalNotesView({
   );
 
   const isActiveNoteRecording = isTranscribing && recordingNoteId === activeNote?.id;
-  const echoCancellationMessage = isActiveNoteRecording
-    ? getMeetingEchoCancellationMessage(recordingAecMode, recordingAecReason, t)
-    : null;
+  // Only surface the AEC status when something needs attention: a permanent
+  // "echo cancellation is active" banner is noise while everything works.
+  const echoCancellationMessage =
+    isActiveNoteRecording && recordingAecMode !== "enabled"
+      ? getMeetingEchoCancellationMessage(recordingAecMode, recordingAecReason, t)
+      : null;
   const resolvedActiveTranscript = resolveNoteActionTranscript({
     isActiveNoteRecording,
     realtimeTranscript,
@@ -1564,7 +1567,7 @@ export default function PersonalNotesView({
       >
         <div className="ow-collapsible-pane-content">
           <div className="h-full w-full shrink-0 ow-inner-sidebar">
-            <div className="px-3 pt-4 pb-3 shrink-0 space-y-1">
+            <div className="ow-window-drag px-3 pt-4 pb-3 shrink-0 space-y-1">
               <button onClick={handleOpenNewNoteDialog} className="ow-inner-nav-item h-7">
                 <SquarePen size={14} className="shrink-0" />
                 {t("notes.sidebar.newNote")}
@@ -1582,7 +1585,7 @@ export default function PersonalNotesView({
             </div>
 
             {/* Folders */}
-            <div className="flex items-center justify-between px-4 pt-3 pb-1.5">
+            <div className="ow-window-drag flex items-center justify-between px-4 pt-3 pb-1.5">
               <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
                 {t("notes.folders.title")}
               </span>
@@ -1816,7 +1819,7 @@ export default function PersonalNotesView({
             <div className="mx-4 h-px bg-border/70 dark:bg-white/8 my-3" />
 
             {/* Notes list */}
-            <div className="flex items-center justify-between px-4 py-1.5 gap-1">
+            <div className="ow-window-drag flex items-center justify-between px-4 py-1.5 gap-1">
               <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
                 {isSelectionMode
                   ? t("notes.bulkExport.selectedCount", { count: selectedCount })
@@ -2083,7 +2086,7 @@ export default function PersonalNotesView({
               <div
                 role="status"
                 className={cn(
-                  "mx-4 mt-3 rounded-md border px-3 py-2 text-xs leading-snug",
+                  "mx-4 mt-4 rounded-md border px-3 py-2 text-xs leading-snug",
                   recordingAecMode === "enabled"
                     ? "border-success/20 bg-success/8 text-success"
                     : "border-warning/20 bg-warning/8 text-warning"

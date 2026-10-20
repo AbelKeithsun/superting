@@ -275,11 +275,28 @@
     -webkit-app-region: drag;
   }
 
+  /* Any blank pixel inside a drag region moves the window; controls and
+   * editable fields opt back out so they keep receiving clicks. */
+  .ow-window-drag {
+    -webkit-app-region: drag;
+  }
+
   .ow-page-header button,
+  .ow-page-header a,
   .ow-page-header input,
   .ow-page-header textarea,
   .ow-page-header select,
-  .ow-page-header [role="button"] {
+  .ow-page-header [role="button"],
+  .ow-page-header [contenteditable],
+  .ow-page-header [data-no-drag],
+  .ow-window-drag button,
+  .ow-window-drag a,
+  .ow-window-drag input,
+  .ow-window-drag textarea,
+  .ow-window-drag select,
+  .ow-window-drag [role="button"],
+  .ow-window-drag [contenteditable],
+  .ow-window-drag [data-no-drag] {
     -webkit-app-region: no-drag;
   }
 
