@@ -28,6 +28,16 @@
       "recordingPill": {
         "title": "Afficher le bouton d'enregistrement flottant",
         "description": "Affiche un bouton flottant avec l'état d'enregistrement lors de l'enregistrement de notes ou de réunions"
+      },
+      "echoCancellation": {
+        "title": "Suppression de l'écho du haut-parleur",
+        "description": "Supprime l'écho du haut-parleur de la piste du micro lors de l'enregistrement des réunions. Un casque donne le meilleur résultat.",
+        "checking": "Vérification…",
+        "ready": "Prêt",
+        "needsPermission": "Accès à l'audio système requis",
+        "unavailable": "Indisponible sur cet appareil",
+        "unsupported": "Non pris en charge sur cette plateforme",
+        "grant": "Accorder l'accès"
       }
     }
   },

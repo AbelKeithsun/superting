@@ -28,6 +28,16 @@
       "recordingPill": {
         "title": "显示悬浮录音按钮",
         "description": "录音笔记或会议时，显示带录音状态的悬浮按钮"
+      },
+      "echoCancellation": {
+        "title": "扬声器回声消除",
+        "description": "会议录音时自动从麦克风轨中消除扬声器回声，使用耳机可获得最干净的效果。",
+        "checking": "检查中…",
+        "ready": "已就绪",
+        "needsPermission": "需要授权系统音频",
+        "unavailable": "当前设备不可用",
+        "unsupported": "当前系统不支持",
+        "grant": "去授权"
       }
     }
   },

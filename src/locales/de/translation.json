@@ -28,6 +28,16 @@
       "recordingPill": {
         "title": "Schwebenden Aufnahmebutton anzeigen",
         "description": "Zeigt beim Aufnehmen von Notizen oder Meetings einen schwebenden Button mit Aufnahmestatus an"
+      },
+      "echoCancellation": {
+        "title": "Lautsprecher-Echounterdrückung",
+        "description": "Entfernt Lautsprecher-Echos aus der Mikrofon-Spur bei Meeting-Aufnahmen. Kopfhörer liefern das beste Ergebnis.",
+        "checking": "Wird geprüft…",
+        "ready": "Bereit",
+        "needsPermission": "Zugriff auf Systemaudio erforderlich",
+        "unavailable": "Auf diesem Gerät nicht verfügbar",
+        "unsupported": "Auf dieser Plattform nicht unterstützt",
+        "grant": "Zugriff erlauben"
       }
     }
   },

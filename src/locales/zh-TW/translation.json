@@ -28,6 +28,16 @@
       "recordingPill": {
         "title": "顯示懸浮錄音按鈕",
         "description": "錄製筆記或會議時，顯示帶錄音狀態的懸浮按鈕"
+      },
+      "echoCancellation": {
+        "title": "揚聲器回聲消除",
+        "description": "會議錄音時自動從麥克風軌中消除揚聲器回聲，使用耳機可獲得最乾淨的效果。",
+        "checking": "檢查中…",
+        "ready": "已就緒",
+        "needsPermission": "需要授權系統音訊",
+        "unavailable": "目前裝置不可用",
+        "unsupported": "目前系統不支援",
+        "grant": "去授權"
       }
     }
   },
