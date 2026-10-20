@@ -73,7 +73,7 @@ export default function ControlPanelSidebar({
 
   if (collapsed) {
     return (
-      <div className="ow-surface-pane w-[4.5rem] h-full shrink-0 flex flex-col items-center">
+      <div className="ow-surface-pane w-[5.5rem] h-full shrink-0 flex flex-col items-center">
         <div
           className="w-full h-10 shrink-0"
           style={{ WebkitAppRegion: "drag" } as React.CSSProperties}
