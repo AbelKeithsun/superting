@@ -28,6 +28,16 @@
       "recordingPill": {
         "title": "Mostrar botón flotante de grabación",
         "description": "Muestra un botón flotante con el estado de grabación mientras grabas notas o reuniones"
+      },
+      "echoCancellation": {
+        "title": "Cancelación de eco del altavoz",
+        "description": "Elimina el eco del altavoz de la pista del micrófono al grabar reuniones. Los auriculares ofrecen el mejor resultado.",
+        "checking": "Comprobando…",
+        "ready": "Listo",
+        "needsPermission": "Se requiere acceso al audio del sistema",
+        "unavailable": "No disponible en este dispositivo",
+        "unsupported": "No compatible con esta plataforma",
+        "grant": "Conceder acceso"
       }
     }
   },

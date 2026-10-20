@@ -363,6 +363,12 @@ export interface SystemAudioAccessResult {
   error?: string;
 }
 
+export interface MeetingAecStatusResult {
+  helperSupported: boolean;
+  helperAvailable: boolean;
+  systemAudio: SystemAudioAccessResult | null;
+}
+
 export interface UpdateCheckResult {
   updateAvailable: boolean;
   version?: string;
@@ -1484,6 +1490,7 @@ declare global {
       checkMicrophoneAccess?: () => Promise<{ granted: boolean; status: string }>;
       checkSystemAudioAccess?: () => Promise<SystemAudioAccessResult>;
       requestSystemAudioAccess?: () => Promise<SystemAudioAccessResult>;
+      getMeetingAecStatus?: () => Promise<MeetingAecStatusResult>;
       openMicrophoneSettings?: () => Promise<{ success: boolean; error?: string }>;
       openSoundInputSettings?: () => Promise<{ success: boolean; error?: string }>;
       openAccessibilitySettings?: () => Promise<{ success: boolean; error?: string }>;

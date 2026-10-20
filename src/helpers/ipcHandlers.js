@@ -5303,6 +5303,16 @@ class IPCHandlers {
 
     ipcMain.handle("check-system-audio-access", () => getSystemAudioAccess());
 
+    // Availability of speaker echo cancellation for meeting recording. The
+    // runtime mode is reported while recording; the settings page needs to
+    // explain up-front why the helper will or will not run.
+    ipcMain.handle("get-meeting-aec-status", async () => {
+      const helperSupported = this.meetingAecManager?.isSupported?.() ?? false;
+      const helperAvailable = this.meetingAecManager?.isAvailable?.() ?? false;
+      const systemAudio = await getSystemAudioAccess().catch(() => null);
+      return { helperSupported, helperAvailable, systemAudio };
+    });
+
     ipcMain.handle("request-system-audio-access", async () => {
       if (process.platform === "win32") {
         return buildSystemAudioAccess({

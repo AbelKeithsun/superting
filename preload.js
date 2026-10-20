@@ -584,6 +584,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
   checkMicrophoneAccess: () => ipcRenderer.invoke("check-microphone-access"),
   checkSystemAudioAccess: () => ipcRenderer.invoke("check-system-audio-access"),
   requestSystemAudioAccess: () => ipcRenderer.invoke("request-system-audio-access"),
+  getMeetingAecStatus: () => ipcRenderer.invoke("get-meeting-aec-status"),
   openMicrophoneSettings: () => ipcRenderer.invoke("open-microphone-settings"),
   openSoundInputSettings: () => ipcRenderer.invoke("open-sound-input-settings"),
   openAccessibilitySettings: () => ipcRenderer.invoke("open-accessibility-settings"),

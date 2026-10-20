@@ -28,6 +28,16 @@
       "recordingPill": {
         "title": "Mostra pulsante di registrazione flottante",
         "description": "Mostra un pulsante flottante con lo stato di registrazione durante la registrazione di note o riunioni"
+      },
+      "echoCancellation": {
+        "title": "Cancellazione dell'eco dell'altoparlante",
+        "description": "Rimuove l'eco dell'altoparlante dalla traccia del microfono durante la registrazione delle riunioni. Le cuffie danno il risultato migliore.",
+        "checking": "Verifica in corso…",
+        "ready": "Pronto",
+        "needsPermission": "Accesso all'audio di sistema richiesto",
+        "unavailable": "Non disponibile su questo dispositivo",
+        "unsupported": "Non supportato su questa piattaforma",
+        "grant": "Concedi accesso"
       }
     }
   },

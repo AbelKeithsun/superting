@@ -28,6 +28,16 @@
       "recordingPill": {
         "title": "Show floating recording button",
         "description": "Show a floating button with recording status while recording notes or meetings"
+      },
+      "echoCancellation": {
+        "title": "Speaker echo cancellation",
+        "description": "Removes speaker echo from the microphone track while recording meetings. Headphones give the cleanest result.",
+        "checking": "Checking…",
+        "ready": "Ready",
+        "needsPermission": "System audio access required",
+        "unavailable": "Unavailable on this device",
+        "unsupported": "Not supported on this platform",
+        "grant": "Grant access"
       }
     }
   },

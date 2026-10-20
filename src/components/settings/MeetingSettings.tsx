@@ -1,4 +1,4 @@
-import { useCallback } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Key, Cpu, Network } from "lucide-react";
 import { useSettingsStore } from "../../stores/settingsStore";
@@ -7,7 +7,7 @@ import type { InferenceModeOption } from "../ui/SettingsSection";
 import { Toggle } from "../ui/toggle";
 import TranscriptionModelPicker from "../TranscriptionModelPicker";
 import SelfHostedPanel from "../SelfHostedPanel";
-import type { InferenceMode } from "../../types/electron";
+import type { InferenceMode, MeetingAecStatusResult } from "../../types/electron";
 
 export function MeetingSpeakerDetectionRow() {
   const { t } = useTranslation();
@@ -40,6 +40,100 @@ export function MeetingRecordingPillRow() {
 }
 
 const noop = () => {};
+
+type EchoCancellationUiState =
+  | "checking"
+  | "ready"
+  | "needsPermission"
+  | "unavailable"
+  | "unsupported";
+
+export function MeetingEchoCancellationRow() {
+  const { t } = useTranslation();
+  const [status, setStatus] = useState<MeetingAecStatusResult | null>(null);
+  const [isGranting, setIsGranting] = useState(false);
+
+  const refresh = useCallback(async () => {
+    try {
+      const next = await window.electronAPI?.getMeetingAecStatus?.();
+      if (next) setStatus(next);
+    } catch {
+      // Keep the previous status if the probe fails.
+    }
+  }, []);
+
+  useEffect(() => {
+    void refresh();
+    // Permissions are granted in System Settings, so re-probe on focus.
+    const handleFocus = () => void refresh();
+    window.addEventListener("focus", handleFocus);
+    return () => window.removeEventListener("focus", handleFocus);
+  }, [refresh]);
+
+  const handleGrant = async () => {
+    if (isGranting) return;
+    setIsGranting(true);
+    try {
+      const result = await window.electronAPI?.requestSystemAudioAccess?.();
+      if (result && !result.granted) {
+        await window.electronAPI?.openSystemAudioSettings?.();
+      }
+      await refresh();
+    } finally {
+      setIsGranting(false);
+    }
+  };
+
+  const state: EchoCancellationUiState = !status
+    ? "checking"
+    : !status.helperSupported
+      ? "unsupported"
+      : !status.helperAvailable
+        ? "unavailable"
+        : status.systemAudio?.granted
+          ? "ready"
+          : "needsPermission";
+
+  const statusLabel = {
+    checking: t("settings.meeting.echoCancellation.checking"),
+    ready: t("settings.meeting.echoCancellation.ready"),
+    needsPermission: t("settings.meeting.echoCancellation.needsPermission"),
+    unavailable: t("settings.meeting.echoCancellation.unavailable"),
+    unsupported: t("settings.meeting.echoCancellation.unsupported"),
+  }[state];
+
+  const badgeClass =
+    state === "ready"
+      ? "bg-success/10 text-success"
+      : state === "needsPermission"
+        ? "bg-warning/10 text-warning"
+        : "bg-muted text-muted-foreground";
+
+  return (
+    <SettingsRow
+      label={t("settings.meeting.echoCancellation.title")}
+      description={t("settings.meeting.echoCancellation.description")}
+    >
+      <div className="flex items-center gap-2">
+        <span
+          className={`inline-flex h-6 items-center whitespace-nowrap rounded-md px-2 text-[11px] font-medium ${badgeClass}`}
+        >
+          {statusLabel}
+        </span>
+        {state === "needsPermission" && (
+          <button
+            type="button"
+            onClick={handleGrant}
+            disabled={isGranting}
+            className="h-7 whitespace-nowrap rounded-md border border-border bg-background px-2.5 text-xs font-medium text-foreground transition-colors hover:bg-muted disabled:opacity-60"
+          >
+            {t("settings.meeting.echoCancellation.grant")}
+          </button>
+        )}
+      </div>
+    </SettingsRow>
+  );
+}
 
 export function MeetingTranscriptionPanel() {
   const { t } = useTranslation();
@@ -161,6 +255,7 @@ export function MeetingTranscriptionPanel() {
       )}
       <MeetingSpeakerDetectionRow />
       <MeetingRecordingPillRow />
+      <MeetingEchoCancellationRow />
     </div>
   );
 }
