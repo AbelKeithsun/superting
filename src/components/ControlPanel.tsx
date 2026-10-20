@@ -55,7 +55,7 @@ const PRIMARY_SIDEBAR_WIDTH_KEY = "superting.primarySidebarWidth";
 const PRIMARY_SIDEBAR_DEFAULT_WIDTH = 224;
 const PRIMARY_SIDEBAR_MIN_WIDTH = 200;
 const PRIMARY_SIDEBAR_MAX_WIDTH = 340;
-const COLLAPSED_PRIMARY_SIDEBAR_WIDTH = 72;
+const COLLAPSED_PRIMARY_SIDEBAR_WIDTH = 88;
 
 const clampWidth = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 
