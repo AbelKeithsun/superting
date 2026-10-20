@@ -219,7 +219,7 @@ export default function ConversationList({
 
   return (
     <div className="flex flex-col h-full" onKeyDown={handleKeyDown} tabIndex={-1}>
-      <div className="px-3 pt-3 pb-2 shrink-0 space-y-1">
+      <div className="ow-window-drag px-3 pt-4 pb-2 shrink-0 space-y-1">
         <button
           onClick={onNewChat}
           className="ow-inner-nav-item"

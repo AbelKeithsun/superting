@@ -2987,10 +2987,7 @@ export default function NoteEditor({
       )}
       <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
         <div className="ow-page-header mx-5 mb-0 min-w-0 pt-4 pb-3">
-          <div
-            className="min-w-0 flex-1"
-            style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
-          >
+          <div className="min-w-0 flex-1">
             <div
               ref={titleRef}
               contentEditable
@@ -2999,7 +2996,7 @@ export default function NoteEditor({
               onKeyDown={handleTitleKeyDown}
               onPaste={handleTitlePaste}
               data-placeholder={t("notes.editor.untitled")}
-              className="min-h-9 max-w-full -mx-2 rounded-lg border border-transparent px-2 py-1 text-lg font-semibold leading-7 text-foreground bg-transparent outline-none tracking-[-0.01em] transition-colors empty:before:content-[attr(data-placeholder)] empty:before:text-muted-foreground empty:before:pointer-events-none hover:border-border/70 hover:bg-background/75 focus:border-ring/45 focus:bg-background focus:shadow-sm"
+              className="w-fit min-h-9 max-w-full -mx-2 rounded-lg border border-transparent px-2 py-1 text-lg font-semibold leading-7 text-foreground bg-transparent outline-none tracking-[-0.01em] transition-colors empty:before:content-[attr(data-placeholder)] empty:before:text-muted-foreground empty:before:pointer-events-none hover:border-border/70 hover:bg-background/75 focus:border-ring/45 focus:bg-background focus:shadow-sm"
               role="textbox"
               aria-label={t("notes.editor.noteTitle")}
             />

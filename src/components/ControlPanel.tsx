@@ -673,6 +673,11 @@ export default function ControlPanel() {
 
   return (
     <div className="h-screen bg-background flex flex-col">
+      {/* Blank strip along the top edge of the window: every empty spot here
+          should move the window, not just the sidebar drag handle. Content in
+          every view starts at least 16px below the top edge, so this strip only
+          covers non-interactive padding. */}
+      <div aria-hidden="true" className="ow-window-drag fixed inset-x-0 top-0 z-20 h-4" />
       <MeetingRecordingMount />
       <MeetingRecordingPill
         activeView={activeView}
