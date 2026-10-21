@@ -272,6 +272,7 @@ const TrayManager = require("./src/helpers/tray");
 const IPCHandlers = require("./src/helpers/ipcHandlers");
 const CliBridge = require("./src/helpers/cliBridge");
 const McpServerManager = require("./src/helpers/mcpServerManager");
+const { AgentAccessSettings } = require("./src/helpers/agentAccess");
 const UpdateManager = require("./src/updater");
 const GlobeKeyManager = require("./src/helpers/globeKeyManager");
 const DevServerManager = require("./src/helpers/devServerManager");
@@ -316,6 +317,8 @@ let qdrantManager = null;
 let ipcHandlers = null;
 let cliBridge = null;
 let mcpServerManager = null;
+// One capability mode shared by the MCP server and the CLI bridge.
+let agentAccess = null;
 let globeKeyAlertShown = false;
 let authBridgeServer = null;
 
@@ -423,7 +426,8 @@ function initializeCoreManagers() {
     oauthProtocol: OAUTH_PROTOCOL,
   });
 
-  mcpServerManager = new McpServerManager(ipcHandlers);
+  agentAccess = new AgentAccessSettings();
+  mcpServerManager = new McpServerManager(ipcHandlers, { agentAccess });
   ipcHandlers.mcpServerManager = mcpServerManager;
 }
 
@@ -711,7 +715,7 @@ async function startApp() {
   registerSidecars();
   startAuthBridgeServer();
 
-  cliBridge = new CliBridge(ipcHandlers);
+  cliBridge = new CliBridge(ipcHandlers, { agentAccess });
   cliBridge.start().catch((err) => {
     debugLogger.error("CLI bridge failed to start", { error: err.message });
     cliBridge = null;

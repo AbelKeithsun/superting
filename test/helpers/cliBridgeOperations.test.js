@@ -6,6 +6,7 @@ const path = require("node:path");
 const net = require("node:net");
 
 const CliBridge = require("../../src/helpers/cliBridge");
+const { AgentAccessSettings } = require("../../src/helpers/agentAccess");
 
 /**
  * End-to-end proof that the CLI bridge is a projection of the operation
@@ -66,15 +67,17 @@ function createIpcHandlers() {
   };
 }
 
-async function startBridge(t, ipcHandlers) {
+async function startBridge(t, ipcHandlers, { toolset = "extended" } = {}) {
   const home = createTempHome(t);
   const bridge = new CliBridge(ipcHandlers, {
     bridgeFilePath: path.join(home, "cli-bridge.json"),
+    homeDir: home,
     portFinder: ephemeralPort,
+    agentAccess: new AgentAccessSettings({ homeDir: home, toolset }),
   });
   await bridge.start();
   t.after(() => bridge.stop());
-  return { url: `http://127.0.0.1:${bridge.port}`, token: bridge.token };
+  return { url: `http://127.0.0.1:${bridge.port}`, token: bridge.token, bridge };
 }
 
 const auth = (token, extra = {}) => ({ Authorization: `Bearer ${token}`, ...extra });
@@ -168,4 +171,42 @@ test("the CLI's own command still resolves through the registry", async (t) => {
   assert.equal(response.status, 200);
   const payload = await jsonOf(response);
   assert.equal(payload.data[0].name, "生成会议纪要");
+});
+
+test("lean mode restricts the bridge to the original basic capabilities", async (t) => {
+  const { url, token, bridge } = await startBridge(t, createIpcHandlers(), { toolset: "lean" });
+
+  const health = await fetch(`${url}/v1/health`, { headers: auth(token) }).then((r) => r.json());
+  assert.equal(health.data.toolset, "lean");
+
+  // The catalog the CLI reads is filtered to the lean surface.
+  const catalogResponse = await fetch(`${url}/v1/operations`, { headers: auth(token) });
+  assert.equal(catalogResponse.status, 200);
+  const catalog = await catalogResponse.json();
+  assert.equal(catalog.toolset, "lean");
+  assert.equal(catalog.data.length, 14);
+  assert.ok(catalog.data.every((operation) => operation.lean));
+  assert.ok(!catalog.data.some((operation) => operation.id === "settings.get"));
+
+  // Basic read routes keep working.
+  const folders = await fetch(`${url}/v1/folders/list`, { headers: auth(token) });
+  assert.equal(folders.status, 200);
+
+  // Extended-only route: refused with an actionable error, not silently 404.
+  const settings = await fetch(`${url}/v1/settings`, { headers: auth(token) });
+  assert.equal(settings.status, 403);
+  const settingsError = await settings.json();
+  assert.equal(settingsError.error.code, "mode_locked");
+  assert.match(settingsError.error.message, /lean mode/);
+  assert.match(settingsError.error.message, /Extend|扩展/);
+
+  // One shared switch: expanding opens the bridge without restarting it.
+  bridge.agentAccess.setToolset("extended");
+  const expandedCatalog = await fetch(`${url}/v1/operations`, { headers: auth(token) }).then((r) =>
+    r.json()
+  );
+  assert.equal(expandedCatalog.toolset, "extended");
+  assert.ok(expandedCatalog.data.length > 80);
+  const expandedSettings = await fetch(`${url}/v1/settings`, { headers: auth(token) });
+  assert.notEqual(expandedSettings.status, 403);
 });

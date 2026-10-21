@@ -73,7 +73,7 @@ test("loadBridgeConfig errors clearly when the bridge file is missing", () => {
 // Integration: CLI process against a mock bridge server
 // ---------------------------------------------------------------------------
 
-function startMockBridge(t) {
+function startMockBridge(t, options = {}) {
   const requests = [];
   const server = http.createServer((req, res) => {
     let raw = "";
@@ -106,6 +106,26 @@ function startMockBridge(t) {
       const url = new URL(req.url, "http://127.0.0.1");
       if (req.method === "GET" && url.pathname === "/v1/health") {
         respond(200, { data: { ok: true, version: 1 } });
+        return;
+      }
+      if (req.method === "GET" && url.pathname === "/v1/operations") {
+        if (options.operations) {
+          respond(200, options.operations);
+          return;
+        }
+        // Deliberately bigger than a pipe buffer (~64 KB compact): this is what
+        // `ops list` in extended mode looks like.
+        const data = Array.from({ length: 1200 }, (_, index) => ({
+          id: `test.operation_${index}`,
+          title: `Operation ${index} ${"x".repeat(20)}`,
+          description: "A generated capability used to exercise large piped output.",
+          policy: "read",
+          params: {},
+          lean: false,
+          mcp: { name: `tool_${index}` },
+          cli: { method: "GET", path: `/v1/test/${index}`, command: null, params: {} },
+        }));
+        respond(200, { toolset: "extended", data });
         return;
       }
       if (req.method === "POST" && url.pathname === "/v1/dictionary/words") {
@@ -220,4 +240,26 @@ test("text format renders key/value lines", async (t) => {
   const result = await runCli(["health", "--format", "text"], bridgeFile);
   assert.equal(result.code, 0);
   assert.match(result.stdout, /ok: true/);
+});
+
+test("large piped output is complete, not truncated at the pipe buffer", async (t) => {
+  const { bridgeFile } = await startMockBridge(t);
+  const result = await runCli(["ops", "list"], bridgeFile);
+  assert.equal(result.code, 0);
+  // `process.exit()` used to cut piped stdout at 64 KB; a large catalog (the
+  // extended mode has ~87 operations) must arrive complete.
+  assert.ok(Buffer.byteLength(result.stdout) > 64 * 1024);
+  const payload = JSON.parse(result.stdout);
+  assert.equal(payload.data.length, 1200);
+});
+
+test("a lean-mode catalog turns a hidden operation into an actionable hint", async (t) => {
+  const { bridgeFile } = await startMockBridge(t, {
+    operations: { toolset: "lean", data: [] },
+  });
+  const result = await runCli(["call", "settings.get"], bridgeFile);
+  assert.equal(result.code, 2);
+  assert.match(result.stderr, /not available/i);
+  assert.match(result.stderr, /lean mode/i);
+  assert.match(result.stderr, /擴展|扩展|Extend/);
 });

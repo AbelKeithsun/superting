@@ -2003,7 +2003,9 @@ class IPCHandlers {
           hasToken: false,
           token: null,
           metadataPath: null,
+          toolset: null,
           tools: [],
+          toolsetCounts: { lean: 0, extended: 0 },
         };
       }
       return this.mcpServerManager.getConnectionInfo();
@@ -2016,6 +2018,20 @@ class IPCHandlers {
       try {
         await this.mcpServerManager.setEnabled(!!enabled);
         return { success: true, status: this.mcpServerManager.getConnectionInfo() };
+      } catch (error) {
+        return { success: false, error: error.message };
+      }
+    });
+
+    // The capability mode is shared by the MCP server and the CLI bridge (see
+    // src/helpers/agentAccess.js). Expanding here is the only way to leave lean
+    // mode — agents cannot expand themselves through either surface.
+    ipcMain.handle("mcp-set-toolset", async (_event, toolset) => {
+      if (!this.mcpServerManager) {
+        return { success: false, error: "MCP server manager is not initialized" };
+      }
+      try {
+        return { success: true, status: await this.mcpServerManager.setToolset(toolset) };
       } catch (error) {
         return { success: false, error: error.message };
       }

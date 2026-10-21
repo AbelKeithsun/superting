@@ -1,10 +1,21 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { CheckCircle2, Power, RefreshCw, Server, Shield, Wrench } from "lucide-react";
+import {
+  CheckCircle2,
+  Layers,
+  Power,
+  RefreshCw,
+  Server,
+  Shield,
+  Sparkles,
+  Wrench,
+} from "lucide-react";
 import { Button } from "./ui/button";
 import { CopyableCommand } from "./ui/CopyableCommand";
 import { LogoTile } from "./ui/LogoTile";
 import logo from "../assets/logo.svg";
+
+type AgentToolset = "lean" | "extended";
 
 interface McpTool {
   name: string;
@@ -12,6 +23,7 @@ interface McpTool {
   description?: string;
   policy?: "read" | "write" | "destructive" | "blocked";
   notes?: string[];
+  lean?: boolean;
 }
 
 interface McpStatus {
@@ -22,6 +34,8 @@ interface McpStatus {
   hasToken: boolean;
   token?: string | null;
   metadataPath?: string | null;
+  toolset?: AgentToolset | null;
+  toolsetCounts?: { lean: number; extended: number };
   tools: McpTool[];
 }
 
@@ -33,6 +47,8 @@ const EMPTY_STATUS: McpStatus = {
   hasToken: false,
   token: null,
   metadataPath: null,
+  toolset: "lean",
+  toolsetCounts: { lean: 14, extended: 0 },
   tools: [],
 };
 
@@ -50,6 +66,11 @@ export default function McpIntegrationCard() {
   useEffect(() => {
     loadStatus().catch((err) => setError((err as Error).message));
   }, [loadStatus]);
+
+  const toolset: AgentToolset = status.toolset === "extended" ? "extended" : "lean";
+  const isLean = toolset === "lean";
+  const leanCount = status.toolsetCounts?.lean ?? 14;
+  const extendedCount = status.toolsetCounts?.extended ?? leanCount;
 
   const codexConfig = useMemo(() => {
     if (!status.url) return "";
@@ -74,6 +95,47 @@ export default function McpIntegrationCard() {
       setBusy(false);
     }
   }, [status.enabled]);
+
+  const applyToolset = useCallback(async (next: AgentToolset) => {
+    setBusy(true);
+    setError(null);
+    try {
+      const result = await window.electronAPI?.setMcpServerToolset?.(next);
+      if (!result?.success) throw new Error(result?.error || "MCP capability mode update failed");
+      if (result.status) setStatus(result.status);
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }, []);
+
+  /**
+   * The one-click extension: switch to the full capability set and, if the
+   * service is still off, turn it on in the same click — "open MCP with
+   * everything" without a second trip to the mode control.
+   */
+  const expandAll = useCallback(async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      const switched = await window.electronAPI?.setMcpServerToolset?.("extended");
+      if (!switched?.success) {
+        throw new Error(switched?.error || "MCP capability mode update failed");
+      }
+      let next = switched.status ?? null;
+      if (next && !next.enabled) {
+        const enabled = await window.electronAPI?.setMcpServerEnabled?.(true);
+        if (!enabled?.success) throw new Error(enabled?.error || "MCP server update failed");
+        next = enabled.status ?? next;
+      }
+      if (next) setStatus(next);
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }, []);
 
   const rotateToken = useCallback(async () => {
     setBusy(true);
@@ -129,10 +191,71 @@ export default function McpIntegrationCard() {
         {t("integrations.mcp.description")}
       </p>
 
+      <div className="mb-4 rounded-md border border-border/60 bg-muted/20 p-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-1.5 text-xs font-medium text-foreground">
+            <Layers className="h-3.5 w-3.5 text-muted-foreground" />
+            {t("integrations.mcp.modeLabel")}
+          </div>
+          <div
+            className="flex items-center gap-1"
+            role="group"
+            aria-label={t("integrations.mcp.modeLabel")}
+          >
+            <Button
+              size="sm"
+              variant={isLean ? "default" : "outline"}
+              className="h-7 px-2.5 text-[11px]"
+              onClick={() => applyToolset("lean")}
+              disabled={busy || isLean}
+            >
+              {t("integrations.mcp.modeLean")}
+            </Button>
+            <Button
+              size="sm"
+              variant={!isLean ? "default" : "outline"}
+              className="h-7 px-2.5 text-[11px]"
+              onClick={() => applyToolset("extended")}
+              disabled={busy || !isLean}
+            >
+              {t("integrations.mcp.modeExtended")}
+            </Button>
+          </div>
+        </div>
+        <p className="mt-2 text-xs leading-relaxed text-muted-foreground/80">
+          {isLean
+            ? t("integrations.mcp.modeLeanHint", { count: leanCount })
+            : t("integrations.mcp.modeExtendedHint", { count: extendedCount })}
+        </p>
+        <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground/60">
+          {t("integrations.mcp.modeSharedNote")}
+        </p>
+      </div>
+
+      {isLean && (
+        <div className="mb-4 flex flex-col items-start justify-between gap-3 rounded-md border border-accent/40 bg-accent/40 px-3 py-3 sm:flex-row sm:items-center dark:bg-accent/15">
+          <div className="flex items-start gap-2">
+            <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-foreground/70" />
+            <div>
+              <p className="text-xs font-medium text-foreground">
+                {t("integrations.mcp.modeLeanBanner")}
+              </p>
+              <p className="mt-0.5 text-[11px] leading-relaxed text-foreground/70">
+                {t("integrations.mcp.modeExtendHint")}
+              </p>
+            </div>
+          </div>
+          <Button size="sm" onClick={expandAll} disabled={busy} className="shrink-0">
+            <Sparkles className="h-3.5 w-3.5" />
+            {t("integrations.mcp.expandAction")}
+          </Button>
+        </div>
+      )}
+
       <div className="mb-4 border-y border-border/60 py-3">
         <div className="mb-2 flex items-center gap-1.5 text-xs font-medium text-foreground">
           <Wrench className="h-3.5 w-3.5 text-muted-foreground" />
-          {t("integrations.mcp.toolsTitle")}
+          {t("integrations.mcp.toolsTitle")} ({status.tools.length})
         </div>
         <div role="table" className="overflow-hidden rounded-md border border-border/60">
           <div

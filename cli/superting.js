@@ -281,8 +281,13 @@ async function loadOperation(bridge, operationId) {
   const catalog = await bridgeRequest(bridge, "GET", "/v1/operations");
   const operation = (catalog?.data ?? []).find((item) => item.id === operationId);
   if (!operation) {
+    const hint =
+      catalog?.toolset === "lean"
+        ? ` The app is in lean mode (${catalog.data.length} basic capabilities). Click 扩展 (Extend all capabilities) ` +
+          "in SuperTing → 设置 → 集成 → 本地 MCP 访问, then retry — it unlocks MCP and the CLI together."
+        : " It may have been added in a newer app version.";
     throw new ArgError(
-      `Operation "${operationId}" is not available in this app version (see: superting ops list)`
+      `Operation "${operationId}" is not available.${hint} (see: superting ops list)`
     );
   }
   return operation;
@@ -608,7 +613,8 @@ function buildCommandRegistry() {
   };
 
   command("ops list", {
-    description: "List every capability the app exposes to agents (MCP tool + CLI route + params).",
+    description:
+      "List the capabilities available in the current agent mode (lean: 14 basic; extended: all), with MCP tool + CLI route + params.",
     usage: "superting ops list",
     run: async ({ bridge }) => bridgeRequest(bridge, "GET", "/v1/operations"),
   });
@@ -1055,5 +1061,10 @@ if (require.main === module) {
     process.stderr.write(`${CLI_NAME} requires Node.js >= 18 (found ${process.versions.node})\n`);
     process.exit(EXIT_USAGE);
   }
-  runCli(process.argv.slice(2)).then((code) => process.exit(code));
+  runCli(process.argv.slice(2)).then((code) => {
+    // Writing to a pipe is asynchronous: process.exit() immediately after a
+    // large response (extended `ops list` is ~65 KB) truncates stdout at the
+    // pipe buffer. Let the event loop drain the streams and exit naturally.
+    process.exitCode = code;
+  });
 }

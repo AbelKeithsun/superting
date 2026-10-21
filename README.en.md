@@ -60,16 +60,29 @@ Requires Node.js 24+. See this repository for setup guides, platform-specific in
 
 The app exposes one capability surface, generated from a single main-process
 registry (`src/helpers/appOperations/`) and projected onto both machine
-interfaces — currently **87 capabilities**: notes, note actions (meeting
+interfaces — **87 capabilities** in extended mode: notes, note actions (meeting
 minutes), recording control, audio files, transcription and transcript-segment
 editing, people/voiceprints, speaker labelling, dictionary, chat history,
 settings and more.
+
+Capabilities come in two modes, switched by one shared setting (MCP and the CLI
+move together; **lean is the default**):
+
+- **Lean**: only the original 14-tool MCP surface — `health`, notes
+  list/search/get/create/update/delete, folders list/create, transcriptions
+  list/get, dictionary/replacement-rule reads and tags list.
+- **Extended**: all 87 capabilities. Click **Extend all capabilities** once in
+  the app (Settings → Integrations → Local MCP access); no restart is needed and
+  connected MCP clients see the new tools after reconnecting. The choice is
+  persisted in `~/.superting/agent-access.json`.
 
 ### MCP
 
 1. In the app: **Settings → Integrations → Local MCP access** → enable. You get a
    loopback URL and a bearer token (metadata in `~/.superting/mcp-server.json`,
-   token can be rotated; the server only binds 127.0.0.1).
+   token can be rotated; the server only binds 127.0.0.1). The server starts in
+   lean mode; the same card's **Extend all capabilities** button unlocks MCP and
+   the CLI in one click.
 2. Paste this into your MCP client (`mcpServers`):
 
    ```json
@@ -84,9 +97,10 @@ settings and more.
    }
    ```
 
-3. Tool names mirror the CLI capabilities (`list_notes`, `search_notes`,
-   `run_note_action`, `list_jobs`, `update_transcript_segment`, `get_settings`, …).
-   Call `list_operations` first for the full catalog with parameters.
+3. Tool names mirror the CLI capabilities (lean exposes the 14 basic tools;
+   extended adds `run_note_action`, `list_jobs`, `update_transcript_segment`,
+   `get_settings`, …). In extended mode call `list_operations` first for the full
+   catalog with parameters.
 4. Capabilities that need the UI (running an action, recording, export dialog,
    writing settings) wake the app window; if it is still unavailable the call
    fails with `renderer_unavailable` instead of returning stale data.
@@ -96,7 +110,7 @@ settings and more.
 ```bash
 npm run install:cli            # symlink into ~/.local/bin (SUPERTING_CLI_BIN_DIR, --copy)
 superting health               # the app must be running (the app serves the bridge)
-superting ops list             # all 87 capabilities: id / policy / route / MCP name / params
+superting ops list             # capabilities in the current mode (lean 14 / extended 87): id / policy / route / MCP name / params
 superting call <operation.id> --json '{"…"}'   # generic escape hatch for any capability
 superting notes list --limit 5
 superting transcript segments --id 47 --limit 20

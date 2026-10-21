@@ -3,6 +3,7 @@
 const assert = require("node:assert/strict");
 const test = require("node:test");
 const fs = require("node:fs");
+const os = require("node:os");
 const path = require("node:path");
 const z = require("zod/v4");
 
@@ -21,7 +22,12 @@ const {
   collectParams,
   matchPath,
 } = require("../../src/helpers/appOperations/cliAdapter");
-const { listMcpToolNames } = require("../../src/helpers/appOperations");
+const {
+  getToolsetCounts,
+  listMcpToolNames,
+  listMcpTools,
+} = require("../../src/helpers/appOperations");
+const { AgentAccessSettings } = require("../../src/helpers/agentAccess");
 const {
   OUTPUT_PATH,
   renderOperationsDoc,
@@ -120,6 +126,44 @@ test("historical MCP tools and CLI routes are still present", () => {
   for (const route of LEGACY_CLI_ROUTES) {
     assert.ok(routes.has(route), `CLI route ${route} disappeared`);
   }
+});
+
+test("lean mode is exactly the original 14-tool surface, a strict subset of extended", () => {
+  const registry = buildRegistry();
+  const lean = registry.listForToolset("lean");
+  const extended = registry.listForToolset("extended");
+
+  assert.equal(lean.length, LEGACY_MCP_TOOLS.length);
+  assert.deepEqual(
+    lean
+      .filter((operation) => operation.mcp)
+      .map((operation) => operation.mcp.name)
+      .sort(),
+    [...LEGACY_MCP_TOOLS].sort()
+  );
+  assert.equal(extended.length, registry.list().length);
+  assert.ok(extended.length > lean.length);
+
+  // Every lean capability is also part of the extended surface.
+  for (const operation of lean) {
+    assert.ok(extended.includes(operation), `${operation.id} missing from extended`);
+  }
+
+  // The mode flag lives on the registry, so both projections can honour it.
+  assert.equal(registry.get("notes.get").lean, true);
+  assert.equal(registry.get("dictionary.list").lean, true);
+  assert.equal(registry.get("system.operations").lean, false);
+  assert.equal(registry.get("settings.get").lean, false);
+  assert.equal(registry.isAllowedInToolset(registry.get("notes.get"), "lean"), true);
+  assert.equal(registry.isAllowedInToolset(registry.get("settings.get"), "lean"), false);
+  assert.equal(registry.isAllowedInToolset(registry.get("settings.get"), "extended"), true);
+
+  assert.deepEqual(listMcpToolNames("lean").sort(), [...LEGACY_MCP_TOOLS].sort());
+  const counts = getToolsetCounts();
+  assert.equal(counts.lean, LEGACY_MCP_TOOLS.length);
+  assert.ok(counts.extended >= 80);
+  assert.equal(listMcpTools("lean").length, counts.lean);
+  assert.equal(listMcpTools().length, counts.extended);
 });
 
 test("the parity fixes are real: dictionary writes, semantic search and action runs", () => {
@@ -628,10 +672,27 @@ test("every MCP tool is described in the settings UI, localised", () => {
     );
   }
 
-  // And the status payload the renderer consumes carries the registry text.
+  // And the status payload the renderer consumes carries the registry text,
+  // already filtered by the capability mode (lean is the default for a fresh
+  // config, so the settings page lists the 14 basic tools until expanded).
   const McpServerManager = require("../../src/helpers/mcpServerManager.js");
-  const status = new McpServerManager({ databaseManager: {} }).getStatus();
-  assert.equal(status.tools.length, tools.length);
-  assert.ok(status.tools.every((tool) => tool.description));
-  assert.ok(status.tools.some((tool) => tool.policy === "destructive"));
+  const homeDir = fs.mkdtempSync(path.join(os.tmpdir(), "superting-mcp-status-"));
+  try {
+    const leanStatus = new McpServerManager({ databaseManager: {} }, { homeDir }).getStatus();
+    assert.equal(leanStatus.toolset, "lean");
+    assert.equal(leanStatus.tools.length, listMcpTools("lean").length);
+    assert.ok(leanStatus.tools.every((tool) => tool.description));
+    assert.ok(leanStatus.tools.some((tool) => tool.policy === "destructive"));
+
+    const extendedStatus = new McpServerManager(
+      { databaseManager: {} },
+      { homeDir, agentAccess: new AgentAccessSettings({ homeDir, toolset: "extended" }) }
+    ).getStatus();
+    assert.equal(extendedStatus.toolset, "extended");
+    assert.equal(extendedStatus.tools.length, tools.length);
+    assert.ok(extendedStatus.tools.every((tool) => tool.description));
+    assert.ok(extendedStatus.tools.some((tool) => tool.policy === "destructive"));
+  } finally {
+    fs.rmSync(homeDir, { recursive: true, force: true });
+  }
 });

@@ -62,11 +62,19 @@ function descriptionFor(operation) {
 /**
  * @param {object} server MCP server instance
  * @param {import("./registry").AppRegistry} registry
- * @param {{ z: object, sendMcpToolResult: Function, context: object }} deps
+ * @param {{ z: object, sendMcpToolResult: Function, context: object,
+ *           toolset?: "lean" | "extended" }} deps
+ *
+ * `toolset: "lean"` registers only the operations of the original 14-tool basic
+ * surface; the default `"extended"` registers the whole registry.
  */
-function registerRegistryTools(server, registry, { z, sendMcpToolResult, context }) {
+function registerRegistryTools(
+  server,
+  registry,
+  { z, sendMcpToolResult, context, toolset = "extended" }
+) {
   const registered = [];
-  for (const operation of registry.list()) {
+  for (const operation of registry.listForToolset(toolset)) {
     if (!operation.mcp) continue;
     server.registerTool(
       operation.mcp.name,
@@ -78,7 +86,10 @@ function registerRegistryTools(server, registry, { z, sendMcpToolResult, context
       },
       async (args) => {
         try {
-          const payload = await registry.invoke(operation.id, args, context);
+          const payload = await registry.invoke(operation.id, args, {
+            ...context,
+            toolset,
+          });
           const serialized =
             typeof operation.mcp.serialize === "function"
               ? operation.mcp.serialize(payload, args)

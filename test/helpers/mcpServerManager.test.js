@@ -9,6 +9,7 @@ const {
   StreamableHTTPClientTransport,
 } = require("@modelcontextprotocol/sdk/client/streamableHttp.js");
 const McpServerManager = require("../../src/helpers/mcpServerManager");
+const { AgentAccessSettings } = require("../../src/helpers/agentAccess");
 
 const LEGACY_TOOL_NAMES = [
   "health",
@@ -152,13 +153,16 @@ test("MCP server stays stopped until explicitly enabled", async (t) => {
     { enabled: false, running: false, url: null, port: null }
   );
   assert.equal(status.hasToken, false);
-  // The tool list is projected from the app-operations registry, so it only
-  // grows; the tools shipped before the registry existed must all remain.
-  const statusTools = status.tools.map((tool) => tool.name);
-  for (const name of LEGACY_TOOL_NAMES) {
-    assert.ok(statusTools.includes(name), `status must still list ${name}`);
-  }
+  // A fresh install starts in lean mode: exactly the hand-written MCP surface
+  // that shipped before the registry, never more.
+  assert.equal(status.toolset, "lean");
+  assert.deepEqual(
+    status.tools.map((tool) => tool.name).sort(),
+    [...LEGACY_TOOL_NAMES].sort()
+  );
+  assert.ok(status.toolsetCounts.extended > status.toolsetCounts.lean);
   assert.equal(fs.existsSync(path.join(homeDir, ".superting", "mcp-server.json")), false);
+  assert.equal(fs.existsSync(path.join(homeDir, ".superting", "agent-access.json")), false);
 });
 
 test("MCP server exposes authenticated tools over Streamable HTTP", async (t) => {
@@ -166,10 +170,12 @@ test("MCP server exposes authenticated tools over Streamable HTTP", async (t) =>
   const manager = new McpServerManager(createIpcHandlers(), { homeDir, portRange: [18730, 18739] });
   t.after(async () => manager.stop());
 
+  await manager.setToolset("extended");
   await manager.setEnabled(true);
   const status = manager.getStatus();
   assert.equal(status.enabled, true);
   assert.equal(status.running, true);
+  assert.equal(status.toolset, "extended");
   assert.ok(status.url);
   assert.equal(status.hasToken, true);
 
@@ -177,6 +183,9 @@ test("MCP server exposes authenticated tools over Streamable HTTP", async (t) =>
   const metadata = JSON.parse(fs.readFileSync(metadataPath, "utf8"));
   assert.equal(metadata.url, status.url);
   assert.equal(metadata.token.length, 64);
+  assert.equal(metadata.toolset, "extended");
+  const access = JSON.parse(fs.readFileSync(path.join(homeDir, ".superting", "agent-access.json"), "utf8"));
+  assert.equal(access.toolset, "extended");
 
   const { client } = await createClient(status.url, metadata.token);
   t.after(async () => client.close());
@@ -205,6 +214,7 @@ test("MCP server exposes authenticated tools over Streamable HTTP", async (t) =>
 test("renderer-bound MCP tools report a clear failure instead of crashing", async (t) => {
   const homeDir = createTempHome(t);
   const manager = new McpServerManager(createIpcHandlers(), { homeDir, portRange: [18750, 18759] });
+  await manager.setToolset("extended");
   await manager.setEnabled(true);
   t.after(async () => manager.stop());
 
@@ -284,4 +294,90 @@ test("MCP server exposes note write tools", async (t) => {
   // `deleted: true` is the registry's shared payload, also returned by the CLI
   // route and the generic `superting call notes.delete` escape hatch.
   assert.deepEqual(deleted, { success: true, data: { id: created.data.id, deleted: true } });
+});
+
+
+test("lean mode exposes exactly the original 14-tool surface over MCP", async (t) => {
+  const homeDir = createTempHome(t);
+  const manager = new McpServerManager(createIpcHandlers(), { homeDir, portRange: [18760, 18769] });
+  await manager.setEnabled(true);
+  t.after(async () => manager.stop());
+
+  const metadata = JSON.parse(fs.readFileSync(manager.metadataFilePath, "utf8"));
+  assert.equal(metadata.toolset, "lean");
+
+  const { client } = await createClient(manager.url, metadata.token);
+  t.after(async () => client.close());
+
+  const tools = await client.listTools();
+  assert.deepEqual(
+    tools.tools.map((tool) => tool.name).sort(),
+    [...LEGACY_TOOL_NAMES].sort()
+  );
+
+  // Lean includes the original note writers (create/update/delete) …
+  const created = await client.callTool({
+    name: "create_note",
+    arguments: { title: "Lean draft", content: "Kept inside the lean surface" },
+  });
+  const payload = JSON.parse(created.content[0].text);
+  assert.equal(payload.success, true);
+
+  // … but not anything from the extended registry. The SDK surfaces the
+  // server-side "tool not found" as an error result rather than throwing.
+  for (const name of ["run_note_action", "list_operations", "get_settings", "list_people"]) {
+    const result = await client.callTool({ name, arguments: {} });
+    assert.match(JSON.stringify(result), /not found|unknown tool/i, `${name} must be hidden`);
+  }
+});
+
+test("expanding to extended switches new MCP sessions and persists the mode", async (t) => {
+  const homeDir = createTempHome(t);
+  const manager = new McpServerManager(createIpcHandlers(), { homeDir, portRange: [18770, 18779] });
+  await manager.setEnabled(true);
+  t.after(async () => manager.stop());
+
+  const metadata = JSON.parse(fs.readFileSync(manager.metadataFilePath, "utf8"));
+  const { client: leanClient } = await createClient(manager.url, metadata.token);
+  t.after(async () => leanClient.close().catch(() => {}));
+  const leanTools = await leanClient.listTools();
+  assert.ok(!leanTools.tools.some((tool) => tool.name === "run_note_action"));
+
+  const status = await manager.setToolset("extended");
+  assert.equal(status.toolset, "extended");
+  assert.ok(status.tools.some((tool) => tool.name === "run_note_action"));
+  assert.equal(status.toolsetCounts.extended, status.tools.length);
+
+  // The open session was closed, so the client's next request must fail rather
+  // than keep serving the stale lean tool list.
+  await assert.rejects(
+    () => leanClient.callTool({ name: "list_notes", arguments: {} }),
+    /session|not found|expired|HTTP 404/i
+  );
+
+  // A reconnecting client gets the extended surface.
+  const { client: extendedClient } = await createClient(manager.url, metadata.token);
+  t.after(async () => extendedClient.close());
+  const extendedTools = await extendedClient.listTools();
+  assert.ok(extendedTools.tools.some((tool) => tool.name === "run_note_action"));
+  assert.ok(extendedTools.tools.length > leanTools.tools.length);
+
+  // Persisted for the next app launch; a new manager instance sees the mode.
+  const access = JSON.parse(
+    fs.readFileSync(path.join(homeDir, ".superting", "agent-access.json"), "utf8")
+  );
+  assert.equal(access.toolset, "extended");
+  const restarted = new McpServerManager(createIpcHandlers(), {
+    homeDir,
+    portRange: [18780, 18789],
+  });
+  assert.equal(restarted.getStatus().toolset, "extended");
+});
+
+test("an unknown capability mode is rejected instead of silently defaulting", async (t) => {
+  const homeDir = createTempHome(t);
+  const agentAccess = new AgentAccessSettings({ homeDir });
+  const manager = new McpServerManager(createIpcHandlers(), { homeDir, agentAccess });
+  await assert.rejects(() => manager.setToolset("everything"), /Unknown agent toolset/);
+  assert.equal(manager.getStatus().toolset, "lean");
 });

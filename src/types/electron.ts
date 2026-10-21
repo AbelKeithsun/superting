@@ -779,14 +779,17 @@ declare global {
         port: number | null;
         hasToken: boolean;
         token?: string | null;
-
+        toolset?: "lean" | "extended" | null;
+        toolsetCounts?: { lean: number; extended: number };
         metadataPath?: string | null;
+        agentAccessPath?: string | null;
         tools: Array<{
           name: string;
           title?: string;
           description?: string;
           policy?: "read" | "write" | "destructive" | "blocked";
           notes?: string[];
+          lean?: boolean;
         }>;
       }>;
       setMcpServerEnabled?: (enabled: boolean) => Promise<{
@@ -799,13 +802,41 @@ declare global {
           port: number | null;
           hasToken: boolean;
           token?: string | null;
+          toolset?: "lean" | "extended" | null;
+          toolsetCounts?: { lean: number; extended: number };
           metadataPath?: string | null;
+          agentAccessPath?: string | null;
           tools: Array<{
             name: string;
             title?: string;
             description?: string;
             policy?: "read" | "write" | "destructive" | "blocked";
             notes?: string[];
+            lean?: boolean;
+          }>;
+        };
+      }>;
+      setMcpServerToolset?: (toolset: "lean" | "extended") => Promise<{
+        success: boolean;
+        error?: string;
+        status?: {
+          enabled: boolean;
+          running: boolean;
+          url: string | null;
+          port: number | null;
+          hasToken: boolean;
+          token?: string | null;
+          toolset?: "lean" | "extended" | null;
+          toolsetCounts?: { lean: number; extended: number };
+          metadataPath?: string | null;
+          agentAccessPath?: string | null;
+          tools: Array<{
+            name: string;
+            title?: string;
+            description?: string;
+            policy?: "read" | "write" | "destructive" | "blocked";
+            notes?: string[];
+            lean?: boolean;
           }>;
         };
       }>;
@@ -819,13 +850,17 @@ declare global {
           port: number | null;
           hasToken: boolean;
           token?: string | null;
+          toolset?: "lean" | "extended" | null;
+          toolsetCounts?: { lean: number; extended: number };
           metadataPath?: string | null;
+          agentAccessPath?: string | null;
           tools: Array<{
             name: string;
             title?: string;
             description?: string;
             policy?: "read" | "write" | "destructive" | "blocked";
             notes?: string[];
+            lean?: boolean;
           }>;
         };
       }>;

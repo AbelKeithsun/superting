@@ -8,172 +8,176 @@
 认证：回环地址 + `Authorization: Bearer <token>`（token 见 `~/.superting/cli-bridge.json`）。
 参数位置见「位置」列：path=路径占位符，query=查询串，body=JSON 请求体。
 
+模式：默认精炼，只放行「精炼 + 扩展」的能力（14 项基础能力）；其余路由返回
+HTTP 403 `mode_locked`，在应用内点一次「一键扩展全部能力」即放开（MCP 与 CLI 同步）。
+`GET /v1/operations` 在精炼模式下只返回精炼能力目录，响应带 `toolset` 字段。
+
 ## actions
 
-| 方法 | 路由 | 策略 | 参数（位置） | CLI |
-| --- | --- | --- | --- | --- |
-| `GET /v1/actions` | List note actions | `read` | — | `superting actions list` |
-| `GET /v1/actions/:id` | Get note action | `read` | `id`(path,必填) | `superting actions get` |
-| `POST /v1/actions` | Create note action | `write` | `name`(body,必填) `description`(body) `prompt`(body,必填) `icon`(body) `output_target`(body) `write_mode`(body) | `superting actions create` |
-| `PATCH /v1/actions/:id` | Update note action | `write` | `id`(path,必填) `name`(body) `description`(body) `prompt`(body) `icon`(body) `output_target`(body) `write_mode`(body) `sort_order`(body) | `superting actions update` |
-| `DELETE /v1/actions/:id` | Delete note action | `destructive` | `id`(path,必填) | `superting actions delete` |
-| `POST /v1/actions/:id/run` | Run a note action | `write` | `id`(path,必填) `note_id`(body,必填) | `superting actions run` |
+| 方法 | 路由 | 策略 | 模式 | 参数（位置） | CLI |
+| --- | --- | --- | --- | --- | --- |
+| `GET /v1/actions` | List note actions | `read` | 仅扩展 | — | `superting actions list` |
+| `GET /v1/actions/:id` | Get note action | `read` | 仅扩展 | `id`(path,必填) | `superting actions get` |
+| `POST /v1/actions` | Create note action | `write` | 仅扩展 | `name`(body,必填) `description`(body) `prompt`(body,必填) `icon`(body) `output_target`(body) `write_mode`(body) | `superting actions create` |
+| `PATCH /v1/actions/:id` | Update note action | `write` | 仅扩展 | `id`(path,必填) `name`(body) `description`(body) `prompt`(body) `icon`(body) `output_target`(body) `write_mode`(body) `sort_order`(body) | `superting actions update` |
+| `DELETE /v1/actions/:id` | Delete note action | `destructive` | 仅扩展 | `id`(path,必填) | `superting actions delete` |
+| `POST /v1/actions/:id/run` | Run a note action | `write` | 仅扩展 | `id`(path,必填) `note_id`(body,必填) | `superting actions run` |
 
 ## audio
 
-| 方法 | 路由 | 策略 | 参数（位置） | CLI |
-| --- | --- | --- | --- | --- |
-| `GET /v1/audio/usage` | Audio storage usage | `read` | — | `superting audio usage` |
-| `PUT /v1/audio/retention` | Set audio retention | `write` | `days`(body,必填) | `superting audio retention` |
-| `POST /v1/audio/compress` | Compress all audio | `write` | `wait`(body) | `superting audio compress-all` |
-| `DELETE /v1/audio` | Delete all audio | `destructive` | — | `superting audio delete-all` |
+| 方法 | 路由 | 策略 | 模式 | 参数（位置） | CLI |
+| --- | --- | --- | --- | --- | --- |
+| `GET /v1/audio/usage` | Audio storage usage | `read` | 仅扩展 | — | `superting audio usage` |
+| `PUT /v1/audio/retention` | Set audio retention | `write` | 仅扩展 | `days`(body,必填) | `superting audio retention` |
+| `POST /v1/audio/compress` | Compress all audio | `write` | 仅扩展 | `wait`(body) | `superting audio compress-all` |
+| `DELETE /v1/audio` | Delete all audio | `destructive` | 仅扩展 | — | `superting audio delete-all` |
 
 ## chats
 
-| 方法 | 路由 | 策略 | 参数（位置） | CLI |
-| --- | --- | --- | --- | --- |
-| `GET /v1/chats` | List chats | `read` | `limit`(query) | `superting chats list` |
-| `GET /v1/chats/:id/messages` | Get chat messages | `read` | `id`(path,必填) | `superting chats messages` |
-| `GET /v1/notes/:id/chats` | List a note's chats | `read` | `id`(path,必填) `limit`(query) | `superting chats for-note` |
-| `POST /v1/chats` | Create chat | `write` | `title`(body) `note_id`(body) | `superting chats create` |
-| `POST /v1/chats/:id/archive` | Archive chat | `write` | `id`(path,必填) | `superting chats archive` |
-| `DELETE /v1/chats/:id` | Delete chat | `destructive` | `id`(path,必填) | `superting chats delete` |
+| 方法 | 路由 | 策略 | 模式 | 参数（位置） | CLI |
+| --- | --- | --- | --- | --- | --- |
+| `GET /v1/chats` | List chats | `read` | 仅扩展 | `limit`(query) | `superting chats list` |
+| `GET /v1/chats/:id/messages` | Get chat messages | `read` | 仅扩展 | `id`(path,必填) | `superting chats messages` |
+| `GET /v1/notes/:id/chats` | List a note's chats | `read` | 仅扩展 | `id`(path,必填) `limit`(query) | `superting chats for-note` |
+| `POST /v1/chats` | Create chat | `write` | 仅扩展 | `title`(body) `note_id`(body) | `superting chats create` |
+| `POST /v1/chats/:id/archive` | Archive chat | `write` | 仅扩展 | `id`(path,必填) | `superting chats archive` |
+| `DELETE /v1/chats/:id` | Delete chat | `destructive` | 仅扩展 | `id`(path,必填) | `superting chats delete` |
 
 ## contacts
 
-| 方法 | 路由 | 策略 | 参数（位置） | CLI |
-| --- | --- | --- | --- | --- |
-| `GET /v1/contacts/search` | Search contacts | `read` | `query`(query,必填) | `superting contacts search` |
-| `POST /v1/contacts` | Upsert contact record | `write` | `contact`(body,必填) | `superting contacts upsert` |
+| 方法 | 路由 | 策略 | 模式 | 参数（位置） | CLI |
+| --- | --- | --- | --- | --- | --- |
+| `GET /v1/contacts/search` | Search contacts | `read` | 仅扩展 | `query`(query,必填) | `superting contacts search` |
+| `POST /v1/contacts` | Upsert contact record | `write` | 仅扩展 | `contact`(body,必填) | `superting contacts upsert` |
 
 ## dictionary
 
-| 方法 | 路由 | 策略 | 参数（位置） | CLI |
-| --- | --- | --- | --- | --- |
-| `GET /v1/dictionary` | Get dictionary | `read` | — | `superting dict list` |
-| `PUT /v1/dictionary` | Replace dictionary | `destructive` | `words`(body,必填) | `superting dict replace` |
-| `POST /v1/dictionary/words` | Add dictionary words | `write` | `words`(body,必填) | `superting dict add` |
-| `DELETE /v1/dictionary/words` | Remove dictionary words | `destructive` | `words`(query,必填) | `superting dict remove` |
-| `GET /v1/dictionary/aliases` | Get dictionary aliases | `read` | — | `superting alias list` |
-| `PUT /v1/dictionary/aliases` | Replace dictionary aliases | `destructive` | `aliases`(body,必填) | `superting alias replace` |
-| `POST /v1/dictionary/aliases` | Add dictionary alias | `write` | `from`(body,必填) `to`(body,必填) | `superting alias add` |
-| `DELETE /v1/dictionary/aliases` | Remove dictionary aliases | `destructive` | `from`(query,必填) | `superting alias remove` |
-| `GET /v1/dictionary/groups` | List dictionary groups | `read` | — | `superting dict groups list` |
-| `POST /v1/dictionary/groups` | Create dictionary group | `write` | `name`(body,必填) `parent_id`(body) | `superting dict groups create` |
-| `PATCH /v1/dictionary/groups/:id` | Rename dictionary group | `write` | `id`(path,必填) `name`(body,必填) | `superting dict groups rename` |
-| `POST /v1/dictionary/groups/move` | Move dictionary group or item | `write` | `group_id`(body) `parent_id`(body) `item_type`(body) `key`(body) `item_group_id`(body) | `superting dict groups move` |
-| `DELETE /v1/dictionary/groups/:id` | Delete dictionary group | `destructive` | `id`(path,必填) | `superting dict groups delete` |
+| 方法 | 路由 | 策略 | 模式 | 参数（位置） | CLI |
+| --- | --- | --- | --- | --- | --- |
+| `GET /v1/dictionary` | Get dictionary | `read` | 精炼 + 扩展 | — | `superting dict list` |
+| `PUT /v1/dictionary` | Replace dictionary | `destructive` | 仅扩展 | `words`(body,必填) | `superting dict replace` |
+| `POST /v1/dictionary/words` | Add dictionary words | `write` | 仅扩展 | `words`(body,必填) | `superting dict add` |
+| `DELETE /v1/dictionary/words` | Remove dictionary words | `destructive` | 仅扩展 | `words`(query,必填) | `superting dict remove` |
+| `GET /v1/dictionary/aliases` | Get dictionary aliases | `read` | 精炼 + 扩展 | — | `superting alias list` |
+| `PUT /v1/dictionary/aliases` | Replace dictionary aliases | `destructive` | 仅扩展 | `aliases`(body,必填) | `superting alias replace` |
+| `POST /v1/dictionary/aliases` | Add dictionary alias | `write` | 仅扩展 | `from`(body,必填) `to`(body,必填) | `superting alias add` |
+| `DELETE /v1/dictionary/aliases` | Remove dictionary aliases | `destructive` | 仅扩展 | `from`(query,必填) | `superting alias remove` |
+| `GET /v1/dictionary/groups` | List dictionary groups | `read` | 仅扩展 | — | `superting dict groups list` |
+| `POST /v1/dictionary/groups` | Create dictionary group | `write` | 仅扩展 | `name`(body,必填) `parent_id`(body) | `superting dict groups create` |
+| `PATCH /v1/dictionary/groups/:id` | Rename dictionary group | `write` | 仅扩展 | `id`(path,必填) `name`(body,必填) | `superting dict groups rename` |
+| `POST /v1/dictionary/groups/move` | Move dictionary group or item | `write` | 仅扩展 | `group_id`(body) `parent_id`(body) `item_type`(body) `key`(body) `item_group_id`(body) | `superting dict groups move` |
+| `DELETE /v1/dictionary/groups/:id` | Delete dictionary group | `destructive` | 仅扩展 | `id`(path,必填) | `superting dict groups delete` |
 
 ## folders
 
-| 方法 | 路由 | 策略 | 参数（位置） | CLI |
-| --- | --- | --- | --- | --- |
-| `GET /v1/folders/list` | List folders | `read` | — | `superting folders list` |
-| `POST /v1/folders/create` | Create folder | `write` | `name`(body,必填) | `superting folders create` |
-| `PATCH /v1/folders/:id` | Rename folder | `write` | `id`(path,必填) `name`(body,必填) | `superting folders rename` |
-| `DELETE /v1/folders/:id` | Delete folder | `destructive` | `id`(path,必填) | `superting folders delete` |
-| `PUT /v1/folders/order` | Reorder folders | `write` | `folder_ids`(body,必填) | `superting folders reorder` |
+| 方法 | 路由 | 策略 | 模式 | 参数（位置） | CLI |
+| --- | --- | --- | --- | --- | --- |
+| `GET /v1/folders/list` | List folders | `read` | 精炼 + 扩展 | — | `superting folders list` |
+| `POST /v1/folders/create` | Create folder | `write` | 精炼 + 扩展 | `name`(body,必填) | `superting folders create` |
+| `PATCH /v1/folders/:id` | Rename folder | `write` | 仅扩展 | `id`(path,必填) `name`(body,必填) | `superting folders rename` |
+| `DELETE /v1/folders/:id` | Delete folder | `destructive` | 仅扩展 | `id`(path,必填) | `superting folders delete` |
+| `PUT /v1/folders/order` | Reorder folders | `write` | 仅扩展 | `folder_ids`(body,必填) | `superting folders reorder` |
 
 ## jobs
 
-| 方法 | 路由 | 策略 | 参数（位置） | CLI |
-| --- | --- | --- | --- | --- |
-| `GET /v1/jobs` | List operation jobs | `read` | `limit`(query) `status`(query) | `superting jobs list` |
-| `GET /v1/jobs/:id` | Get operation job | `read` | `id`(path,必填) | `superting jobs get` |
-| `POST /v1/jobs/:id/cancel` | Cancel operation job | `write` | `id`(path,必填) | `superting jobs cancel` |
+| 方法 | 路由 | 策略 | 模式 | 参数（位置） | CLI |
+| --- | --- | --- | --- | --- | --- |
+| `GET /v1/jobs` | List operation jobs | `read` | 仅扩展 | `limit`(query) `status`(query) | `superting jobs list` |
+| `GET /v1/jobs/:id` | Get operation job | `read` | 仅扩展 | `id`(path,必填) | `superting jobs get` |
+| `POST /v1/jobs/:id/cancel` | Cancel operation job | `write` | 仅扩展 | `id`(path,必填) | `superting jobs cancel` |
 
 ## notes
 
-| 方法 | 路由 | 策略 | 参数（位置） | CLI |
-| --- | --- | --- | --- | --- |
-| `GET /v1/notes/list` | List notes | `read` | `limit`(query) `folder_id`(query) `note_type`(query) `tags`(query) | `superting notes list` |
-| `GET /v1/notes/search` | Search notes | `read` | `query`(query,必填) `limit`(query) `tags`(query) `semantic`(query) | `superting notes search` |
-| `GET /v1/notes/:id` | Get note | `read` | `id`(path,必填) | `superting notes get` |
-| `POST /v1/notes/create` | Create note | `write` | `title`(body) `content`(body) `note_type`(body) `folder_id`(body) `tags`(body) | `superting notes create` |
-| `PATCH /v1/notes/:id` | Update note | `write` | `id`(path,必填) `title`(body) `content`(body) `enhanced_content`(body) `transcript`(body) `folder_id`(body) `tags`(body) | `superting notes update` |
-| `POST /v1/notes/:id/append` | Append to note | `write` | `id`(path,必填) `text`(body,必填) | `superting notes append` |
-| `DELETE /v1/notes/:id` | Delete note | `destructive` | `id`(path,必填) | `superting notes delete` |
-| `DELETE /v1/notes/:id/purge` | Permanently delete a note | `destructive` | `id`(path,必填) | `superting notes purge` |
-| `GET /v1/notes/:id/export` | Export note as text | `read` | `id`(path,必填) `format`(query) `fields`(query) | `superting notes export` |
-| `GET /v1/notes/:id/audio` | List note audio | `read` | `id`(path,必填) | `superting notes audio list` |
-| `POST /v1/notes/:id/audio/compress` | Compress note audio | `write` | `id`(path,必填) `audio_file_id`(body) | `superting notes audio compress` |
-| `POST /v1/notes/:id/audio/merge` | Merge note audio | `destructive` | `id`(path,必填) `wait`(body) | `superting notes audio merge` |
-| `POST /v1/notes/:id/audio/rediarize` | Re-run speaker diarization | `write` | `id`(path,必填) `audio_file_id`(body) `expected_count`(body) `wait`(body) | `superting notes audio rediarize` |
-| `POST /v1/notes/:id/import` | Import a file into a note | `write` | `id`(path,必填) `file_path`(body,必填) `target`(body) | `superting notes import` |
-| `POST /v1/notes/export` | Export notes to disk | `write` | `note_ids`(body,必填) `format`(body) `fields`(body) | `superting notes export-to-disk` |
-| `GET /v1/notes/:id/transcript/segments` | List transcript segments | `read` | `id`(path,必填) `offset`(query) `limit`(query) | `superting transcript segments` |
-| `PATCH /v1/notes/:id/transcript/segments` | Update a transcript segment | `write` | `id`(path,必填) `segment_id`(body) `index`(body) `text`(body) `speaker`(body) `speaker_name`(body) `lock`(body) | `superting transcript segment-update` |
-| `DELETE /v1/notes/:id/transcript/segments` | Delete transcript segments | `destructive` | `id`(path,必填) `segment_ids`(query) `index`(query) `count`(query) | `superting transcript segment-delete` |
+| 方法 | 路由 | 策略 | 模式 | 参数（位置） | CLI |
+| --- | --- | --- | --- | --- | --- |
+| `GET /v1/notes/list` | List notes | `read` | 精炼 + 扩展 | `limit`(query) `folder_id`(query) `note_type`(query) `tags`(query) | `superting notes list` |
+| `GET /v1/notes/search` | Search notes | `read` | 精炼 + 扩展 | `query`(query,必填) `limit`(query) `tags`(query) `semantic`(query) | `superting notes search` |
+| `GET /v1/notes/:id` | Get note | `read` | 精炼 + 扩展 | `id`(path,必填) | `superting notes get` |
+| `POST /v1/notes/create` | Create note | `write` | 精炼 + 扩展 | `title`(body) `content`(body) `note_type`(body) `folder_id`(body) `tags`(body) | `superting notes create` |
+| `PATCH /v1/notes/:id` | Update note | `write` | 精炼 + 扩展 | `id`(path,必填) `title`(body) `content`(body) `enhanced_content`(body) `transcript`(body) `folder_id`(body) `tags`(body) | `superting notes update` |
+| `POST /v1/notes/:id/append` | Append to note | `write` | 仅扩展 | `id`(path,必填) `text`(body,必填) | `superting notes append` |
+| `DELETE /v1/notes/:id` | Delete note | `destructive` | 精炼 + 扩展 | `id`(path,必填) | `superting notes delete` |
+| `DELETE /v1/notes/:id/purge` | Permanently delete a note | `destructive` | 仅扩展 | `id`(path,必填) | `superting notes purge` |
+| `GET /v1/notes/:id/export` | Export note as text | `read` | 仅扩展 | `id`(path,必填) `format`(query) `fields`(query) | `superting notes export` |
+| `GET /v1/notes/:id/audio` | List note audio | `read` | 仅扩展 | `id`(path,必填) | `superting notes audio list` |
+| `POST /v1/notes/:id/audio/compress` | Compress note audio | `write` | 仅扩展 | `id`(path,必填) `audio_file_id`(body) | `superting notes audio compress` |
+| `POST /v1/notes/:id/audio/merge` | Merge note audio | `destructive` | 仅扩展 | `id`(path,必填) `wait`(body) | `superting notes audio merge` |
+| `POST /v1/notes/:id/audio/rediarize` | Re-run speaker diarization | `write` | 仅扩展 | `id`(path,必填) `audio_file_id`(body) `expected_count`(body) `wait`(body) | `superting notes audio rediarize` |
+| `POST /v1/notes/:id/import` | Import a file into a note | `write` | 仅扩展 | `id`(path,必填) `file_path`(body,必填) `target`(body) | `superting notes import` |
+| `POST /v1/notes/export` | Export notes to disk | `write` | 仅扩展 | `note_ids`(body,必填) `format`(body) `fields`(body) | `superting notes export-to-disk` |
+| `GET /v1/notes/:id/transcript/segments` | List transcript segments | `read` | 仅扩展 | `id`(path,必填) `offset`(query) `limit`(query) | `superting transcript segments` |
+| `PATCH /v1/notes/:id/transcript/segments` | Update a transcript segment | `write` | 仅扩展 | `id`(path,必填) `segment_id`(body) `index`(body) `text`(body) `speaker`(body) `speaker_name`(body) `lock`(body) | `superting transcript segment-update` |
+| `DELETE /v1/notes/:id/transcript/segments` | Delete transcript segments | `destructive` | 仅扩展 | `id`(path,必填) `segment_ids`(query) `index`(query) `count`(query) | `superting transcript segment-delete` |
 
 ## people
 
-| 方法 | 路由 | 策略 | 参数（位置） | CLI |
-| --- | --- | --- | --- | --- |
-| `GET /v1/people` | List contacts | `read` | `query`(query) | `superting people list` |
-| `GET /v1/people/:id` | Get contact | `read` | `id`(path,必填) | `superting people get` |
-| `POST /v1/people` | Create contact | `write` | `display_name`(body) `email`(body) `phone`(body) `organization`(body) `notes`(body) | `superting people create` |
-| `PATCH /v1/people/:id` | Update contact | `write` | `id`(path,必填) `display_name`(body) `email`(body) `phone`(body) `organization`(body) `notes`(body) | `superting people update` |
-| `DELETE /v1/people/:id` | Delete contact | `destructive` | `id`(path,必填) | `superting people delete` |
-| `POST /v1/people/merge` | Merge contacts | `destructive` | `keep_id`(body,必填) `remove_id`(body,必填) | `superting people merge` |
+| 方法 | 路由 | 策略 | 模式 | 参数（位置） | CLI |
+| --- | --- | --- | --- | --- | --- |
+| `GET /v1/people` | List contacts | `read` | 仅扩展 | `query`(query) | `superting people list` |
+| `GET /v1/people/:id` | Get contact | `read` | 仅扩展 | `id`(path,必填) | `superting people get` |
+| `POST /v1/people` | Create contact | `write` | 仅扩展 | `display_name`(body) `email`(body) `phone`(body) `organization`(body) `notes`(body) | `superting people create` |
+| `PATCH /v1/people/:id` | Update contact | `write` | 仅扩展 | `id`(path,必填) `display_name`(body) `email`(body) `phone`(body) `organization`(body) `notes`(body) | `superting people update` |
+| `DELETE /v1/people/:id` | Delete contact | `destructive` | 仅扩展 | `id`(path,必填) | `superting people delete` |
+| `POST /v1/people/merge` | Merge contacts | `destructive` | 仅扩展 | `keep_id`(body,必填) `remove_id`(body,必填) | `superting people merge` |
 
 ## recording
 
-| 方法 | 路由 | 策略 | 参数（位置） | CLI |
-| --- | --- | --- | --- | --- |
-| `GET /v1/recording` | Recording status | `read` | — | `superting recording status` |
-| `POST /v1/recording/start` | Start recording | `write` | `note_id`(body,必填) | `superting recording start` |
-| `POST /v1/recording/stop` | Stop recording | `write` | — | `superting recording stop` |
+| 方法 | 路由 | 策略 | 模式 | 参数（位置） | CLI |
+| --- | --- | --- | --- | --- | --- |
+| `GET /v1/recording` | Recording status | `read` | 仅扩展 | — | `superting recording status` |
+| `POST /v1/recording/start` | Start recording | `write` | 仅扩展 | `note_id`(body,必填) | `superting recording start` |
+| `POST /v1/recording/stop` | Stop recording | `write` | 仅扩展 | — | `superting recording stop` |
 
 ## settings
 
-| 方法 | 路由 | 策略 | 参数（位置） | CLI |
-| --- | --- | --- | --- | --- |
-| `GET /v1/settings` | Get settings | `read` | `key`(query) | `superting settings get` |
-| `PUT /v1/settings` | Update a setting | `write` | `key`(body,必填) `value`(body) `json`(body) | `superting settings set` |
+| 方法 | 路由 | 策略 | 模式 | 参数（位置） | CLI |
+| --- | --- | --- | --- | --- | --- |
+| `GET /v1/settings` | Get settings | `read` | 仅扩展 | `key`(query) | `superting settings get` |
+| `PUT /v1/settings` | Update a setting | `write` | 仅扩展 | `key`(body,必填) `value`(body) `json`(body) | `superting settings set` |
 
 ## speakers
 
-| 方法 | 路由 | 策略 | 参数（位置） | CLI |
-| --- | --- | --- | --- | --- |
-| `GET /v1/notes/:id/speakers` | Get speaker mappings | `read` | `id`(path,必填) | `superting speakers mappings` |
-| `GET /v1/speakers` | List speaker profiles | `read` | — | `superting speakers profiles` |
-| `GET /v1/speakers/names` | List speaker names | `read` | — | `superting speakers names` |
-| `POST /v1/notes/:id/speakers` | Assign a speaker name | `write` | `id`(path,必填) `speaker_id`(body,必填) `display_name`(body,必填) `email`(body) `profile_id`(body) | `superting speakers assign` |
-| `POST /v1/speakers/names` | Upsert speaker name | `write` | `display_name`(body,必填) `email`(body) | `superting speakers name-add` |
-| `DELETE /v1/speakers/names/:id` | Delete speaker name | `destructive` | `id`(path,必填) | `superting speakers name-delete` |
-| `POST /v1/speakers/email` | Attach email to speaker | `write` | `profile_id`(body,必填) `email`(body,必填) | `superting speakers email-attach` |
+| 方法 | 路由 | 策略 | 模式 | 参数（位置） | CLI |
+| --- | --- | --- | --- | --- | --- |
+| `GET /v1/notes/:id/speakers` | Get speaker mappings | `read` | 仅扩展 | `id`(path,必填) | `superting speakers mappings` |
+| `GET /v1/speakers` | List speaker profiles | `read` | 仅扩展 | — | `superting speakers profiles` |
+| `GET /v1/speakers/names` | List speaker names | `read` | 仅扩展 | — | `superting speakers names` |
+| `POST /v1/notes/:id/speakers` | Assign a speaker name | `write` | 仅扩展 | `id`(path,必填) `speaker_id`(body,必填) `display_name`(body,必填) `email`(body) `profile_id`(body) | `superting speakers assign` |
+| `POST /v1/speakers/names` | Upsert speaker name | `write` | 仅扩展 | `display_name`(body,必填) `email`(body) | `superting speakers name-add` |
+| `DELETE /v1/speakers/names/:id` | Delete speaker name | `destructive` | 仅扩展 | `id`(path,必填) | `superting speakers name-delete` |
+| `POST /v1/speakers/email` | Attach email to speaker | `write` | 仅扩展 | `profile_id`(body,必填) `email`(body,必填) | `superting speakers email-attach` |
 
 ## system
 
-| 方法 | 路由 | 策略 | 参数（位置） | CLI |
-| --- | --- | --- | --- | --- |
-| `GET /v1/health` | Health check | `read` | — | `superting health` |
-| `GET /v1/operations` | List machine capabilities | `read` | — | `superting ops list` |
+| 方法 | 路由 | 策略 | 模式 | 参数（位置） | CLI |
+| --- | --- | --- | --- | --- | --- |
+| `GET /v1/health` | Health check | `read` | 精炼 + 扩展 | — | `superting health` |
+| `GET /v1/operations` | List machine capabilities | `read` | 仅扩展 | — | `superting ops list` |
 
 ## tags
 
-| 方法 | 路由 | 策略 | 参数（位置） | CLI |
-| --- | --- | --- | --- | --- |
-| `GET /v1/tags` | List tags | `read` | — | `superting tags list` |
+| 方法 | 路由 | 策略 | 模式 | 参数（位置） | CLI |
+| --- | --- | --- | --- | --- | --- |
+| `GET /v1/tags` | List tags | `read` | 精炼 + 扩展 | — | `superting tags list` |
 
 ## transcriptions
 
-| 方法 | 路由 | 策略 | 参数（位置） | CLI |
-| --- | --- | --- | --- | --- |
-| `GET /v1/transcriptions/list` | List transcriptions | `read` | `limit`(query) | `superting transcriptions list` |
-| `GET /v1/transcriptions/:id` | Get transcription | `read` | `id`(path,必填) | `superting transcriptions get` |
-| `DELETE /v1/transcriptions/:id` | Delete transcription | `destructive` | `id`(path,必填) | `superting transcriptions delete` |
-| `DELETE /v1/transcriptions/:id/audio` | Delete transcription audio | `destructive` | `id`(path,必填) | `superting transcriptions delete-audio` |
-| `DELETE /v1/transcriptions` | Clear transcription history | `destructive` | — | `superting transcriptions clear` |
-| `POST /v1/transcriptions/transcribe` | Transcribe an audio file | `write` | `file_path`(body,必填) `provider`(body) `model`(body) `language`(body) `wait`(body) | `superting transcriptions transcribe` |
-| `POST /v1/transcriptions/:id/retry` | Retry transcription | `write` | `id`(path,必填) | `superting transcriptions retry` |
+| 方法 | 路由 | 策略 | 模式 | 参数（位置） | CLI |
+| --- | --- | --- | --- | --- | --- |
+| `GET /v1/transcriptions/list` | List transcriptions | `read` | 精炼 + 扩展 | `limit`(query) | `superting transcriptions list` |
+| `GET /v1/transcriptions/:id` | Get transcription | `read` | 精炼 + 扩展 | `id`(path,必填) | `superting transcriptions get` |
+| `DELETE /v1/transcriptions/:id` | Delete transcription | `destructive` | 仅扩展 | `id`(path,必填) | `superting transcriptions delete` |
+| `DELETE /v1/transcriptions/:id/audio` | Delete transcription audio | `destructive` | 仅扩展 | `id`(path,必填) | `superting transcriptions delete-audio` |
+| `DELETE /v1/transcriptions` | Clear transcription history | `destructive` | 仅扩展 | — | `superting transcriptions clear` |
+| `POST /v1/transcriptions/transcribe` | Transcribe an audio file | `write` | 仅扩展 | `file_path`(body,必填) `provider`(body) `model`(body) `language`(body) `wait`(body) | `superting transcriptions transcribe` |
+| `POST /v1/transcriptions/:id/retry` | Retry transcription | `write` | 仅扩展 | `id`(path,必填) | `superting transcriptions retry` |
 
 ## voiceprints
 
-| 方法 | 路由 | 策略 | 参数（位置） | CLI |
-| --- | --- | --- | --- | --- |
-| `GET /v1/voiceprints/segments` | List voiceprint segments | `read` | `person_id`(query) | `superting voiceprints segments` |
-| `DELETE /v1/voiceprints` | Delete voiceprints | `destructive` | `person_id`(query) | `superting voiceprints delete-all` |
+| 方法 | 路由 | 策略 | 模式 | 参数（位置） | CLI |
+| --- | --- | --- | --- | --- | --- |
+| `GET /v1/voiceprints/segments` | List voiceprint segments | `read` | 仅扩展 | `person_id`(query) | `superting voiceprints segments` |
+| `DELETE /v1/voiceprints` | Delete voiceprints | `destructive` | 仅扩展 | `person_id`(query) | `superting voiceprints delete-all` |
 
 ## 错误约定
 

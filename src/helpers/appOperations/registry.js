@@ -40,9 +40,18 @@
  *     status: 201,                      // optional success status override
  *   },
  *   rendererRequired: false,            // true when it must run in the renderer
+ *   lean: true,                         // in the original 14-tool lean surface
  *   handler: async (params, ctx) => ({ data }),
  * }
  * ```
+ *
+ * ## Capability modes
+ *
+ * `lean: true` marks the operations that make up the original, hand-written MCP
+ * surface (14 basic note/folder/transcription/dictionary/tag tools). The shared
+ * agent-access mode (src/helpers/agentAccess.js) decides whether the MCP server
+ * and the CLI bridge expose only those operations (`lean`, the default) or the
+ * whole registry (`extended`).
  */
 
 class OperationError extends Error {
@@ -163,6 +172,11 @@ function validateOperation(operation) {
     );
   }
 
+  assert(
+    operation.lean === undefined || typeof operation.lean === "boolean",
+    `${id}: lean must be a boolean`
+  );
+
   const notes = normalizeNotes(operation.notes, id);
 
   return {
@@ -172,6 +186,7 @@ function validateOperation(operation) {
     policy,
     params: paramSpecs,
     notes,
+    lean: !!operation.lean,
     mcp: mcp ? { ...mcp, serialize: mcp.serialize ?? null } : null,
     cli: cli ? { ...cli, serialize: cli.serialize ?? null } : null,
     rendererRequired: !!operation.rendererRequired,
@@ -268,6 +283,19 @@ class AppRegistry {
 
   list() {
     return this.operations;
+  }
+
+  /**
+   * The operations visible in a capability mode. `extended` (default) is the
+   * whole registry; `lean` is the original 14-tool basic surface.
+   */
+  listForToolset(toolset = "extended") {
+    if (toolset !== "lean") return this.operations;
+    return this.operations.filter((operation) => operation.lean);
+  }
+
+  isAllowedInToolset(operation, toolset = "extended") {
+    return toolset !== "lean" || !!operation?.lean;
   }
 
   get(id) {
