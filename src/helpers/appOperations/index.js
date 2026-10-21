@@ -68,18 +68,21 @@ function createAppOperations(ipcHandlers) {
 }
 
 /** Tool names without needing an IpcHandlers instance (status API, tests, docs). */
-function listMcpToolNames() {
-  return listMcpTools().map((tool) => tool.name);
+function listMcpToolNames(toolset = "extended") {
+  return listMcpTools(toolset).map((tool) => tool.name);
 }
 
 /**
  * MCP tool catalog for the status API / settings UI: the registry is the single
  * source, so the 集成 page can show a real description for every tool instead
  * of a "no description" placeholder.
+ *
+ * Pass `"lean"` for the default 14-tool basic surface; the default `"extended"`
+ * keeps the whole catalog available to tests/docs/UIs that ask for it.
  */
-function listMcpTools() {
+function listMcpTools(toolset = "extended") {
   return createRegistry(buildOperationList())
-    .list()
+    .listForToolset(toolset)
     .filter((operation) => operation.mcp)
     .map((operation) => ({
       name: operation.mcp.name,
@@ -87,7 +90,16 @@ function listMcpTools() {
       description: operation.description,
       notes: operation.notes,
       policy: operation.policy,
+      lean: !!operation.lean,
     }));
 }
 
-module.exports = { createAppOperations, listMcpToolNames, listMcpTools };
+/** Tool counts per capability mode, for the settings UI. */
+function getToolsetCounts() {
+  return {
+    lean: listMcpToolNames("lean").length,
+    extended: listMcpToolNames("extended").length,
+  };
+}
+
+module.exports = { createAppOperations, getToolsetCounts, listMcpToolNames, listMcpTools };

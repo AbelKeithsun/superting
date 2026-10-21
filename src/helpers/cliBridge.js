@@ -7,6 +7,8 @@ const debugLogger = require("./debugLogger");
 const { ensureMigratedPath } = require("./brandConfig");
 const { isPortAvailable } = require("../utils/serverUtils");
 const { createAppOperations } = require("./appOperations");
+const { buildCliRoutes } = require("./appOperations/cliAdapter");
+const { AgentAccessSettings } = require("./agentAccess");
 
 const PORT_RANGE_START = 8200;
 const PORT_RANGE_END = 8219;
@@ -16,6 +18,13 @@ const MAX_REQUEST_BODY_BYTES = 1 * 1024 * 1024;
 const LOOPBACK_ADDRESSES = new Set(["127.0.0.1", "::1", "::ffff:127.0.0.1"]);
 
 const NO_CONTENT = Symbol("CliBridge.NoContent");
+
+/**
+ * Capabilities that stay reachable in lean mode even though they are not part
+ * of the lean operation set: the catalog route itself (the CLI needs it to
+ * resolve commands and to tell "unknown command" from "hidden by lean mode").
+ */
+const LEAN_MODE_META_OPERATIONS = new Set(["system.operations"]);
 
 function getBridgeFilePath() {
   return path.join(ensureMigratedPath(os.homedir(), "config"), "cli-bridge.json");
@@ -136,6 +145,9 @@ class CliBridge {
     this.token = null;
     this.bridgeFilePath = options.bridgeFilePath || getBridgeFilePath();
     this.findPort = options.portFinder || findAvailablePort;
+    // Shared with the MCP server: expanding in the app applies to both surfaces.
+    this.agentAccess =
+      options.agentAccess || new AgentAccessSettings({ homeDir: options.homeDir });
     this.routes = this._buildRouteTable();
   }
 
@@ -233,6 +245,17 @@ class CliBridge {
       return;
     }
 
+    if (!this._isOperationVisible(route.operationId)) {
+      sendV1Error(
+        res,
+        403,
+        "mode_locked",
+        `Agent access is in lean mode; "${route.operationId}" requires extended mode. ` +
+          "Click 扩展 (Extend all capabilities) in SuperTing → 设置 → 集成 → 本地 MCP 访问 to unlock it."
+      );
+      return;
+    }
+
     let body = {};
     if (req.method !== "GET" && req.method !== "DELETE") {
       try {
@@ -273,6 +296,19 @@ class CliBridge {
     sendV1Error(res, 500, "internal_error", err.message || "Internal server error");
   }
 
+  /**
+   * Lean mode only serves the original basic capabilities (plus the catalog
+   * route). Everything else is refused here — not silently 404'd — so an agent
+   * gets an actionable "expand in the app" message instead of guessing.
+   */
+  _isOperationVisible(operationId) {
+    if (!operationId) return false;
+    if (this.agentAccess.getToolset() !== "lean") return true;
+    if (LEAN_MODE_META_OPERATIONS.has(operationId)) return true;
+    const operation = this.app?.registry?.get(operationId);
+    return !!operation?.lean;
+  }
+
   _matchRoute(method, pathname) {
     for (const route of this.routes) {
       if (route.method !== method) continue;
@@ -287,7 +323,9 @@ class CliBridge {
     // src/helpers/appOperations/. Adding a capability there makes it available
     // to the CLI, the MCP server and the renderer at once.
     this.app = createAppOperations(this.ipcHandlers);
-    return this.app.cliRoutes;
+    return buildCliRoutes(this.app.registry, this.app.context, {
+      getToolset: () => this.agentAccess.getToolset(),
+    });
   }
 }
 

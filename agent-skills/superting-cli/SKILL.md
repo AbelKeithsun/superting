@@ -18,10 +18,19 @@ cli_version: ">=2.0.12"
 ## 严格要求 (MUST)
 
 - 不确定应用是否在运行时，先 `superting health`；报 `bridge_not_running` 就让用户启动应用，不要循环重试。
-- 先 `superting ops list` 确认能力与参数（87 项：id、策略、CLI 路由、MCP 工具名、参数位置），不确定的参数不要猜。
+- 先 `superting ops list` 确认能力与参数（当前模式下全部 id、策略、CLI 路由、MCP 工具名、参数位置；精炼 14 项 / 扩展 87 项），不确定的参数不要猜。
 - 输出默认 JSON：解析它。列表默认截断预览，需要全文用 `notes get <id> --full`。
 - 长任务（重新分离、合并音频、批量压缩、音频转写）加 `--wait false` 会立刻返回 `job_id`，再 `jobs get <job_id>` 轮询；不要同步干等几分钟。
 - 需要界面的能力（`actions run`、`recording *`、`settings set`、导出到磁盘、`transcriptions retry`）要求应用窗口存在；返回 `renderer_unavailable` 时提示用户打开应用窗口，不要重试循环。
+
+## 能力模式（精炼 / 扩展）
+
+- 应用默认 **精炼**：MCP 与 CLI 共用一个开关，只开放原精炼版 MCP 的 14 项基础能力
+  （health、笔记 list/search/get/create/update/delete、文件夹 list/create、转录 list/get、
+  词典/替换规则读取、标签 list）。
+- 精炼模式下调用其它能力会得到 403 `mode_locked`，或 `ops list` 里根本看不到该 id。
+- 需要更多能力时，请用户在应用内 **设置 → 集成 → 本地 MCP 访问** 点「一键扩展全部能力」；
+  agent 不能自行扩展，也不要用 curl/裸 HTTP 绕过模式。`superting health` 返回当前 `toolset`。
 
 ## 命令速查
 

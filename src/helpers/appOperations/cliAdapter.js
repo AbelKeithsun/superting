@@ -65,9 +65,13 @@ function collectParams(operation, { params = {}, query, body } = {}) {
 /**
  * @param {import("./registry").AppRegistry} registry
  * @param {object} context Handler context (db / ipc / broadcast / renderer)
+ * @param {{ getToolset?: () => "lean" | "extended" }} [options] The bridge passes
+ *   the live capability mode so handlers (catalog, health) can describe it; the
+ *   route table itself is always complete and gated by the bridge.
  * @returns {Array<{method: string, match: Function, handler: Function, status?: number, noContent?: boolean}>}
  */
-function buildCliRoutes(registry, context) {
+function buildCliRoutes(registry, context, options = {}) {
+  const getToolset = options.getToolset;
   return registry
     .list()
     .filter((operation) => operation.cli)
@@ -81,7 +85,10 @@ function buildCliRoutes(registry, context) {
         noContent: !!cli.noContent,
         handler: async (request) => {
           const raw = collectParams(operation, request);
-          const payload = await registry.invoke(operation.id, raw, context ?? {});
+          const payload = await registry.invoke(operation.id, raw, {
+            ...(context ?? {}),
+            toolset: getToolset ? getToolset() : "extended",
+          });
           if (cli.noContent) return payload;
           if (typeof cli.serialize === "function") return cli.serialize(payload, raw);
           return payload;

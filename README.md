@@ -172,11 +172,16 @@ SuperTing 可以把桌面上的语音输入变成文本、笔记和行动项。�
 
 ### 4. Agent 数据中心
 
-SuperTing 把**同一份能力**开放给外部 agent：本地 MCP server（给 Claude Desktop / Cursor / Codex 等 MCP 客户端）与本地 CLI（`superting`）。两者由主进程的同一份操作注册表生成（`src/helpers/appOperations/`），能力集合永远一致——当前 **87 项**，覆盖笔记、会议纪要动作、录音控制、音频文件、转录与段级编辑、联系人/声纹、说话人标注、词典、聊天记录、设置读写。
+SuperTing 把**同一份能力**开放给外部 agent：本地 MCP server（给 Claude Desktop / Cursor / Codex 等 MCP 客户端）与本地 CLI（`superting`）。两者由主进程的同一份操作注册表生成（`src/helpers/appOperations/`），能力集合永远一致。
+
+能力分两档，MCP 与 CLI **共用一个开关**（默认精炼）：
+
+- **精炼（默认）**：只开放原精炼版 MCP 的 **14 项**基础能力——`health`、笔记 list/search/get/create/update/delete、文件夹 list/create、转录 list/get、词典与替换规则读取、标签 list。适合只让 agent 读写笔记/转录、控制上下文体积。
+- **扩展**：全部 **87 项**能力，覆盖笔记、会议纪要动作、录音控制、音频文件、转录与段级编辑、联系人/声纹、说话人标注、词典、聊天记录、设置读写。在 **设置 → 集成 → 本地 MCP 访问** 点一次「一键扩展全部能力」即可（无需重启；已连接的 MCP 客户端重连后看到新工具）。
 
 #### MCP
 
-1. 应用内打开 **设置 → 集成 → 本地 MCP 访问**，启用后生成本地 URL 与 Bearer token（元数据在 `~/.superting/mcp-server.json`，可一键轮换 token；仅监听 127.0.0.1）。
+1. 应用内打开 **设置 → 集成 → 本地 MCP 访问**，启用后生成本地 URL 与 Bearer token（元数据在 `~/.superting/mcp-server.json`，可一键轮换 token；仅监听 127.0.0.1）。默认以精炼模式启动；同一张卡片上的「一键扩展全部能力」会同时放开 MCP 与 CLI（模式持久化在 `~/.superting/agent-access.json`）。
 2. 把下面的配置粘进 MCP 客户端（以 `mcpServers` 为例；url 默认 `http://127.0.0.1:8220/mcp`，端口被占用时会自动顺延）：
 
    ```json
@@ -191,7 +196,7 @@ SuperTing 把**同一份能力**开放给外部 agent：本地 MCP server（给 
    }
    ```
 
-3. 工具名与 CLI 能力一一对应（`list_notes`、`search_notes`、`run_note_action`、`list_jobs`、`update_transcript_segment`、`get_settings`…）。先调用 `list_operations` 拿到全量目录与参数。
+3. 工具名与 CLI 能力一一对应（精炼模式只有 14 个基础工具；扩展后还有 `run_note_action`、`list_jobs`、`update_transcript_segment`、`get_settings` 等）。扩展模式下可先调用 `list_operations` 拿到全量目录与参数。
 4. 需要界面的能力（运行笔记动作、录音启停、导出对话框、写设置）会自动唤起应用窗口；窗口仍不可用时返回明确错误（`renderer_unavailable`），**不会**用旧数据顶替。
 
 #### CLI
@@ -199,7 +204,7 @@ SuperTing 把**同一份能力**开放给外部 agent：本地 MCP server（给 
 ```bash
 npm run install:cli          # 符号链接到 ~/.local/bin（SUPERTING_CLI_BIN_DIR 可改目录；只读检出加 --copy）
 superting health             # 应用需正在运行（bridge 由应用进程提供）
-superting ops list           # 列出全部 87 项能力：id / 策略 / CLI 路由 / MCP 工具名 / 参数
+superting ops list           # 列出当前模式下的能力（精炼 14 / 扩展 87）：id / 策略 / CLI 路由 / MCP 工具名 / 参数
 superting call <operation.id> --json '{"…"}'   # 通用兜底：任何能力都能调，参数位置由能力目录决定
 
 superting notes list --limit 5
@@ -212,7 +217,7 @@ superting actions list                         # 找到「生成会议纪要」�
 superting actions run 1 --note-id 47                     # 生成会议纪要
 superting jobs list                            # 长任务（重新分离/批量压缩/音频转写）：wait=false 时返回 job_id
 superting jobs get <job_id>
-superting recording status / recording start --note-id 47 / recording stop
+superting recording status / recording start --note-id 47 / recording stop   # 需要先扩展
 superting settings get --key uiLanguage
 superting people list && superting speakers profiles     # 联系人与说话人
 superting audio usage                                    # 音频占用

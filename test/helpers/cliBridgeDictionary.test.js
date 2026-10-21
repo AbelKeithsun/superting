@@ -6,6 +6,7 @@ const path = require("node:path");
 const net = require("node:net");
 
 const CliBridge = require("../../src/helpers/cliBridge");
+const { AgentAccessSettings } = require("../../src/helpers/agentAccess");
 
 function createTempHome(t) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "superting-clip-test-"));
@@ -95,11 +96,13 @@ function createIpcHandlers() {
   };
 }
 
-async function startBridge(t, ipcHandlers) {
+async function startBridge(t, ipcHandlers, { toolset = "extended" } = {}) {
   const home = createTempHome(t);
   const bridge = new CliBridge(ipcHandlers, {
     bridgeFilePath: path.join(home, "cli-bridge.json"),
+    homeDir: home,
     portFinder: ephemeralPort,
+    agentAccess: new AgentAccessSettings({ homeDir: home, toolset }),
   });
   await bridge.start();
   t.after(() => bridge.stop());

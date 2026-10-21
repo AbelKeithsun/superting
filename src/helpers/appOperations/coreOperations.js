@@ -30,12 +30,15 @@ function coreOperations() {
     // ------------------------------------------------------------------ system
     {
       id: "system.health",
+      lean: true,
       title: "Health check",
       description: "Check whether the local SuperTing agent surfaces are available.",
       policy: "read",
       mcp: { name: "health" },
       cli: { method: "GET", path: "/v1/health", command: "health" },
-      handler: () => ({ data: { ok: true, version: 1 } }),
+      handler: (_params, ctx) => ({
+        data: { ok: true, version: 1, toolset: ctx.toolset === "lean" ? "lean" : "extended" },
+      }),
     },
     {
       id: "system.operations",
@@ -46,30 +49,40 @@ function coreOperations() {
       notes: ["Call this first when unsure which capability or parameter to use."],
       mcp: { name: "list_operations" },
       cli: { method: "GET", path: "/v1/operations", command: "ops list" },
-      handler: (_params, ctx) => ({
-        data: (ctx.registry?.list() ?? []).map((operation) => ({
-          id: operation.id,
-          title: operation.title,
-          description: operation.description,
-          policy: operation.policy,
-          rendererRequired: operation.rendererRequired,
-          params: operation.params,
-          mcp: operation.mcp ? { name: operation.mcp.name } : null,
-          cli: operation.cli
-            ? {
-                method: operation.cli.method,
-                path: operation.cli.path,
-                command: operation.cli.command ?? null,
-                params: operation.cli.params ?? {},
-              }
-            : null,
-        })),
-      }),
+      handler: (_params, ctx) => {
+        // The catalog itself honours the active capability mode, so an agent in
+        // lean mode only ever discovers the lean surface — the same list its
+        // tools/list returns.
+        const toolset = ctx.toolset === "lean" ? "lean" : "extended";
+        const operations = ctx.registry?.listForToolset?.(toolset) ?? [];
+        return {
+          toolset,
+          data: operations.map((operation) => ({
+            id: operation.id,
+            title: operation.title,
+            description: operation.description,
+            policy: operation.policy,
+            rendererRequired: operation.rendererRequired,
+            params: operation.params,
+            lean: !!operation.lean,
+            mcp: operation.mcp ? { name: operation.mcp.name } : null,
+            cli: operation.cli
+              ? {
+                  method: operation.cli.method,
+                  path: operation.cli.path,
+                  command: operation.cli.command ?? null,
+                  params: operation.cli.params ?? {},
+                }
+              : null,
+          })),
+        };
+      },
     },
 
     // ------------------------------------------------------------------- notes
     {
       id: "notes.list",
+      lean: true,
       title: "List notes",
       description: "List local notes with previews and audio metadata.",
       policy: "read",
@@ -106,6 +119,7 @@ function coreOperations() {
     },
     {
       id: "notes.search",
+      lean: true,
       title: "Search notes",
       description: "Search notes by keyword, or by meaning when semantic is true.",
       policy: "read",
@@ -147,6 +161,7 @@ function coreOperations() {
     },
     {
       id: "notes.get",
+      lean: true,
       title: "Get note",
       description: "Get the full text fields for one note.",
       policy: "read",
@@ -172,6 +187,7 @@ function coreOperations() {
     },
     {
       id: "notes.create",
+      lean: true,
       title: "Create note",
       description: "Create a local note and update the search index.",
       policy: "write",
@@ -224,6 +240,7 @@ function coreOperations() {
     },
     {
       id: "notes.update",
+      lean: true,
       title: "Update note",
       description: "Update a note's title, content, enhanced content, transcript, folder or tags.",
       policy: "write",
@@ -328,6 +345,7 @@ function coreOperations() {
     },
     {
       id: "notes.delete",
+      lean: true,
       title: "Delete note",
       description: "Delete a note and its retained audio references.",
       policy: "destructive",
@@ -421,6 +439,7 @@ function coreOperations() {
     // ----------------------------------------------------------------- folders
     {
       id: "folders.list",
+      lean: true,
       title: "List folders",
       description: "List local folders.",
       policy: "read",
@@ -431,6 +450,7 @@ function coreOperations() {
     },
     {
       id: "folders.create",
+      lean: true,
       title: "Create folder",
       description: "Create a local folder.",
       policy: "write",
@@ -531,6 +551,7 @@ function coreOperations() {
     // -------------------------------------------------------------------- tags
     {
       id: "tags.list",
+      lean: true,
       title: "List tags",
       description: "List tags used by local notes.",
       policy: "read",
@@ -543,6 +564,7 @@ function coreOperations() {
     // -------------------------------------------------------------- dictionary
     {
       id: "dictionary.list",
+      lean: true,
       title: "Get dictionary",
       description: "Get custom dictionary hotwords.",
       policy: "read",
@@ -640,6 +662,7 @@ function coreOperations() {
     },
     {
       id: "dictionary.aliases.list",
+      lean: true,
       title: "Get dictionary aliases",
       description: "Get replacement rules used by transcription correction.",
       policy: "read",
@@ -894,6 +917,7 @@ function coreOperations() {
     // ---------------------------------------------------------- transcriptions
     {
       id: "transcriptions.list",
+      lean: true,
       title: "List transcriptions",
       description: "List transcription text records with audio metadata only.",
       policy: "read",
@@ -918,6 +942,7 @@ function coreOperations() {
     },
     {
       id: "transcriptions.get",
+      lean: true,
       title: "Get transcription",
       description: "Get one transcription record with audio metadata only.",
       policy: "read",

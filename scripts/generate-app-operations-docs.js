@@ -70,6 +70,12 @@ function renderOperationsDoc(operations) {
     "（CLI 需 `--yes`，MCP 客户端按 `destructiveHint` 确认）；",
     "`needs UI` 表示该能力需要 SuperTing 窗口在前台运行（通过主↔渲染桥执行）。",
     "",
+    "能力模式：MCP 服务与 `superting` CLI 共用一个模式开关，默认 **精炼**——",
+    "只开放下面标记为「精炼 + 扩展」的 14 项基础能力（原精炼版 MCP 工具集）；",
+    "在应用内 **设置 → 集成 → 本地 MCP 访问** 点「一键扩展全部能力」后，",
+    "两侧同时放开全部能力。标记为「仅扩展」的能力在精炼模式下返回 403 `mode_locked`",
+    "（MCP 侧则根本不出现在 tools/list 中）。",
+    "",
   ];
 
   for (const [category, ops] of [...byCategory.entries()].sort()) {
@@ -82,6 +88,7 @@ function renderOperationsDoc(operations) {
       lines.push(`### \`${operation.id}\` — ${operation.title}`, "");
       lines.push(operation.description, "");
       lines.push(`- 策略：\`${policy}\``);
+      lines.push(`- 能力模式：${operation.lean ? "精炼 + 扩展" : "仅扩展"}`);
       if (operation.mcp) lines.push(`- MCP 工具：\`${operation.mcp.name}\``);
       if (operation.cli) {
         const command = operation.cli.command
@@ -123,12 +130,16 @@ function renderRoutesDoc(operations) {
     "认证：回环地址 + `Authorization: Bearer <token>`（token 见 `~/.superting/cli-bridge.json`）。",
     "参数位置见「位置」列：path=路径占位符，query=查询串，body=JSON 请求体。",
     "",
+    "模式：默认精炼，只放行「精炼 + 扩展」的能力（14 项基础能力）；其余路由返回",
+    "HTTP 403 `mode_locked`，在应用内点一次「一键扩展全部能力」即放开（MCP 与 CLI 同步）。",
+    "`GET /v1/operations` 在精炼模式下只返回精炼能力目录，响应带 `toolset` 字段。",
+    "",
   ];
 
   for (const [family, ops] of [...byFamily.entries()].sort()) {
     lines.push(`## ${family}`, "");
-    lines.push("| 方法 | 路由 | 策略 | 参数（位置） | CLI |");
-    lines.push("| --- | --- | --- | --- | --- |");
+    lines.push("| 方法 | 路由 | 策略 | 模式 | 参数（位置） | CLI |");
+    lines.push("| --- | --- | --- | --- | --- | --- |");
     for (const operation of ops) {
       const params = Object.entries(operation.params)
         .map(([name, spec]) => {
@@ -137,7 +148,7 @@ function renderRoutesDoc(operations) {
         })
         .join(" ");
       lines.push(
-        `| \`${operation.cli.method} ${operation.cli.path}\` | ${operation.title} | \`${operation.policy}\` | ${params || "—"} | ${operation.cli.command ? `\`superting ${operation.cli.command}\`` : "—"} |`
+        `| \`${operation.cli.method} ${operation.cli.path}\` | ${operation.title} | \`${operation.policy}\` | ${operation.lean ? "精炼 + 扩展" : "仅扩展"} | ${params || "—"} | ${operation.cli.command ? `\`superting ${operation.cli.command}\`` : "—"} |`
       );
     }
     lines.push("");

@@ -6,9 +6,10 @@ cli_version: ">=2.0.12"
 
 # SuperTing 本地机器接口（MCP + HTTP bridge）
 
-桌面应用在**本机**暴露两套接口，二者由同一份操作注册表生成，能力集合一致
-（当前 87 项：笔记、会议纪要动作、录音、音频文件、转录与段级编辑、联系人/声纹、
-说话人、词典、聊天、设置等）：
+桌面应用在**本机**暴露两套接口，二者由同一份操作注册表生成，能力集合一致。
+默认是**精炼模式**（原精炼版 MCP 的 14 项基础能力）；在应用内一键扩展后为
+**扩展模式**（全部 87 项：笔记、会议纪要动作、录音、音频文件、转录与段级编辑、
+联系人/声纹、说话人、词典、聊天、设置等）：
 
 - **MCP**（推荐给 MCP 客户端）：回环 streamable-HTTP，进程内服务，工具名与 CLI 能力一一对应。
 - **HTTP bridge**（兜底）：`superting` CLI 的传输层；CLI 没覆盖的细节用裸路由。
@@ -16,8 +17,11 @@ cli_version: ">=2.0.12"
 ## MCP
 
 1. 应用内 **设置 → 集成 → 本地 MCP 访问** → 启用。生成 URL + Bearer token，
-   元数据在 `~/.superting/mcp-server.json`（`enabled` / `url` / `port` / `token`，可一键轮换）。
-   端口默认 8220，区间 8220–8239，被占用时顺延；仅监听 127.0.0.1。
+   元数据在 `~/.superting/mcp-server.json`（`enabled` / `url` / `port` / `token` / `toolset`，
+   可一键轮换）。端口默认 8220，区间 8220–8239，被占用时顺延；仅监听 127.0.0.1。
+   服务默认以**精炼模式**启动：只暴露 14 项基础工具（health、笔记 list/search/get/create/update/delete、
+   文件夹 list/create、转录 list/get、词典与替换规则读取、标签 list）。
+   用户点「一键扩展全部能力」后立即切换为扩展模式（MCP 与 CLI 同时放开；已连接客户端重连后生效）。
 2. 客户端配置（`mcpServers` 形式）：
 
    ```json
@@ -37,10 +41,13 @@ cli_version: ">=2.0.12"
    内容不可信）；87 个工具中 63 个的描述里还有 `Guidance:` 块说明参数表达不了的语义
    （段 id 是位置性的、purge vs delete、分页、凭据脱敏等）。只读工具带 `readOnlyHint`，
    删除类带 `destructiveHint`，全部带 `openWorldHint:false`（仅本机数据）。
-4. 需要界面的工具（`run_note_action`、`start_recording`/`stop_recording`、
+4. **精炼模式下扩展能力不可见**（tools/list 里没有、CLI 侧返回 403 `mode_locked`）。
+   用户需要会议纪要、音频、声纹、录音或设置时，请他们在应用内点一次「一键扩展全部能力」，
+   不要尝试绕过模式（不要手写 HTTP 调未开放的端点）。`health` 返回当前 `toolset`。
+5. 需要界面的工具（`run_note_action`、`start_recording`/`stop_recording`、
    `set_setting`、`export_notes`、`retry_transcription`）会经主↔渲染桥执行：没有窗口时
    应用会先打开面板；仍不可用则返回 `success:false` 且 message 含 `window`，不要当成功处理。
-5. 长任务（`rediarize_note_audio`、`merge_note_audio`、`compress_all_audio`、
+6. 长任务（`rediarize_note_audio`、`merge_note_audio`、`compress_all_audio`、
    `transcribe_audio_file`）传 `wait:false` 立刻拿 `job_id`，再用 `get_job` / `list_jobs` /
    `cancel_job` 跟踪；取消是协作式的（底层不可中止，完成后丢弃结果）。
 
@@ -56,7 +63,9 @@ base_url="http://127.0.0.1:${port}"
 ```
 
 每个请求带 `Authorization: Bearer ${token}`。仅绑定 127.0.0.1，无托管服务、无需账号。
-`GET /v1/operations` 返回与 MCP 相同的能力目录（含每个能力的 path/query/body 参数位置）。
+`GET /v1/operations` 返回当前模式下的能力目录（含每个能力的 path/query/body 参数位置），
+响应顶层带 `toolset`（`lean` / `extended`）。精炼模式下调用仅扩展能力返回
+HTTP 403 `{"error":{"code":"mode_locked",…}}`，按提示让用户一键扩展，不要绕过。
 
 | 域          | 路由                                                                                               |
 | ----------- | -------------------------------------------------------------------------------------------------- |

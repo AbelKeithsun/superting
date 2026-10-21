@@ -94,3 +94,48 @@ test("notes default to all folders and load 50 more at the bottom", () => {
     assert.ok(translations.notes.loadingMore, `${locale} should translate notes.loadingMore`);
   }
 });
+
+test("the MCP card exposes the capability mode and the one-click extension", () => {
+  const card = read("src/components/McpIntegrationCard.tsx");
+
+  // The card reads the mode from the status payload and renders both choices.
+  assert.match(card, /status\.toolset/);
+  assert.match(card, /integrations\.mcp\.modeLabel/);
+  assert.match(card, /integrations\.mcp\.modeLean/);
+  assert.match(card, /integrations\.mcp\.modeExtended/);
+  assert.match(card, /integrations\.mcp\.modeLeanHint/);
+  assert.match(card, /integrations\.mcp\.modeExtendedHint/);
+  assert.match(card, /integrations\.mcp\.modeSharedNote/);
+
+  // One click extends: switch the toolset and, when the server is still off,
+  // enable it in the same action.
+  assert.match(card, /integrations\.mcp\.expandAction/);
+  assert.match(card, /setMcpServerToolset\?\.\("extended"\)/);
+  assert.match(card, /setMcpServerEnabled\?\.\(true\)/);
+
+  // The mode keys exist in every locale (the i18n check also covers this, but
+  // this test names the contract the UI depends on).
+  const localeRoot = path.join(root, "src/locales");
+  const locales = fs
+    .readdirSync(localeRoot, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => entry.name);
+  for (const locale of locales) {
+    const translations = JSON.parse(read(`src/locales/${locale}/translation.json`));
+    const mcp = translations.integrations.mcp;
+    for (const key of [
+      "modeLabel",
+      "modeLean",
+      "modeExtended",
+      "modeLeanHint",
+      "modeExtendedHint",
+      "modeSharedNote",
+      "modeLeanBanner",
+      "modeExtendHint",
+      "expandAction",
+    ]) {
+      assert.equal(typeof mcp[key], "string", `${locale} is missing integrations.mcp.${key}`);
+      assert.ok(mcp[key].length > 0, `${locale} has empty integrations.mcp.${key}`);
+    }
+  }
+});
